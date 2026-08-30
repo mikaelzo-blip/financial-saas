@@ -14,10 +14,10 @@
 
 **Purpose**: Establish AI configuration settings, provider interface, and mock/live adapters.
 
-- [ ] T001 [P] Configure AI insight settings in `backend/src/core/config.py`
-- [ ] T002 [P] Define `AIInsightProvider` abstract base class and DTOs in `backend/src/services/ai/provider.py`
-- [ ] T003 [P] Implement `MockAIInsightProvider` for deterministic offline testing in `backend/src/services/ai/mock_provider.py`
-- [ ] T004 [P] Implement `GeminiInsightProvider` and `OpenAICompatibleInsightProvider` in `backend/src/services/ai/cloud_providers.py`
+- [X] T001 [P] Configure AI insight settings in `backend/src/core/config.py`
+- [X] T002 [P] Define `AIInsightProvider` abstract base class and DTOs in `backend/src/services/ai/provider.py`
+- [X] T003 [P] Implement `MockAIInsightProvider` for deterministic offline testing in `backend/src/services/ai/mock_provider.py`
+- [X] T004 [P] Implement `GeminiInsightProvider` and `OpenAICompatibleInsightProvider` in `backend/src/services/ai/cloud_providers.py`
 
 ---
 
@@ -25,12 +25,12 @@
 
 **Purpose**: Database tables, Pydantic DTOs, grounding aggregator from Feature 004, and deterministic fallback summarizer.
 
-- [ ] T005 [P] Define Pydantic request/response schemas in `backend/src/schemas/ai_insight.py`
-- [ ] T006 [P] Create SQLAlchemy models `AIInsightLog`, `AIConversationSession`, and `AIConversationMessage` in `backend/src/models/ai_insight.py`
-- [ ] T007 [P] Create Alembic migration for AI insight tables in `backend/alembic/versions/`
-- [ ] T008 [P] Implement `GroundingService` pulling authoritative DTOs in `backend/src/services/ai/grounding_service.py`
-- [ ] T009 [P] Implement `DeterministicFallbackEngine` rule-based heuristic summary in `backend/src/services/ai/fallback_engine.py`
-- [ ] T010 [P] Unit test for `DeterministicFallbackEngine` in `backend/tests/unit/test_ai_fallback_engine.py`
+- [X] T005 [P] Define Pydantic request/response schemas in `backend/src/schemas/ai_insight.py`
+- [X] T006 [P] Create SQLAlchemy models `AIInsightLog`, `AIConversationSession`, and `AIConversationMessage` in `backend/src/models/ai_insight.py`
+- [X] T007 [P] Create Alembic migration for AI insight tables in `backend/alembic/versions/`
+- [X] T008 [P] Implement `GroundingService` pulling authoritative DTOs in `backend/src/services/ai/grounding_service.py`
+- [X] T009 [P] Implement `DeterministicFallbackEngine` rule-based heuristic summary in `backend/src/services/ai/fallback_engine.py`
+- [X] T010 [P] Unit test for `DeterministicFallbackEngine` in `backend/tests/unit/test_ai_fallback_engine.py`
 
 ---
 

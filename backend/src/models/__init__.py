@@ -23,6 +23,7 @@ from src.models.transaction import Transaction, TransactionAllocation, Transacti
 from src.models.journal import JournalEntry, JournalLine
 from src.models.payable import VendorBill, VendorPaymentAllocation, VendorAdvance
 from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation
+from src.models.hermes import HermesSubmission
 
 __all__ = [
     "UserRole",
@@ -60,4 +61,5 @@ __all__ = [
     "VendorAdvance",
     "CustomerInvoice",
     "CustomerPaymentAllocation",
+    "HermesSubmission",
 ]

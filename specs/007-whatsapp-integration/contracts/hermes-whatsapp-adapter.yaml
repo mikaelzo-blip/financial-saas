@@ -1,0 +1,94 @@
+openapi: 3.0.3
+info:
+  title: Hermes Internal WhatsApp Adapter Protocol
+  version: 1.0.0
+  description: Internal service contracts for WhatsApp message parsing, media streaming, and clarification session resolution.
+components:
+  schemas:
+    AdapterInboundEvent:
+      type: object
+      required:
+        - wamid
+        - sender_phone
+        - timestamp
+        - event_type
+      properties:
+        wamid:
+          type: string
+        sender_phone:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        event_type:
+          type: string
+          enum: [MEDIA_INTAKE, TEXT_COMMAND, CLARIFICATION_REPLY, UNREGISTERED_CONTACT]
+        caption:
+          type: string
+        media_id:
+          type: string
+        mime_type:
+          type: string
+        file_name:
+          type: string
+
+    AdapterOutboundMessage:
+      type: object
+      required:
+        - recipient_phone
+        - message_type
+        - body_text
+      properties:
+        recipient_phone:
+          type: string
+        message_type:
+          type: string
+          enum: [TEXT, INTERACTIVE_BUTTONS, INTERACTIVE_LIST]
+        body_text:
+          type: string
+        header_text:
+          type: string
+        footer_text:
+          type: string
+        buttons:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              title:
+                type: string
+
+    ClarificationPromptRequest:
+      type: object
+      required:
+        - document_id
+        - phone_number
+        - question_type
+        - options
+      properties:
+        document_id:
+          type: string
+          format: uuid
+        phone_number:
+          type: string
+        question_type:
+          type: string
+          enum: [SELECT_PROJECT, CONFIRM_AMOUNT, SELECT_CATEGORY]
+        prompt_text:
+          type: string
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              option_key:
+                type: string
+                example: '1'
+              entity_id:
+                type: string
+                format: uuid
+              label:
+                type: string
+                example: 'Proyek Ruko Thamrin'

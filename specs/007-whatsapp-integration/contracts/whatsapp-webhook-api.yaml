@@ -1,0 +1,298 @@
+openapi: 3.0.3
+info:
+  title: WhatsApp Ingest & Administration API
+  version: 1.0.0
+  description: Public webhook endpoint and tenant administrative management for WhatsApp integration.
+paths:
+  /api/v1/integrations/whatsapp/webhook:
+    get:
+      summary: Meta Webhook Handshake Verification
+      description: Validates webhook subscription challenge from Meta/WhatsApp Cloud API.
+      parameters:
+        - name: hub.mode
+          in: query
+          required: true
+          schema:
+            type: string
+            example: subscribe
+        - name: hub.verify_token
+          in: query
+          required: true
+          schema:
+            type: string
+            example: secret_verify_token_123
+        - name: hub.challenge
+          in: query
+          required: true
+          schema:
+            type: string
+            example: 1158201444
+      responses:
+        '200':
+          description: Handshake successful. Returns hub.challenge raw integer string.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '403':
+          description: Invalid verification token.
+
+    post:
+      summary: Inbound WhatsApp Webhook Payload
+      description: Receives inbound messages, media notifications, and status updates.
+      parameters:
+        - name: X-Hub-Signature-256
+          in: header
+          required: true
+          description: HMAC-SHA256 signature calculated with the app secret.
+          schema:
+            type: string
+            example: sha256=d57...
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WhatsAppWebhookPayload'
+      responses:
+        '200':
+          description: Webhook received, verified, and queued/processed idempotently.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+        '401':
+          description: Invalid HMAC-SHA256 signature.
+        '429':
+          description: Sender rate limit exceeded.
+
+  /api/v1/integrations/whatsapp/senders:
+    get:
+      summary: List Registered WhatsApp Senders
+      description: Returns all phone numbers registered for the current organization.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: X-Organization-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of registered senders.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WhatsAppSenderMappingResponse'
+
+    post:
+      summary: Register WhatsApp Sender
+      description: Associates an authorized user phone number with the organization.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: X-Organization-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WhatsAppSenderCreateRequest'
+      responses:
+        '201':
+          description: Sender successfully registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WhatsAppSenderMappingResponse'
+        '400':
+          description: Invalid phone number format or already registered.
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    WhatsAppWebhookPayload:
+      type: object
+      required:
+        - object
+        - entry
+      properties:
+        object:
+          type: string
+          example: whatsapp_business_account
+        entry:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              changes:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    value:
+                      type: object
+                      properties:
+                        messaging_product:
+                          type: string
+                          example: whatsapp
+                        metadata:
+                          type: object
+                          properties:
+                            display_phone_number:
+                              type: string
+                            phone_number_id:
+                              type: string
+                        contacts:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              profile:
+                                type: object
+                                properties:
+                                  name:
+                                    type: string
+                              wa_id:
+                                type: string
+                                example: '6281234567890'
+                        messages:
+                          type: array
+                          items:
+                            $ref: '#/components/schemas/WhatsAppInboundMessage'
+
+    WhatsAppInboundMessage:
+      type: object
+      required:
+        - id
+        - from
+        - timestamp
+        - type
+      properties:
+        id:
+          type: string
+          example: wamid.HBgLM...
+        from:
+          type: string
+          example: '6281234567890'
+        timestamp:
+          type: string
+          example: '1725028800'
+        type:
+          type: string
+          enum: [text, image, document, interactive, button]
+        text:
+          type: object
+          properties:
+            body:
+              type: string
+        image:
+          type: object
+          properties:
+            id:
+              type: string
+            mime_type:
+              type: string
+            sha256:
+              type: string
+            caption:
+              type: string
+        document:
+          type: object
+          properties:
+            id:
+              type: string
+            filename:
+              type: string
+            mime_type:
+              type: string
+            sha256:
+              type: string
+            caption:
+              type: string
+        interactive:
+          type: object
+          properties:
+            type:
+              type: string
+            button_reply:
+              type: object
+              properties:
+                id:
+                  type: string
+                title:
+                  type: string
+
+    WhatsAppSenderCreateRequest:
+      type: object
+      required:
+        - user_id
+        - phone_number
+        - display_name
+        - role_in_org
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        phone_number:
+          type: string
+          example: '+6281234567890'
+        display_name:
+          type: string
+          example: 'Budi (Mandor Ruko Thamrin)'
+        role_in_org:
+          type: string
+          enum: [OPERATOR, PROJECT_MANAGER, FINANCE_MANAGER]
+
+    WhatsAppSenderMappingResponse:
+      type: object
+      required:
+        - id
+        - organization_id
+        - user_id
+        - phone_number
+        - display_name
+        - role_in_org
+        - is_active
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        phone_number:
+          type: string
+        display_name:
+          type: string
+        role_in_org:
+          type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time

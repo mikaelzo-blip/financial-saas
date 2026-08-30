@@ -1,0 +1,100 @@
+name: Quality Gates
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-gates-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend / tests, dependencies, migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv 0.12.7
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.12.7"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install locked backend and test dependencies
+        run: |
+          uv sync --locked --extra test
+          uv pip install --python .venv/bin/python pip==25.3
+
+      - name: Validate installed dependencies
+        run: .venv/bin/python -m pip check
+
+      - name: Run full backend test suite
+        run: .venv/bin/python -m pytest -q -p no:cacheprovider
+
+      - name: Validate complete Alembic migration chain offline
+        run: |
+          .venv/bin/python -m alembic upgrade head --sql > "${RUNNER_TEMP}/financial-saas-migrations.sql"
+          test -s "${RUNNER_TEMP}/financial-saas-migrations.sql"
+
+  frontend:
+    name: Frontend / tests, lint, types, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install locked frontend dependencies
+        run: npm ci
+
+      - name: Run frontend tests
+        run: npm test
+
+      - name: Run frontend lint
+        run: npm run lint
+
+      - name: Run TypeScript typecheck
+        run: npm run typecheck
+
+      - name: Build production frontend
+        run: npm run build
+
+  repository-safety:
+    name: Repository / tracked secrets and environment files
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository with full tracked content
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Verify repository safety
+        run: bash .github/scripts/check-repository-safety.sh

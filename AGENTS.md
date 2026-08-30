@@ -71,11 +71,11 @@ Before feature completion require:
 
 ## Autonomous Git Workflow
 
-Codex may autonomously:
+Codex may autonomously, after the relevant verification checkpoint passes:
 
 - inspect git status and diff
 - create local commits
-- push the current `codex/*` feature branch to origin
+- push only the current `codex/*` feature branch to origin
 - create multiple checkpoint commits while implementing a feature
 
 Codex must only auto-push after the relevant checkpoint passes its required:
@@ -87,7 +87,7 @@ Codex must only auto-push after the relevant checkpoint passes its required:
 
 Codex MUST NOT autonomously:
 
-- push directly to `main`
+- push directly to `main` (verified checkpoints may auto-push only to `codex/*` branches)
 - force-push
 - rewrite published Git history
 - delete remote branches

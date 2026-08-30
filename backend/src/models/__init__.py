@@ -24,6 +24,7 @@ from src.models.journal import JournalEntry, JournalLine
 from src.models.payable import VendorBill, VendorPaymentAllocation, VendorAdvance
 from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation
 from src.models.hermes import HermesSubmission
+from src.models.whatsapp import WhatsAppSenderMapping, WhatsAppMessageLog, WhatsAppClarificationSession
 
 __all__ = [
     "UserRole",
@@ -62,4 +63,5 @@ __all__ = [
     "CustomerInvoice",
     "CustomerPaymentAllocation",
     "HermesSubmission",
+    "WhatsAppSenderMapping", "WhatsAppMessageLog", "WhatsAppClarificationSession",
 ]

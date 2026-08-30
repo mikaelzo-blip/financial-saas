@@ -14,10 +14,10 @@
 
 **Purpose**: Establish WhatsApp configuration settings, abstract provider interfaces, and mock provider simulator for offline testing.
 
-- [ ] T001 [P] Configure WhatsApp settings in `backend/src/core/config.py`
-- [ ] T002 [P] Define `WhatsAppProvider` abstract interface and event DTOs in `backend/src/services/integrations/whatsapp/provider.py`
-- [ ] T003 [P] Implement `MockWhatsAppProvider` for offline test execution in `backend/src/services/integrations/whatsapp/mock_provider.py`
-- [ ] T004 [P] Implement `MetaCloudWhatsAppProvider` with Graph API client in `backend/src/services/integrations/whatsapp/meta_provider.py`
+- [X] T001 [P] Configure WhatsApp settings in `backend/src/core/config.py`
+- [X] T002 [P] Define `WhatsAppProvider` abstract interface and event DTOs in `backend/src/services/integrations/whatsapp/provider.py`
+- [X] T003 [P] Implement `MockWhatsAppProvider` for offline test execution in `backend/src/services/integrations/whatsapp/mock_provider.py`
+- [X] T004 [P] Implement `MetaCloudWhatsAppProvider` with Graph API client in `backend/src/services/integrations/whatsapp/meta_provider.py`
 
 ---
 
@@ -25,11 +25,11 @@
 
 **Purpose**: Core database tables, Pydantic schemas, and cryptographic HMAC-SHA256 signature verification.
 
-- [ ] T005 [P] Define Pydantic request/response schemas in `backend/src/schemas/whatsapp.py`
-- [ ] T006 [P] Create SQLAlchemy models `WhatsAppSenderMapping`, `WhatsAppMessageLog`, and `WhatsAppClarificationSession` in `backend/src/models/whatsapp.py`
-- [ ] T007 [P] Create Alembic migration for WhatsApp tables in `backend/alembic/versions/`
-- [ ] T008 [P] Implement HMAC-SHA256 signature validation utility in `backend/src/services/integrations/whatsapp/security.py`
-- [ ] T009 [P] Unit test for signature validation and handshake challenge in `backend/tests/unit/test_whatsapp_security.py`
+- [X] T005 [P] Define Pydantic request/response schemas in `backend/src/schemas/whatsapp.py`
+- [X] T006 [P] Create SQLAlchemy models `WhatsAppSenderMapping`, `WhatsAppMessageLog`, and `WhatsAppClarificationSession` in `backend/src/models/whatsapp.py`
+- [X] T007 [P] Create Alembic migration for WhatsApp tables in `backend/alembic/versions/`
+- [X] T008 [P] Implement HMAC-SHA256 signature validation utility in `backend/src/services/integrations/whatsapp/security.py`
+- [X] T009 [P] Unit test for signature validation and handshake challenge in `backend/tests/unit/test_whatsapp_security.py`
 
 ---
 
@@ -99,7 +99,7 @@
 - [ ] T029 [P] Implement sliding-window rate limiting middleware in `backend/src/services/integrations/whatsapp/rate_limiter.py`
 - [ ] T030 [P] Integration test for multi-tenant data isolation in `backend/tests/integration/test_whatsapp_isolation.py`
 - [ ] T031 [P] Integration test for rate limiting enforcement in `backend/tests/unit/test_whatsapp_rate_limiter.py`
-- [ ] T032 Register WhatsApp API router in `backend/src/api/v1/__init__.py`
+- [X] T032 Register WhatsApp API router in `backend/src/api/v1/__init__.py`
 - [ ] T033 Execute complete Quickstart verification scenarios A through F per `quickstart.md`
 - [ ] T034 [P] Update API documentation and deployment guide in `docs/`
 

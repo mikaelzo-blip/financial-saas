@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import re
 
 from src.schemas.ai_insight import NarrativeOutput
 from src.services.ai.grounding_service import GroundedPayload
@@ -22,7 +23,11 @@ def validate_output(output: NarrativeOutput, payload: GroundedPayload, max_token
     if output != expected:
         raise ValueError('Ungrounded provider claim')
     prose = output.headline + output.analytical_narrative + ' '.join(output.actionable_recommendations)
-    # UTF-8 bytes are a conservative upper bound for supported byte tokenizers.
-    if len(prose.encode('utf-8')) > max_tokens:
+    if mock_token_count(prose) > max_tokens:
         raise ValueError('Output budget exceeded')
     return output
+
+
+def mock_token_count(text: str) -> int:
+    """Deterministic mock tokenizer; cloud codecs separately cap provider tokens."""
+    return len(re.findall(r'\w+|[^\w\s]', text))

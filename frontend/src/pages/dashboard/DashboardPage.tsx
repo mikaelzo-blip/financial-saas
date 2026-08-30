@@ -18,6 +18,7 @@ import { Card } from '../../components/ui/Card';
 import { SkeletonLoader } from '../../components/feedback/SkeletonLoader';
 import { QuickActionsPanel } from './components/QuickActionsPanel';
 import { RecentActivityTable } from './components/RecentActivityTable';
+import { ExecutiveSummaryCard } from '../../components/ai/ExecutiveSummaryCard';
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -199,6 +200,7 @@ export const DashboardPage: React.FC = () => {
       )}
 
       {/* Quick Actions Panel */}
+      <ExecutiveSummaryCard />
       <QuickActionsPanel reviewCount={metrics?.review_queue_pending_count || 0} />
 
       {/* Recent Activity */}

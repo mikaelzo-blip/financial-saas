@@ -41,15 +41,15 @@
 **Independent Test**: Request executive summary for August 2026; verify revenue and profit figures match backend DTOs exactly.
 
 ### Tests for User Story 1
-- [ ] T011 [P] [US1] Unit test for executive summary prompt generation and anti-hallucination verification in `backend/tests/unit/test_ai_executive_summary.py`
-- [ ] T012 [P] [US1] Integration test for `GET /api/v1/insights/executive-summary` in `backend/tests/integration/test_ai_executive_summary_api.py`
+- [X] T011 [P] [US1] Unit test for executive summary prompt generation and anti-hallucination verification in `backend/tests/unit/test_ai_executive_summary.py`
+- [X] T012 [P] [US1] Integration test for `GET /api/v1/insights/executive-summary` in `backend/tests/integration/test_ai_executive_summary_api.py`
 
 ### Implementation for User Story 1
-- [ ] T013 [P] [US1] Implement prompt templates for executive summaries in `backend/src/services/ai/prompt_templates.py`
-- [ ] T014 [US1] Implement `AIInsightService.get_executive_summary` with SHA-256 caching in `backend/src/services/ai/insight_service.py`
-- [ ] T015 [US1] Implement endpoint `GET /api/v1/insights/executive-summary` in `backend/src/api/v1/insights.py`
-- [ ] T016 [P] [US1] Implement `ExecutiveSummaryCard` component in `frontend/src/components/ai/ExecutiveSummaryCard.tsx`
-- [ ] T017 [US1] Embed `ExecutiveSummaryCard` on Executive Dashboard in `frontend/src/pages/dashboard/DashboardPage.tsx`
+- [X] T013 [P] [US1] Implement prompt templates for executive summaries in `backend/src/services/ai/prompt_templates.py`
+- [X] T014 [US1] Implement `AIInsightService.get_executive_summary` with SHA-256 caching in `backend/src/services/ai/insight_service.py`
+- [X] T015 [US1] Implement endpoint `GET /api/v1/insights/executive-summary` in `backend/src/api/v1/insights.py`
+- [X] T016 [P] [US1] Implement `ExecutiveSummaryCard` component in `frontend/src/components/ai/ExecutiveSummaryCard.tsx`
+- [X] T017 [US1] Embed `ExecutiveSummaryCard` on Executive Dashboard in `frontend/src/pages/dashboard/DashboardPage.tsx`
 
 **Checkpoint**: User Story 1 MVP fully functional and independently testable.
 
@@ -115,8 +115,8 @@
 - [ ] T035 [P] Unit test for prompt injection defense in `backend/tests/unit/test_ai_prompt_sanitization.py`
 - [ ] T036 [P] Integration test for strict multi-tenant isolation in `backend/tests/integration/test_ai_isolation.py`
 - [ ] T037 [P] Integration test for SHA-256 payload cache hit in `backend/tests/integration/test_ai_caching.py`
-- [ ] T038 Register AI Insights API router in `backend/src/api/v1/__init__.py`
-- [ ] T039 Implement typed API client in `frontend/src/api/insights.ts`
+- [X] T038 Register AI Insights API router in `backend/src/api/v1/__init__.py`
+- [X] T039 Implement typed API client in `frontend/src/api/insights.ts`
 - [ ] T040 Execute complete Quickstart verification scenarios A through G per `quickstart.md`
 
 ---

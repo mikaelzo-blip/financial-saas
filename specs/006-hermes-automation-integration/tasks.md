@@ -39,7 +39,7 @@
 - [x] T015 [P] [SC-001,SC-005] Run focused backend unit/integration tests and verify Hermes package has no ORM, database, document service, or WhatsApp imports.
 - [x] T016 [P] [SC-002,SC-003,SC-004] Run the full backend suite, offline migration validation, dependency checks, and source hygiene checks.
 - [x] T017 [P] [SC-005] Run frontend tests, lint, type check, and production build; verify no frontend work was necessary.
-- [ ] T018 [SC-001,SC-002,SC-003,SC-004,SC-005] Reconcile task coverage, re-run Spec Kit analysis, commit and push the verified `codex/006-hermes-automation` checkpoint, then create a non-merging PR to `main`.
+- [x] T018 [SC-001,SC-002,SC-003,SC-004,SC-005] Reconcile task coverage, re-run Spec Kit analysis, commit and push the verified `codex/006-hermes-automation` checkpoint, then create a non-merging PR to `main`.
 
 ## Dependencies and execution order
 

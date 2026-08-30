@@ -1,0 +1,338 @@
+openapi: 3.1.0
+info:
+  title: Contractor Financial SaaS Core API
+  version: 1.0.0
+  description: >
+    Authoritative backend API for Contractor Financial SaaS.
+    Enforces Single-Input accounting, project-based financials, immutable double-entry ledger,
+    and review queue workflows. External agents (e.g., Hermes) interact via this authenticated API.
+servers:
+  - url: /api/v1
+    description: Current Base API
+
+security:
+  - BearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      summary: User / Service Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: Authenticated token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  token_type: { type: string, example: bearer }
+
+  /documents/upload:
+    post:
+      summary: Upload Source Evidentiary Document
+      description: Ingests raw file, calculates SHA-256 hash, detects exact duplicates, and returns DOC metadata.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, document_type]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                document_type:
+                  type: string
+                  example: VENDOR_INVOICE
+                source_channel:
+                  type: string
+                  default: WEB_UPLOAD
+                source_metadata:
+                  type: object
+                  description: Optional JSON for WhatsApp sender, chat ID, etc.
+      responses:
+        '201':
+          description: Document stored successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '409':
+          description: Exact duplicate document detected via SHA-256 hash
+
+  /projects:
+    get:
+      summary: List Projects with derived financial statuses
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectResponse'
+    post:
+      summary: Create Project Master Record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResponse'
+
+  /projects/{projectId}/summary:
+    get:
+      summary: Get Project Financial Summary
+      description: Returns contract value, recognized revenue, invoiced amount, cash collected, total project costs (by category), margin %, and cash position.
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectFinancialSummary'
+
+  /transactions:
+    get:
+      summary: List Transactions
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: project_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransactionResponse'
+    post:
+      summary: Capture / Ingest Business Transaction (Single Input)
+      description: Captures business event. Automatically evaluates duplicate heuristics, links documents/allocations, and assigns initial workflow status.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransactionRequest'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+
+  /transactions/{transactionId}/approve:
+    post:
+      summary: Approve & Post Transaction to Ledger
+      description: Triggers Accounting Engine to generate balanced journal entry, update AR/AP/Project Cost, and transition status to POSTED.
+      parameters:
+        - name: transactionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Successfully posted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+        '422':
+          description: Invariant failure (unbalanced journal, unresolved review flags, or insufficient permissions)
+
+  /transactions/{transactionId}/reverse:
+    post:
+      summary: Reverse Posted Transaction
+      description: Creates an audit-compliant reversal transaction and offsetting journal entry.
+      parameters:
+        - name: transactionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+
+  /review-queue:
+    get:
+      summary: Get Review Queue Items
+      description: Fetches all transactions in REVIEW_REQUIRED status or with unresolved review flags.
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransactionResponse'
+
+  /review-queue/{flagId}/resolve:
+    post:
+      summary: Resolve Review Flag
+      parameters:
+        - name: flagId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resolution_notes]
+              properties:
+                resolution_notes: { type: string }
+      responses:
+        '200':
+          description: Flag resolved
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    DocumentResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        document_code: { type: string, example: "DOC-2026-000001" }
+        document_type: { type: string }
+        file_name: { type: string }
+        file_hash: { type: string }
+        source_channel: { type: string }
+        created_at: { type: string, format: date-time }
+
+    CreateProjectRequest:
+      type: object
+      required: [project_name, customer_id, original_contract_value, start_date]
+      properties:
+        project_name: { type: string }
+        customer_id: { type: string, format: uuid }
+        po_spk_no: { type: string }
+        original_contract_value: { type: number, minimum: 0 }
+        start_date: { type: string, format: date }
+        target_end_date: { type: string, format: date }
+
+    ProjectResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        project_code: { type: string, example: "PRJ-2026-001" }
+        project_name: { type: string }
+        customer_id: { type: string, format: uuid }
+        original_contract_value: { type: number }
+        variation_order_value: { type: number }
+        revised_contract_value: { type: number }
+        project_status: { type: string }
+        billing_status: { type: string }
+        collection_status: { type: string }
+
+    ProjectFinancialSummary:
+      type: object
+      properties:
+        project_id: { type: string, format: uuid }
+        revised_contract_value: { type: number }
+        revenue_recognized: { type: number }
+        total_invoiced: { type: number }
+        total_collected: { type: number }
+        total_project_cost: { type: number }
+        cost_breakdown:
+          type: object
+          additionalProperties: { type: number }
+        project_profit: { type: number }
+        project_margin_percent: { type: number }
+        cash_surplus_deficit: { type: number }
+
+    CreateTransactionRequest:
+      type: object
+      required: [transaction_date, transaction_type, description, total_amount]
+      properties:
+        transaction_date: { type: string, format: date }
+        transaction_type: { type: string }
+        description: { type: string }
+        total_amount: { type: number, minimum: 0.01 }
+        counterparty_id: { type: string, format: uuid }
+        payment_account_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        cost_category: { type: string }
+        expense_category: { type: string }
+        reference_number: { type: string }
+        document_ids:
+          type: array
+          items: { type: string, format: uuid }
+        allocations:
+          type: array
+          description: Optional multi-project split allocations
+          items:
+            type: object
+            required: [project_id, cost_category, allocated_amount]
+            properties:
+              project_id: { type: string, format: uuid }
+              cost_category: { type: string }
+              allocated_amount: { type: number, minimum: 0.01 }
+
+    TransactionResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        transaction_code: { type: string, example: "TRX-2026-000001" }
+        transaction_date: { type: string, format: date }
+        transaction_type: { type: string }
+        description: { type: string }
+        total_amount: { type: number }
+        workflow_status: { type: string }
+        review_flags:
+          type: array
+          items:
+            type: object
+            properties:
+              flag: { type: string }
+              details: { type: string }
+              is_resolved: { type: boolean }

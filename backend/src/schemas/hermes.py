@@ -17,6 +17,7 @@ class HermesDocumentOutcome(BaseModel):
     processing_status: DocumentProcessingStatus
     correlation_id: Optional[uuid.UUID] = None
     review_required: bool = False
+    duplicate: bool = False
 
 
 class HermesSubmissionRequest(BaseModel):

@@ -1,5 +1,5 @@
 from typing import List, Optional
-from pydantic import AnyHttpUrl, field_validator
+from pydantic import AnyHttpUrl, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,6 +27,18 @@ class Settings(BaseSettings):
     # runtime; an unset token disables the machine endpoint.
     HERMES_AGENT_TOKEN: Optional[str] = None
     HERMES_ORGANIZATION_ID: Optional[str] = None
+
+    # Disabled without explicit webhook secrets; mock never contacts Meta.
+    WHATSAPP_PROVIDER: str = "mock"
+    WHATSAPP_VERIFY_TOKEN: Optional[SecretStr] = None
+    WHATSAPP_WEBHOOK_APP_SECRET: Optional[SecretStr] = None
+    WHATSAPP_API_TOKEN: Optional[SecretStr] = None
+    WHATSAPP_PHONE_NUMBER_ID: Optional[str] = None
+    WHATSAPP_GRAPH_VERSION: str = "v20.0"
+    WHATSAPP_SAAS_URL: str = "https://localhost"
+    WHATSAPP_ADAPTER_TOKEN: Optional[SecretStr] = None
+    WHATSAPP_TENANT_TOKENS: dict[str, SecretStr] = Field(default_factory=dict)
+    WHATSAPP_ORG_MESSAGES_PER_MINUTE: int = Field(default=200, ge=20)
 
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]

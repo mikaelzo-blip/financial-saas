@@ -14,10 +14,10 @@
 
 **Purpose**: Establish WhatsApp configuration settings, abstract provider interfaces, and mock provider simulator for offline testing.
 
-- [ ] T001 [P] Configure WhatsApp settings in `backend/src/core/config.py`
-- [ ] T002 [P] Define `WhatsAppProvider` abstract interface and event DTOs in `backend/src/services/integrations/whatsapp/provider.py`
-- [ ] T003 [P] Implement `MockWhatsAppProvider` for offline test execution in `backend/src/services/integrations/whatsapp/mock_provider.py`
-- [ ] T004 [P] Implement `MetaCloudWhatsAppProvider` with Graph API client in `backend/src/services/integrations/whatsapp/meta_provider.py`
+- [X] T001 [P] Configure WhatsApp settings in `backend/src/core/config.py`
+- [X] T002 [P] Define `WhatsAppProvider` abstract interface and event DTOs in `backend/src/services/integrations/whatsapp/provider.py`
+- [X] T003 [P] Implement `MockWhatsAppProvider` for offline test execution in `backend/src/services/integrations/whatsapp/mock_provider.py`
+- [X] T004 [P] Implement `MetaCloudWhatsAppProvider` with Graph API client in `backend/src/services/integrations/whatsapp/meta_provider.py`
 
 ---
 
@@ -25,11 +25,11 @@
 
 **Purpose**: Core database tables, Pydantic schemas, and cryptographic HMAC-SHA256 signature verification.
 
-- [ ] T005 [P] Define Pydantic request/response schemas in `backend/src/schemas/whatsapp.py`
-- [ ] T006 [P] Create SQLAlchemy models `WhatsAppSenderMapping`, `WhatsAppMessageLog`, and `WhatsAppClarificationSession` in `backend/src/models/whatsapp.py`
-- [ ] T007 [P] Create Alembic migration for WhatsApp tables in `backend/alembic/versions/`
-- [ ] T008 [P] Implement HMAC-SHA256 signature validation utility in `backend/src/services/integrations/whatsapp/security.py`
-- [ ] T009 [P] Unit test for signature validation and handshake challenge in `backend/tests/unit/test_whatsapp_security.py`
+- [X] T005 [P] Define Pydantic request/response schemas in `backend/src/schemas/whatsapp.py`
+- [X] T006 [P] Create SQLAlchemy models `WhatsAppSenderMapping`, `WhatsAppMessageLog`, and `WhatsAppClarificationSession` in `backend/src/models/whatsapp.py`
+- [X] T007 [P] Create Alembic migration for WhatsApp tables in `backend/alembic/versions/`
+- [X] T008 [P] Implement HMAC-SHA256 signature validation utility in `backend/src/services/integrations/whatsapp/security.py`
+- [X] T009 [P] Unit test for signature validation and handshake challenge in `backend/tests/unit/test_whatsapp_security.py`
 
 ---
 
@@ -40,17 +40,17 @@
 **Independent Test**: Send mock webhook with photo and caption from a registered number; verify document ingested into Feature 005 and confirmation reply returned.
 
 ### Tests for User Story 1
-- [ ] T010 [P] [US1] Unit test for phone sender mapping and tenant resolver in `backend/tests/unit/test_whatsapp_sender_service.py`
-- [ ] T011 [P] [US1] Unit test for media stream downloading and MIME validation in `backend/tests/unit/test_whatsapp_media_service.py`
-- [ ] T012 [P] [US1] Integration test for inbound media webhook and idempotency in `backend/tests/integration/test_whatsapp_intake_flow.py`
+- [X] T010 [P] [US1] Unit test for phone sender mapping and tenant resolver in `backend/tests/unit/test_whatsapp_sender_service.py`
+- [X] T011 [P] [US1] Unit test for media stream downloading and MIME validation in `backend/tests/unit/test_whatsapp_media_service.py`
+- [X] T012 [P] [US1] Integration test for inbound media webhook and idempotency in `backend/tests/integration/test_whatsapp_intake_flow.py`
 
 ### Implementation for User Story 1
-- [ ] T013 [P] [US1] Implement `WhatsAppSenderService` for phone-to-tenant resolution in `backend/src/services/integrations/whatsapp/sender_service.py`
-- [ ] T014 [P] [US1] Implement `WhatsAppMediaService` for secure binary streaming in `backend/src/services/integrations/whatsapp/media_service.py`
-- [ ] T015 [US1] Implement `WhatsAppWebhookService` orchestrating media download and Hermes API forwarding in `backend/src/services/integrations/whatsapp/webhook_service.py`
-- [ ] T016 [US1] Implement `WhatsAppOutboundService` for dispatching formatted receipt notices in `backend/src/services/integrations/whatsapp/outbound_service.py`
-- [ ] T017 [US1] Implement webhook GET (handshake) and POST (ingest) endpoints in `backend/src/api/v1/whatsapp.py`
-- [ ] T018 [US1] Implement admin sender mapping endpoints (`GET /post /delete /senders`) in `backend/src/api/v1/whatsapp.py`
+- [X] T013 [P] [US1] Implement `WhatsAppSenderService` for phone-to-tenant resolution in `backend/src/services/integrations/whatsapp/sender_service.py`
+- [X] T014 [P] [US1] Implement `WhatsAppMediaService` for secure binary streaming in `backend/src/services/integrations/whatsapp/media_service.py`
+- [X] T015 [US1] Implement `WhatsAppWebhookService` orchestrating media download and Hermes API forwarding in `backend/src/services/integrations/whatsapp/webhook_service.py`
+- [X] T016 [US1] Implement `WhatsAppOutboundService` for dispatching formatted receipt notices in `backend/src/services/integrations/whatsapp/outbound_service.py`
+- [X] T017 [US1] Implement webhook GET (handshake) and POST (ingest) endpoints in `backend/src/api/v1/whatsapp.py`
+- [X] T018 [US1] Implement admin sender mapping endpoints (`GET /post /delete /senders`) in `backend/src/api/v1/whatsapp.py`
 
 **Checkpoint**: At this point, User Story 1 MVP is fully testable and operational.
 
@@ -63,14 +63,14 @@
 **Independent Test**: Trigger a clarification question for an ambiguous project; reply with valid option number; verify candidate project field updated.
 
 ### Tests for User Story 2
-- [ ] T019 [P] [US2] Unit test for clarification session state machine in `backend/tests/unit/test_whatsapp_clarification.py`
-- [ ] T020 [P] [US2] Integration test for interactive numeric reply resolving Review Queue candidate in `backend/tests/integration/test_whatsapp_clarification_flow.py`
+- [X] T019 [P] [US2] Unit test for clarification session state machine in `backend/tests/unit/test_whatsapp_clarification.py`
+- [X] T020 [P] [US2] Integration test for interactive numeric reply resolving Review Queue candidate in `backend/tests/integration/test_whatsapp_clarification_flow.py`
 
 ### Implementation for User Story 2
-- [ ] T021 [P] [US2] Implement `WhatsAppClarificationService` state machine in `backend/src/services/integrations/whatsapp/clarification_service.py`
-- [ ] T022 [US2] Wire interactive option dispatching to `WhatsAppOutboundService` in `backend/src/services/integrations/whatsapp/outbound_service.py`
-- [ ] T023 [US2] Update `WhatsAppWebhookService` to intercept numeric replies and update Review Queue in `backend/src/services/integrations/whatsapp/webhook_service.py`
-- [ ] T024 [US2] Add clarification session expiry cleanup task in `backend/src/services/integrations/whatsapp/clarification_service.py`
+- [X] T021 [P] [US2] Implement `WhatsAppClarificationService` state machine in `backend/src/services/integrations/whatsapp/clarification_service.py`
+- [X] T022 [US2] Wire interactive option dispatching to `WhatsAppOutboundService` in `backend/src/services/integrations/whatsapp/outbound_service.py`
+- [X] T023 [US2] Update `WhatsAppWebhookService` to intercept numeric replies and update Review Queue in `backend/src/services/integrations/whatsapp/webhook_service.py`
+- [X] T024 [US2] Add clarification session expiry cleanup task in `backend/src/services/integrations/whatsapp/clarification_service.py`
 
 **Checkpoint**: User Stories 1 and 2 are fully functional and testable.
 
@@ -83,12 +83,12 @@
 **Independent Test**: Send text `"STATUS"` from a registered supervisor number; verify summarized report text returned.
 
 ### Tests for User Story 3
-- [ ] T025 [P] [US3] Unit test for text command parsing and authorization in `backend/tests/unit/test_whatsapp_command_service.py`
-- [ ] T026 [P] [US3] Integration test for operational status inquiry in `backend/tests/integration/test_whatsapp_status_inquiry.py`
+- [X] T025 [P] [US3] Unit test for text command parsing and authorization in `backend/tests/unit/test_whatsapp_command_service.py`
+- [X] T026 [P] [US3] Integration test for operational status inquiry in `backend/tests/integration/test_whatsapp_status_inquiry.py`
 
 ### Implementation for User Story 3
-- [ ] T027 [US3] Implement `WhatsAppCommandService` parsing commands (`STATUS`, `HELP`, `RINGKASAN`) in `backend/src/services/integrations/whatsapp/command_service.py`
-- [ ] T028 [US3] Wire command router to `WhatsAppWebhookService` in `backend/src/services/integrations/whatsapp/webhook_service.py`
+- [X] T027 [US3] Implement `WhatsAppCommandService` parsing commands (`STATUS`, `HELP`, `RINGKASAN`) in `backend/src/services/integrations/whatsapp/command_service.py`
+- [X] T028 [US3] Wire command router to `WhatsAppWebhookService` in `backend/src/services/integrations/whatsapp/webhook_service.py`
 
 ---
 
@@ -96,12 +96,12 @@
 
 **Purpose**: Hardening, denial-of-service protection, strict multi-tenant verification, and execution of Quickstart Scenarios A through F.
 
-- [ ] T029 [P] Implement sliding-window rate limiting middleware in `backend/src/services/integrations/whatsapp/rate_limiter.py`
-- [ ] T030 [P] Integration test for multi-tenant data isolation in `backend/tests/integration/test_whatsapp_isolation.py`
-- [ ] T031 [P] Integration test for rate limiting enforcement in `backend/tests/unit/test_whatsapp_rate_limiter.py`
-- [ ] T032 Register WhatsApp API router in `backend/src/api/v1/__init__.py`
-- [ ] T033 Execute complete Quickstart verification scenarios A through F per `quickstart.md`
-- [ ] T034 [P] Update API documentation and deployment guide in `docs/`
+- [X] T029 [P] Implement sliding-window rate limiting middleware in `backend/src/services/integrations/whatsapp/rate_limiter.py`
+- [X] T030 [P] Integration test for multi-tenant data isolation in `backend/tests/integration/test_whatsapp_isolation.py`
+- [X] T031 [P] Integration test for rate limiting enforcement in `backend/tests/unit/test_whatsapp_rate_limiter.py`
+- [X] T032 Register WhatsApp API router in `backend/src/api/v1/__init__.py`
+- [X] T033 Execute complete Quickstart verification scenarios A through F per `quickstart.md`
+- [X] T034 [P] Update API documentation and deployment guide in `docs/`
 
 ---
 

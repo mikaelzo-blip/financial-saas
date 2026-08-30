@@ -40,4 +40,8 @@ class StorageService:
         return str(Path("documents") / rel_dir / f"{file_id}{ext}").replace("\\", "/")
 
     def get_file_path(self, storage_path: str) -> Path:
-        return self.base_dir / storage_path
+        root = self.base_dir.resolve()
+        resolved = (root / storage_path).resolve()
+        if root != resolved and root not in resolved.parents:
+            raise ValueError("Document storage path escapes configured storage root")
+        return resolved

@@ -177,6 +177,14 @@ export interface DocumentResponse {
   mime_type: string;
   source_channel: string;
   created_at: string;
+  processing_status: 'UPLOADED' | 'HASHED' | 'EXTRACTING' | 'EXTRACTED' | 'MATCHING' | 'REVIEW_REQUIRED' | 'READY_FOR_APPROVAL' | 'PROCESSED' | 'FAILED';
+  extracted_data: Record<string, unknown>;
+  matching_results: Record<string, unknown>;
+  confidence_scores: Record<string, string>;
+  candidate_transaction: Record<string, unknown>;
+  review_flags: string[];
+  failure_code?: string;
+  failure_message?: string;
 }
 
 export interface CounterpartyResponse {

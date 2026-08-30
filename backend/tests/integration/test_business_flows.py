@@ -319,7 +319,7 @@ async def test_ten_core_business_flows(db_session: AsyncSession):
     # ====================================================
     # FLOW 8: CRYPTOGRAPHIC DOCUMENT DEDUPLICATION
     # ====================================================
-    file_bytes = b"SPK-PROYEK-ASLI-2026"
+    file_bytes = b"%PDF-1.4\nSPK-PROYEK-ASLI-2026"
     doc1 = await doc_svc.ingest_document(
         org1.id, io.BytesIO(file_bytes), "spk.pdf", "application/pdf", DocumentType.SPK
     )

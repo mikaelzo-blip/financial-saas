@@ -151,6 +151,7 @@ class TransactionService:
             amount=data.amount,
             counterparty_id=data.counterparty_id,
             payment_account_id=data.payment_account_id
+            ,reference_no=data.reference_no
         )
 
         initial_status = WorkflowStatus.STAGED

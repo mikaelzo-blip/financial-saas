@@ -1,6 +1,6 @@
 import uuid
 from typing import Optional
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,11 +24,12 @@ class DuplicateDetectionService:
         amount: Decimal,
         counterparty_id: Optional[uuid.UUID] = None,
         payment_account_id: Optional[uuid.UUID] = None,
+        reference_no: Optional[str] = None,
         exclude_id: Optional[uuid.UUID] = None
     ) -> Optional[Transaction]:
         filters = [
             Transaction.organization_id == organization_id,
-            Transaction.transaction_date == transaction_date,
+            Transaction.transaction_date.between(transaction_date - timedelta(days=1), transaction_date + timedelta(days=1)),
             Transaction.amount == amount,
             Transaction.workflow_status != WorkflowStatus.REVERSED
         ]
@@ -36,6 +37,8 @@ class DuplicateDetectionService:
             filters.append(Transaction.counterparty_id == counterparty_id)
         if payment_account_id:
             filters.append(Transaction.payment_account_id == payment_account_id)
+        if reference_no:
+            filters.append(Transaction.reference_no == reference_no)
         if exclude_id:
             filters.append(Transaction.id != exclude_id)
 

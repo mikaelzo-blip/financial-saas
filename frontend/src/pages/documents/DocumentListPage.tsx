@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FileText, Eye, UploadCloud, Hash } from 'lucide-react';
+import { FileText, Eye, UploadCloud, Hash, ShieldAlert } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { documentsApi } from '../../api/documents';
 import { DocumentResponse } from '../../types/api';
 import { formatDate } from '../../utils/formatters';
@@ -13,6 +14,7 @@ import { FileDropzone } from '../../components/forms/FileDropzone';
 export const DocumentListPage: React.FC = () => {
   const [selectedDoc, setSelectedDoc] = useState<DocumentResponse | null>(null);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const navigate = useNavigate();
 
   const { data: documents = [], isLoading, refetch } = useQuery({
     queryKey: ['documents'],
@@ -20,6 +22,15 @@ export const DocumentListPage: React.FC = () => {
   });
 
   const columns: Column<DocumentResponse>[] = [
+    {
+      key: 'processing_status',
+      header: 'Status AI',
+      render: (d) => (
+        <span className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold ${d.review_flags.length ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+          {d.review_flags.length > 0 && <ShieldAlert className="h-3 w-3" />}{d.processing_status}
+        </span>
+      ),
+    },
     {
       key: 'document_code',
       header: 'Kode Dokumen',
@@ -77,7 +88,8 @@ export const DocumentListPage: React.FC = () => {
           leftIcon={<Eye className="h-3.5 w-3.5" />}
           onClick={(e) => {
             e.stopPropagation();
-            setSelectedDoc(d);
+            if (d.processing_status === 'REVIEW_REQUIRED' || d.processing_status === 'READY_FOR_APPROVAL') navigate(`/documents/${d.id}/review`);
+            else setSelectedDoc(d);
           }}
         >
           Lihat

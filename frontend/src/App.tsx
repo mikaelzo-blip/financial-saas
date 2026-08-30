@@ -19,6 +19,7 @@ import { TransactionListPage } from './pages/transactions/TransactionListPage';
 import { TransactionCreatePage } from './pages/transactions/TransactionCreatePage';
 import { TransactionDetailPage } from './pages/transactions/TransactionDetailPage';
 import { DocumentListPage } from './pages/documents/DocumentListPage';
+import { DocumentReviewPage } from './pages/documents/DocumentReviewPage';
 import { ReceivablesPage } from './pages/receivables/ReceivablesPage';
 import { PayablesPage } from './pages/payables/PayablesPage';
 import { ReviewQueuePage } from './pages/review/ReviewQueuePage';
@@ -70,6 +71,7 @@ export const App: React.FC = () => {
                 <Route path="transactions/new" element={<TransactionCreatePage />} />
                 <Route path="transactions/:id" element={<TransactionDetailPage />} />
                 <Route path="documents" element={<DocumentListPage />} />
+                <Route path="documents/:id/review" element={<DocumentReviewPage />} />
 
                 {/* AR, AP & Review Queue */}
                 <Route path="receivables" element={<ReceivablesPage />} />

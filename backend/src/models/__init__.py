@@ -10,7 +10,7 @@ from src.models.enums import (
     ExpenseCategory,
     AccountType,
     NormalBalance,
-    DocumentType,
+    DocumentType, DocumentProcessingStatus, DocumentSourceChannel, CandidateStatus,
 )
 from src.models.organization import Organization
 from src.models.user import User
@@ -18,7 +18,7 @@ from src.models.counterparty import Counterparty
 from src.models.coa import ChartOfAccount, PaymentAccount
 from src.models.audit import AuditLog
 from src.models.project import Project, ProjectBudget
-from src.models.document import Document, ProjectDocumentLink, TransactionDocumentLink
+from src.models.document import Document, ProjectDocumentLink, TransactionDocumentLink, DocumentCorrection
 from src.models.transaction import Transaction, TransactionAllocation, TransactionReviewFlag
 from src.models.journal import JournalEntry, JournalLine
 from src.models.payable import VendorBill, VendorPaymentAllocation, VendorAdvance
@@ -37,6 +37,7 @@ __all__ = [
     "AccountType",
     "NormalBalance",
     "DocumentType",
+    "DocumentProcessingStatus", "DocumentSourceChannel", "CandidateStatus",
     "Organization",
     "User",
     "Counterparty",
@@ -48,6 +49,7 @@ __all__ = [
     "Document",
     "ProjectDocumentLink",
     "TransactionDocumentLink",
+    "DocumentCorrection",
     "Transaction",
     "TransactionAllocation",
     "TransactionReviewFlag",

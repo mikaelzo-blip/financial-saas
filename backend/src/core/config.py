@@ -19,6 +19,9 @@ class Settings(BaseSettings):
 
     # Storage
     STORAGE_DIR: str = "backend/storage"
+    DOCUMENT_MAX_SIZE_BYTES: int = 25 * 1024 * 1024
+    DOCUMENT_CONFIDENCE_THRESHOLD: float = 0.85
+    DOCUMENT_EXTRACTION_PROVIDER: str = "local"
 
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]

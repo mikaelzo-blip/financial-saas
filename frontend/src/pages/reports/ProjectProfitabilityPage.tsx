@@ -9,6 +9,7 @@ import { Select } from '../../components/ui/Select';
 import { SkeletonLoader } from '../../components/feedback/SkeletonLoader';
 import { formatIDR } from '../../utils/formatters';
 import { ProjectResponse } from '../../types/api';
+import { ReportHeader } from '../../components/reports/ReportHeader';
 
 export const ProjectProfitabilityPage: React.FC = () => {
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
@@ -46,14 +47,12 @@ export const ProjectProfitabilityPage: React.FC = () => {
             Analisis laba rugi berbasis akrual (Revenue vs 9 Kategori Biaya Langsung Proyek).
           </p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => refetch()}
-          disabled={isFetching || !selectedProjectId}
-        >
-          <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
-          Perbarui
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => refetch()} disabled={isFetching || !selectedProjectId}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />Perbarui
+          </Button>
+          <ReportHeader reportType="project-profitability" params={{ project_id: selectedProjectId }} disabled={!data || !selectedProjectId} />
+        </div>
       </div>
 
       <Card className="p-4">

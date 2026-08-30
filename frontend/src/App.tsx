@@ -79,6 +79,7 @@ export const App: React.FC = () => {
                 <Route path="review-queue" element={<ReviewQueuePage />} />
 
                 {/* Financial Reports */}
+                <Route path="reports" element={<Navigate to="/reports/profit-loss" replace />} />
                 <Route path="reports/profit-loss" element={<ProfitLossPage />} />
                 <Route path="reports/balance-sheet" element={<BalanceSheetPage />} />
                 <Route path="reports/cash-flow" element={<CashFlowPage />} />
@@ -86,6 +87,8 @@ export const App: React.FC = () => {
                 <Route path="reports/general-ledger" element={<GeneralLedgerPage />} />
                 <Route path="reports/ar-aging" element={<ARAgingPage />} />
                 <Route path="reports/ap-aging" element={<APAgingPage />} />
+                <Route path="reports/receivables" element={<ARAgingPage />} />
+                <Route path="reports/payables" element={<APAgingPage />} />
                 <Route path="reports/project-profitability" element={<ProjectProfitabilityPage />} />
                 <Route path="reports/project-cash" element={<ProjectCashPositionPage />} />
                 <Route path="reports/budget-vs-actual" element={<BudgetVsActualPage />} />

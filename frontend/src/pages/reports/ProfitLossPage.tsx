@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { reportsApi } from '../../api/reports';
 import { Card } from '../../components/ui/Card';
@@ -7,8 +8,10 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { SkeletonLoader } from '../../components/feedback/SkeletonLoader';
 import { formatIDR } from '../../utils/formatters';
+import { ReportHeader } from '../../components/reports/ReportHeader';
 
 export const ProfitLossPage: React.FC = () => {
+  const navigate = useNavigate();
   const today = new Date().toISOString().split('T')[0];
   const firstDayOfMonth = `${today.substring(0, 7)}-01`;
 
@@ -19,6 +22,15 @@ export const ProfitLossPage: React.FC = () => {
     queryKey: ['profit-loss', startDate, endDate],
     queryFn: () => reportsApi.getProfitLoss(startDate, endDate),
   });
+
+  const openLedger = (accountCode?: string | null) => {
+    if (!accountCode) return;
+    const query = new URLSearchParams({ account_code: accountCode, start_date: startDate, end_date: endDate });
+    navigate(`/reports/general-ledger?${query.toString()}`);
+  };
+
+  const lineClass = (accountCode?: string | null) =>
+    `w-full py-2 flex justify-between text-slate-700 ${accountCode ? 'hover:bg-indigo-50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500' : ''}`;
 
   return (
     <div className="space-y-6">
@@ -51,22 +63,7 @@ export const ProfitLossPage: React.FC = () => {
             <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
             Hitung Ulang
           </Button>
-          <a
-            href={`/api/v1/reports/profit-loss/export?format=xlsx&start_date=${startDate}&end_date=${endDate}`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
-          >
-            Export Excel (.xlsx)
-          </a>
-          <a
-            href={`/api/v1/reports/profit-loss/export?format=pdf&start_date=${startDate}&end_date=${endDate}`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
-          >
-            Export PDF
-          </a>
+          <ReportHeader reportType="profit-loss" params={{ start_date: startDate, end_date: endDate }} disabled={!data} />
         </div>
       </div>
 
@@ -115,10 +112,10 @@ export const ProfitLossPage: React.FC = () => {
                 </h3>
                 <div className="divide-y divide-slate-100 text-xs font-mono mt-2">
                   {data.revenue_section.lines.map((l) => (
-                    <div key={l.account_code || l.line_name} className="py-2 flex justify-between text-slate-700">
+                    <button type="button" key={l.account_code || l.line_name} className={lineClass(l.account_code)} onClick={() => openLedger(l.account_code)} disabled={!l.account_code}>
                       <span className="font-sans text-slate-800 pl-4">{l.account_code} — {l.line_name}</span>
                       <span>{formatIDR(l.amount)}</span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -131,10 +128,10 @@ export const ProfitLossPage: React.FC = () => {
                 </h3>
                 <div className="divide-y divide-slate-100 text-xs font-mono mt-2">
                   {data.cogs_section.lines.map((l) => (
-                    <div key={l.account_code || l.line_name} className="py-2 flex justify-between text-slate-700">
+                    <button type="button" key={l.account_code || l.line_name} className={lineClass(l.account_code)} onClick={() => openLedger(l.account_code)} disabled={!l.account_code}>
                       <span className="font-sans text-slate-800 pl-4">{l.account_code} — {l.line_name}</span>
                       <span>{formatIDR(l.amount)}</span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -153,10 +150,10 @@ export const ProfitLossPage: React.FC = () => {
                 </h3>
                 <div className="divide-y divide-slate-100 text-xs font-mono mt-2">
                   {data.operating_expenses_section.lines.map((l) => (
-                    <div key={l.account_code || l.line_name} className="py-2 flex justify-between text-slate-700">
+                    <button type="button" key={l.account_code || l.line_name} className={lineClass(l.account_code)} onClick={() => openLedger(l.account_code)} disabled={!l.account_code}>
                       <span className="font-sans text-slate-800 pl-4">{l.account_code} — {l.line_name}</span>
                       <span>{formatIDR(l.amount)}</span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -176,10 +173,10 @@ export const ProfitLossPage: React.FC = () => {
                   </h3>
                   <div className="divide-y divide-slate-100 text-xs font-mono mt-2">
                     {data.other_income_expense_section.lines.map((l) => (
-                      <div key={l.account_code || l.line_name} className="py-2 flex justify-between text-slate-700">
+                      <button type="button" key={l.account_code || l.line_name} className={lineClass(l.account_code)} onClick={() => openLedger(l.account_code)} disabled={!l.account_code}>
                         <span className="font-sans text-slate-800 pl-4">{l.account_code} — {l.line_name}</span>
                         <span>{formatIDR(l.amount)}</span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>

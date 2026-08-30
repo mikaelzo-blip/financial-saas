@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { SkeletonLoader } from '../../components/feedback/SkeletonLoader';
 import { formatIDR } from '../../utils/formatters';
+import { ReportHeader } from '../../components/reports/ReportHeader';
 
 export const CashFlowPage: React.FC = () => {
   const today = new Date().toISOString().split('T')[0];
@@ -51,6 +52,7 @@ export const CashFlowPage: React.FC = () => {
             <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
             Perbarui
           </Button>
+          <ReportHeader reportType="cash-flow" params={{ start_date: startDate, end_date: endDate }} disabled={!data} />
         </div>
       </div>
 

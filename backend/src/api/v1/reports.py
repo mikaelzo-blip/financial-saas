@@ -34,8 +34,74 @@ from src.services.reporting.budget_service import BudgetVsActualService
 from src.services.reporting.dashboard_service import DashboardService
 from src.services.reporting.excel_export_service import ExcelExportService
 from src.services.reporting.pdf_export_service import PdfExportService
+from src.services.reporting.export_service import SUPPORTED_REPORT_TYPES, ExportService, safe_filename
 
 router = APIRouter(prefix="/reports", tags=["Financial Reports"])
+
+
+async def _get_authoritative_export_report(
+    report_type: str,
+    db: AsyncSession,
+    org_id: uuid.UUID,
+    start_date: Optional[date],
+    end_date: Optional[date],
+    as_of_date: Optional[date],
+    account_code: Optional[str],
+    project_id: Optional[uuid.UUID],
+):
+    """Resolve exports through the same tenant-scoped services used by JSON APIs."""
+    if report_type == "profit-loss":
+        return await ProfitLossService.get_profit_and_loss(db, org_id, start_date, end_date)
+    if report_type == "balance-sheet":
+        report = await BalanceSheetService.get_balance_sheet(db, org_id, as_of_date)
+        if report.integrity_status != "VALID":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Official export blocked: balance sheet integrity error.")
+        return report
+    if report_type == "cash-flow":
+        return await CashFlowService.get_cash_flow(db, org_id, start_date, end_date)
+    if report_type == "trial-balance":
+        return await TrialBalanceService.get_trial_balance(db, org_id, start_date, end_date, as_of_date)
+    if report_type == "general-ledger":
+        if not account_code or not start_date or not end_date:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="account_code, start_date, and end_date are required for general-ledger export.")
+        return await GeneralLedgerService.get_general_ledger(db, org_id, account_code, start_date, end_date, project_id=project_id, page=1, page_size=500)
+    if report_type == "receivables-aging":
+        return await ARAgingService.get_ar_aging(db, org_id, as_of_date)
+    if report_type == "payables-aging":
+        return await APAgingService.get_ap_aging(db, org_id, as_of_date)
+    if report_type == "project-profitability":
+        if not project_id:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="project_id is required for project-profitability export.")
+        return await ProjectReportingService.get_project_profitability(db, org_id, project_id)
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unsupported report type. Supported values: {', '.join(sorted(SUPPORTED_REPORT_TYPES))}")
+
+
+@router.get("/export/{report_type}")
+async def export_report(
+    report_type: str,
+    format: str = Query(..., pattern="^(xlsx|pdf)$"),
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    as_of_date: Optional[date] = None,
+    account_code: Optional[str] = None,
+    project_id: Optional[uuid.UUID] = None,
+    org_id: uuid.UUID = Depends(get_current_org_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Download a tenant-isolated report generated from its authoritative DTO."""
+    try:
+        report = await _get_authoritative_export_report(report_type, db, org_id, start_date, end_date, as_of_date, account_code, project_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    model = ExportService.build(report_type, report)
+    if format == "xlsx":
+        stream = ExcelExportService.render(model)
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    else:
+        stream = PdfExportService.render(model)
+        media_type = "application/pdf"
+    filename = safe_filename(model.filename_stem, format)
+    return StreamingResponse(stream, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @router.get("/profit-loss/export")

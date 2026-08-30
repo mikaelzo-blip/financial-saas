@@ -1,163 +1,93 @@
-import io
-from decimal import Decimal
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+"""XLSX renderer for authoritative report export models."""
 
-from src.schemas.reporting import (
-    ProfitLossReportResponse,
-    BalanceSheetReportResponse,
-    TrialBalanceResponse,
-    CashFlowReportResponse,
-    ARAgingReportResponse,
-    APAgingReportResponse
-)
+import io
+import re
+from decimal import Decimal
+
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
+from pydantic import BaseModel
+
+from src.services.reporting.export_service import ExportService, ReportExportModel
+
+MONEY_FORMAT = '#,##0.00;[Red]-#,##0.00'
 
 
 class ExcelExportService:
     @staticmethod
-    def _apply_header_style(ws, title: str, subtitle: str, max_col: int = 4):
-        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=max_col)
-        ws.cell(row=1, column=1, value=title).font = Font(name="Calibri", size=14, bold=True)
-        ws.cell(row=1, column=1).alignment = Alignment(horizontal="center")
-
-        ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=max_col)
-        ws.cell(row=2, column=1, value=subtitle).font = Font(name="Calibri", size=10, italic=True)
-        ws.cell(row=2, column=1).alignment = Alignment(horizontal="center")
+    def export(report_type: str, report: BaseModel) -> io.BytesIO:
+        return ExcelExportService.render(ExportService.build(report_type, report))
 
     @staticmethod
-    def export_profit_loss(data: ProfitLossReportResponse) -> io.BytesIO:
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Laba Rugi"
+    def render(model: ReportExportModel) -> io.BytesIO:
+        workbook = Workbook()
+        worksheet = workbook.active
+        worksheet.title = "Report"
+        worksheet.freeze_panes = "A5"
+        worksheet.sheet_view.showGridLines = False
+        worksheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(model.headers))
+        worksheet.cell(1, 1, f"{model.organization_name} — {model.title}").font = Font(size=14, bold=True)
+        worksheet.cell(1, 1).alignment = Alignment(horizontal="center")
+        worksheet.merge_cells(start_row=2, start_column=1, end_row=2, end_column=len(model.headers))
+        worksheet.cell(2, 1, model.subtitle).alignment = Alignment(horizontal="center")
 
-        ExcelExportService._apply_header_style(
-            ws,
-            title=f"{data.organization_name} — LAPORAN LABA RUGI",
-            subtitle=f"Periode: {data.period_label}",
-            max_col=3
-        )
+        for column, header in enumerate(model.headers, start=1):
+            cell = worksheet.cell(4, column, header)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill("solid", fgColor="1E293B")
+            cell.alignment = Alignment(horizontal="center")
 
-        headers = ["Kode", "Keterangan Akun / Komponen", "Jumlah (IDR)"]
-        ws.append([])
-        ws.append(headers)
+        excel_rows = {row.key: index for index, row in enumerate(model.rows, start=5)}
+        reconciliation = []
+        for row_number, row in enumerate(model.rows, start=5):
+            for column_index, value in enumerate(row.values, start=1):
+                cell = worksheet.cell(row_number, column_index, value)
+                if isinstance(value, Decimal):
+                    cell.number_format = MONEY_FORMAT
+            for zero_based_column, template in row.formulas.items():
+                column = zero_based_column + 1
+                source_value = row.values[zero_based_column]
+                if not isinstance(source_value, Decimal):
+                    raise ValueError(f"Formula source {row.key} must be Decimal")
+                formula = re.sub(r"\{([^}]+)\}", lambda match: str(excel_rows[match.group(1)]), template)
+                worksheet.cell(row_number, column, formula).number_format = MONEY_FORMAT
+                reconciliation.append((row.key, str(row.values[1]), column, source_value, f"'{worksheet.title}'!{get_column_letter(column)}{row_number}"))
 
-        header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-        header_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
-        for col_idx in range(1, 4):
-            c = ws.cell(row=4, column=col_idx)
-            c.font = header_font
-            c.fill = header_fill
+            if row.style == "section":
+                for cell in worksheet[row_number]:
+                    cell.font = Font(bold=True, color="FFFFFF")
+                    cell.fill = PatternFill("solid", fgColor="475569")
+            elif row.style in {"subtotal", "total", "grand_total"}:
+                for cell in worksheet[row_number]:
+                    cell.font = Font(bold=True)
+                    if row.style == "grand_total":
+                        cell.fill = PatternFill("solid", fgColor="DCFCE7")
 
-        row_idx = 5
+        for index in range(1, len(model.headers) + 1):
+            worksheet.column_dimensions[get_column_letter(index)].width = 42 if index == 2 else 16
+        worksheet.auto_filter.ref = f"A4:{get_column_letter(len(model.headers))}{len(model.rows) + 4}"
 
-        def add_section(sec_name, lines, subtotal):
-            nonlocal row_idx
-            ws.cell(row=row_idx, column=2, value=sec_name).font = Font(bold=True)
-            row_idx += 1
-            for l in lines:
-                ws.cell(row=row_idx, column=1, value=l.account_code or "")
-                ws.cell(row=row_idx, column=2, value=l.line_name)
-                c = ws.cell(row=row_idx, column=3, value=float(l.amount))
-                c.number_format = '#,##0.00'
-                row_idx += 1
-            # Subtotal
-            ws.cell(row=row_idx, column=2, value=f"Total {sec_name}").font = Font(bold=True)
-            c = ws.cell(row=row_idx, column=3, value=float(subtotal))
-            c.font = Font(bold=True)
-            c.number_format = '#,##0.00'
-            row_idx += 2
+        audit = workbook.create_sheet("Reconciliation")
+        audit.append(("Key", "Label", "Column", "Authoritative DTO Value", "Visible Formula Cell", "Difference"))
+        for index, (key, label, column, authoritative, formula_cell) in enumerate(reconciliation, start=2):
+            audit.append((key, label, get_column_letter(column), authoritative, f"={formula_cell}", f"=E{index}-D{index}"))
+            for column_number in (4, 5, 6):
+                audit.cell(index, column_number).number_format = MONEY_FORMAT
+        audit.sheet_state = "hidden"
+        workbook.calculation.fullCalcOnLoad = True
+        workbook.calculation.forceFullCalc = True
+        workbook.calculation.calcMode = "auto"
 
-        add_section("I. PENDAPATAN USAHA", data.revenue_section.lines, data.revenue_section.subtotal)
-        add_section("II. HARGA POKOK PROYEK (HPP)", data.cogs_section.lines, data.cogs_section.subtotal)
-
-        ws.cell(row=row_idx, column=2, value="LABA KOTOR (GROSS PROFIT)").font = Font(bold=True)
-        c = ws.cell(row=row_idx, column=3, value=float(data.gross_profit))
-        c.font = Font(bold=True)
-        c.number_format = '#,##0.00'
-        row_idx += 2
-
-        add_section("III. BEBAN OPERASIONAL", data.operating_expenses_section.lines, data.operating_expenses_section.subtotal)
-
-        ws.cell(row=row_idx, column=2, value="LABA USAHA (OPERATING PROFIT)").font = Font(bold=True)
-        c = ws.cell(row=row_idx, column=3, value=float(data.operating_profit))
-        c.font = Font(bold=True)
-        c.number_format = '#,##0.00'
-        row_idx += 2
-
-        ws.cell(row=row_idx, column=2, value="LABA BERSIH TAHUN BERJALAN").font = Font(bold=True, color="047857")
-        c = ws.cell(row=row_idx, column=3, value=float(data.net_profit))
-        c.font = Font(bold=True, color="047857")
-        c.number_format = '#,##0.00'
-
-        ws.column_dimensions["A"].width = 15
-        ws.column_dimensions["B"].width = 45
-        ws.column_dimensions["C"].width = 25
-
-        buf = io.BytesIO()
-        wb.save(buf)
-        buf.seek(0)
-        return buf
+        stream = io.BytesIO()
+        workbook.save(stream)
+        stream.seek(0)
+        return stream
 
     @staticmethod
-    def export_balance_sheet(data: BalanceSheetReportResponse) -> io.BytesIO:
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Neraca"
+    def export_profit_loss(report: BaseModel) -> io.BytesIO:
+        return ExcelExportService.export("profit-loss", report)
 
-        ExcelExportService._apply_header_style(
-            ws,
-            title=f"{data.organization_name} — LAPORAN NERACA",
-            subtitle=f"Per Tanggal: {data.as_of_date}",
-            max_col=3
-        )
-
-        ws.append([])
-        ws.append(["Kode", "Komponen Neraca", "Jumlah (IDR)"])
-        for col_idx in range(1, 4):
-            c = ws.cell(row=4, column=col_idx)
-            c.font = Font(bold=True, color="FFFFFF")
-            c.fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
-
-        row_idx = 5
-
-        def add_section(sec_name, lines, subtotal):
-            nonlocal row_idx
-            ws.cell(row=row_idx, column=2, value=sec_name).font = Font(bold=True)
-            row_idx += 1
-            for l in lines:
-                ws.cell(row=row_idx, column=1, value=l.account_code or "")
-                ws.cell(row=row_idx, column=2, value=l.line_name)
-                c = ws.cell(row=row_idx, column=3, value=float(l.amount))
-                c.number_format = '#,##0.00'
-                row_idx += 1
-            ws.cell(row=row_idx, column=2, value=f"Total {sec_name}").font = Font(bold=True)
-            c = ws.cell(row=row_idx, column=3, value=float(subtotal))
-            c.font = Font(bold=True)
-            c.number_format = '#,##0.00'
-            row_idx += 2
-
-        add_section("ASET LANCAR", data.current_assets.lines, data.current_assets.subtotal)
-        add_section("ASET TETAP", data.fixed_assets.lines, data.fixed_assets.subtotal)
-
-        ws.cell(row=row_idx, column=2, value="TOTAL ASET").font = Font(bold=True, color="047857")
-        c = ws.cell(row=row_idx, column=3, value=float(data.total_assets))
-        c.font = Font(bold=True, color="047857")
-        c.number_format = '#,##0.00'
-        row_idx += 2
-
-        add_section("KEWAJIBAN JANGKA PENDEK", data.current_liabilities.lines, data.current_liabilities.subtotal)
-        add_section("EKUITAS", data.equity.lines, data.equity.subtotal)
-
-        ws.cell(row=row_idx, column=2, value="TOTAL KEWAJIBAN & EKUITAS").font = Font(bold=True, color="1E3A8A")
-        c = ws.cell(row=row_idx, column=3, value=float(data.total_liabilities_and_equity))
-        c.font = Font(bold=True, color="1E3A8A")
-        c.number_format = '#,##0.00'
-
-        ws.column_dimensions["A"].width = 15
-        ws.column_dimensions["B"].width = 45
-        ws.column_dimensions["C"].width = 25
-
-        buf = io.BytesIO()
-        wb.save(buf)
-        buf.seek(0)
-        return buf
+    @staticmethod
+    def export_balance_sheet(report: BaseModel) -> io.BytesIO:
+        return ExcelExportService.export("balance-sheet", report)

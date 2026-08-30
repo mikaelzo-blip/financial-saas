@@ -1,0 +1,231 @@
+openapi: 3.0.3
+info:
+  title: AI-Assisted Management Insights & Financial Q&A API
+  version: 1.0.0
+  description: Advisory management intelligence and conversational decision support API.
+paths:
+  /api/v1/insights/executive-summary:
+    get:
+      summary: Get Executive Financial Summary Insight
+      description: Returns structured facts, narrative summary, and management recommendations for the active period.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: X-Organization-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: refresh
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Executive summary insight generated or served from cache.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIInsightResponse'
+
+  /api/v1/insights/projects/{project_id}:
+    get:
+      summary: Get Project Health & Margin Insight
+      description: Evaluates gross margin, 9 cost categories, budget variance, and cash position for a specific project.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: X-Organization-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Project health insight.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIInsightResponse'
+        '404':
+          description: Project not found.
+
+  /api/v1/insights/anomalies:
+    get:
+      summary: Get Financial & Operational Anomaly Flags
+      description: Scans active reporting data and Review Queue for cost spikes, margin deterioration, or duplicate document patterns.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: X-Organization-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of detected anomaly signals.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  anomalies:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AnomalySignal'
+
+  /api/v1/insights/query:
+    post:
+      summary: Submit Financial Management Question (Q&A)
+      description: Processes natural language questions in Indonesian and returns grounded answers.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: X-Organization-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FinancialQAQueryRequest'
+      responses:
+        '200':
+          description: Answer generated from authoritative reporting data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinancialQAQueryResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    AIInsightResponse:
+      type: object
+      required:
+        - headline
+        - factual_metrics
+        - analytical_narrative
+        - actionable_recommendations
+        - confidence_score
+        - data_as_of
+        - provider_metadata
+      properties:
+        headline:
+          type: string
+          example: 'Kinerja Agustus 2026 solid dengan laba bersih Rp 150 Juta.'
+        factual_metrics:
+          type: object
+          additionalProperties:
+            type: number
+        analytical_narrative:
+          type: string
+        anomalies_detected:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnomalySignal'
+        actionable_recommendations:
+          type: array
+          items:
+            type: string
+        confidence_score:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        data_as_of:
+          type: string
+          format: date
+        provider_metadata:
+          type: object
+          properties:
+            provider:
+              type: string
+            cached:
+              type: boolean
+            latency_ms:
+              type: integer
+
+    AnomalySignal:
+      type: object
+      required:
+        - code
+        - severity
+        - description
+      properties:
+        code:
+          type: string
+          example: 'AR_OVERDUE_SURGE'
+        severity:
+          type: string
+          enum: [INFO, WARNING, CRITICAL]
+        description:
+          type: string
+        metric_reference:
+          type: string
+
+    FinancialQAQueryRequest:
+      type: object
+      required:
+        - query_text
+      properties:
+        query_text:
+          type: string
+          example: 'Piutang mana yang paling mendesak ditagih?'
+        session_id:
+          type: string
+          format: uuid
+
+    FinancialQAQueryResponse:
+      type: object
+      required:
+        - session_id
+        - answer_text
+        - classified_intent
+        - source_references
+        - confidence_score
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        answer_text:
+          type: string
+        classified_intent:
+          type: string
+          example: 'AR_AGING'
+        source_references:
+          type: array
+          items:
+            type: string
+            example: 'ARAgingReportResponse (2026-08-31)'
+        confidence_score:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]

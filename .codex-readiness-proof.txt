@@ -1,0 +1,1 @@
+Temporary autonomous Git readiness proof. Safe to remove.

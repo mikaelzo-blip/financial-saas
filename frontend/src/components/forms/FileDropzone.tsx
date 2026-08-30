@@ -11,12 +11,12 @@ export interface FileDropzoneProps {
 
 export const FileDropzone: React.FC<FileDropzoneProps> = ({
   onUploaded,
-  documentType = 'OTHER',
+  documentType = 'UNKNOWN',
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
-  const [uploadedDoc, setUploadedDoc] = useState<DocumentResponse | null>(null);
+  const [uploadedDocs, setUploadedDocs] = useState<DocumentResponse[]>([]);
   const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
   const [duplicateMessage, setDuplicateMessage] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -28,7 +28,7 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
 
     try {
       const doc = await documentsApi.upload(file, documentType);
-      setUploadedDoc(doc);
+      setUploadedDocs((current) => [...current, doc]);
       setUploadProgress(null);
       onUploaded(doc);
     } catch (err: any) {
@@ -46,11 +46,13 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
     }
   };
 
+  const handleFiles = async (files: FileList | File[]) => {
+    for (const file of Array.from(files)) await handleFile(file);
+  };
+
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFile(e.dataTransfer.files[0]);
-    }
+    if (e.dataTransfer.files.length) void handleFiles(e.dataTransfer.files);
   };
 
   return (
@@ -64,22 +66,21 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           className="hidden"
-          accept=".pdf,.jpg,.jpeg,.png"
+          accept=".pdf,.jpg,.jpeg,.png,.webp,.heic"
           onChange={(e) => {
-            if (e.target.files && e.target.files[0]) {
-              handleFile(e.target.files[0]);
-            }
+            if (e.target.files?.length) void handleFiles(e.target.files);
           }}
         />
 
-        {uploadedDoc ? (
+        {uploadedDocs.length ? (
           <div className="flex items-center gap-3 text-emerald-700 bg-emerald-50 px-4 py-2 rounded-lg border border-emerald-200">
             <CheckCircle2 className="h-5 w-5 shrink-0" />
             <div className="text-left">
-              <p className="text-xs font-semibold">{uploadedDoc.file_name}</p>
+              <p className="text-xs font-semibold">{uploadedDocs.length} dokumen berhasil diunggah</p>
               <p className="text-[10px] text-emerald-600 font-mono">
-                {uploadedDoc.document_code} • {(uploadedDoc.file_size_bytes / 1024).toFixed(1)} KB
+                {uploadedDocs.map((doc) => doc.document_code).join(' • ')}
               </p>
             </div>
           </div>
@@ -91,7 +92,7 @@ export const FileDropzone: React.FC<FileDropzoneProps> = ({
             <p className="text-xs font-semibold text-slate-700">
               {isUploading ? uploadProgress : 'Klik atau seret file nota/SPK ke sini'}
             </p>
-            <p className="text-[10px] text-slate-400 mt-1">Mendukung format PDF, JPG, PNG (Maks 15MB)</p>
+            <p className="text-[10px] text-slate-400 mt-1">PDF, JPG, PNG, WEBP, HEIC • Maks 25 MB per file • Batch didukung</p>
           </>
         )}
       </div>

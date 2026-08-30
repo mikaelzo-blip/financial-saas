@@ -1,0 +1,108 @@
+openapi: 3.1.0
+info:
+  title: Financial SaaS Document Intelligence API
+  version: 0.1.0
+  description: Tenant-scoped candidate intake. No debit or credit instructions are accepted.
+paths:
+  /api/v1/documents/upload:
+    post:
+      summary: Store and process one immutable source document
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+                source_channel: {type: string, enum: [WEB, API], default: WEB}
+                project_id: {type: [string, 'null'], format: uuid}
+      responses:
+        '202': {description: Accepted, content: {application/json: {schema: {$ref: '#/components/schemas/Document'}}}}
+        '409': {description: Exact tenant SHA-256 duplicate}
+        '413': {description: Exceeds 25 MB}
+        '415': {description: Unsupported declared or detected content}
+  /api/v1/documents:
+    get:
+      summary: List tenant documents with status/type/review filters
+      responses: {'200': {description: Document summaries}}
+  /api/v1/documents/{document_id}:
+    get:
+      summary: Get extraction, matches, confidence, candidate, flags, and corrections
+      parameters: [{$ref: '#/components/parameters/DocumentId'}]
+      responses:
+        '200': {description: Detail, content: {application/json: {schema: {$ref: '#/components/schemas/Document'}}}}
+        '404': {description: Not found in current tenant}
+  /api/v1/documents/{document_id}/content:
+    get:
+      summary: Stream authorized immutable original
+      parameters: [{$ref: '#/components/parameters/DocumentId'}]
+      responses: {'200': {description: Original bytes}, '404': {description: Not found}}
+  /api/v1/documents/{document_id}/retry:
+    post:
+      summary: Retry failed processing idempotently
+      parameters: [{$ref: '#/components/parameters/DocumentId'}]
+      responses: {'202': {description: Existing document scheduled}, '409': {description: Not retryable}}
+  /api/v1/documents/{document_id}/corrections:
+    post:
+      summary: Apply reviewer corrections with append-only audit
+      parameters: [{$ref: '#/components/parameters/DocumentId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [changes, reason]
+              properties:
+                changes: {type: object, additionalProperties: true}
+                reason: {type: string, minLength: 1}
+      responses: {'200': {description: Revalidated detail}, '403': {description: Reviewer role required}, '422': {description: Invalid change}}
+  /api/v1/documents/{document_id}/approve:
+    post:
+      summary: Convert candidate through authoritative transaction validation
+      parameters: [{$ref: '#/components/parameters/DocumentId'}]
+      responses: {'201': {description: Transaction created}, '409': {description: Flags, incomplete candidate, or duplicate conversion}}
+components:
+  parameters:
+    DocumentId: {in: path, name: document_id, required: true, schema: {type: string, format: uuid}}
+  schemas:
+    Confidence: {type: string, pattern: '^(0(\.\d{1,4})?|1(\.0{1,4})?)$'}
+    ConfidenceScores:
+      type: object
+      properties:
+        ocr_confidence: {$ref: '#/components/schemas/Confidence'}
+        document_type_confidence: {$ref: '#/components/schemas/Confidence'}
+        entity_confidence: {$ref: '#/components/schemas/Confidence'}
+        project_confidence: {$ref: '#/components/schemas/Confidence'}
+        amount_confidence: {$ref: '#/components/schemas/Confidence'}
+    TransactionCandidate:
+      type: object
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid}
+        proposed_transaction_type: {type: [string, 'null']}
+        counterparty_id: {type: [string, 'null'], format: uuid}
+        project_id: {type: [string, 'null'], format: uuid}
+        payment_account_id: {type: [string, 'null'], format: uuid}
+        amount: {type: [string, 'null'], pattern: '^\d+(\.\d{1,2})?$'}
+        status: {type: string, enum: [PROPOSED, REVIEW_REQUIRED, READY_FOR_APPROVAL, CONVERTED]}
+    Document:
+      type: object
+      required: [id, organization_id, document_code, original_filename, mime_type, file_size_bytes, file_hash_sha256, processing_status, review_flags]
+      properties:
+        id: {type: string, format: uuid}
+        organization_id: {type: string, format: uuid}
+        document_code: {type: string}
+        original_filename: {type: string}
+        mime_type: {type: string}
+        file_size_bytes: {type: integer, minimum: 1, maximum: 26214400}
+        file_hash_sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+        document_type: {type: string}
+        processing_status: {type: string, enum: [UPLOADED, HASHED, EXTRACTING, EXTRACTED, MATCHING, REVIEW_REQUIRED, READY_FOR_APPROVAL, PROCESSED, FAILED]}
+        extracted_data: {type: object}
+        matching_results: {type: object}
+        confidence_scores: {$ref: '#/components/schemas/ConfidenceScores'}
+        candidate_transaction: {$ref: '#/components/schemas/TransactionCandidate'}
+        review_flags: {type: array, items: {type: string}, uniqueItems: true}

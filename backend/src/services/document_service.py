@@ -7,9 +7,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.document import Document, ProjectDocumentLink
 from src.models.project import Project
-from src.models.enums import DocumentType
+from src.models.enums import DocumentType, DocumentProcessingStatus
 from src.services.storage_service import StorageService
 from src.core.exceptions import EntityNotFoundException, DuplicateEntityException
+from src.core.config import settings
+
+ALLOWED_MIME_SIGNATURES = {
+    "image/jpeg": (b"\xff\xd8\xff",), "image/png": (b"\x89PNG\r\n\x1a\n",),
+    "image/webp": (b"RIFF",), "image/heic": (b"\x00\x00",),
+    "application/pdf": (b"%PDF-",),
+}
 
 
 def compute_sha256(file_obj: BinaryIO) -> str:
@@ -86,6 +93,10 @@ class DocumentService:
         """
         Ingests a source document: computes SHA-256, verifies uniqueness, stores file, and creates DB record.
         """
+        if source_channel == "WEB_UPLOAD":
+            source_channel = "WEB"
+        if source_channel not in {"WEB", "API"}:
+            raise ValueError("source_channel must be WEB or API")
         file_hash = compute_sha256(file_obj)
 
         # Exact duplicate detection
@@ -104,6 +115,20 @@ class DocumentService:
         file_obj.seek(0, 2)
         file_size = file_obj.tell()
         file_obj.seek(0)
+        if file_size < 1 or file_size > settings.DOCUMENT_MAX_SIZE_BYTES:
+            raise ValueError(f"Document size must be between 1 and {settings.DOCUMENT_MAX_SIZE_BYTES} bytes")
+        if mime_type not in ALLOWED_MIME_SIGNATURES:
+            raise ValueError(f"Unsupported document MIME type: {mime_type}")
+        header = file_obj.read(16)
+        file_obj.seek(0)
+        if mime_type == "image/webp":
+            valid_signature = header.startswith(b"RIFF") and header[8:12] == b"WEBP"
+        elif mime_type == "image/heic":
+            valid_signature = b"ftyp" in header
+        else:
+            valid_signature = any(header.startswith(sig) for sig in ALLOWED_MIME_SIGNATURES[mime_type])
+        if not valid_signature:
+            raise ValueError("File content does not match declared MIME type")
 
         # Save to storage
         storage_path = self.storage.save_file(organization_id, file_obj, file_name)
@@ -122,7 +147,8 @@ class DocumentService:
             storage_path=storage_path,
             source_channel=source_channel,
             source_metadata=source_metadata or {},
-            created_by=created_by
+            created_by=created_by,
+            processing_status=DocumentProcessingStatus.HASHED,
         )
         self.session.add(document)
         await self.session.flush()

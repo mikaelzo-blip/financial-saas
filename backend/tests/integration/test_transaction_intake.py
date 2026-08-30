@@ -182,7 +182,7 @@ async def test_transaction_rest_api_capture_and_query(client: AsyncClient, db_se
     doc_service = DocumentService(db_session)
     doc = await doc_service.ingest_document(
         org.id,
-        io.BytesIO(b"NOTA-BELANJA-KONTRAKTOR"),
+        io.BytesIO(b"%PDF-1.4\nNOTA-BELANJA-KONTRAKTOR"),
         "nota.pdf",
         "application/pdf",
         DocumentType.RECEIPT

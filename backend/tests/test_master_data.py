@@ -312,6 +312,7 @@ def test_domain_enums_integrity():
     assert UserRole.OPERATOR == "OPERATOR"
     assert UserRole.VIEWER == "VIEWER"
 
-    assert len(DocumentType) == 21
+    assert len(DocumentType) == 22
+    assert DocumentType.UNKNOWN == "UNKNOWN"
     assert DocumentType.SPK == "SPK"
     assert DocumentType.BAST == "BAST"

@@ -1,19 +1,19 @@
 import uuid
-from typing import Optional, Dict, Any, TYPE_CHECKING
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from datetime import datetime
 from sqlalchemy import (
     String,
     BigInteger,
     ForeignKey,
     UniqueConstraint,
-    JSON,
+    JSON, Integer, Text,
     Enum as SAEnum
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from src.core.database import Base
-from src.models.enums import DocumentType
+from src.models.enums import DocumentType, DocumentProcessingStatus
 
 if TYPE_CHECKING:
     from src.models.organization import Organization
@@ -84,6 +84,22 @@ class Document(Base):
         nullable=False,
         default=dict
     )
+    processing_status: Mapped[DocumentProcessingStatus] = mapped_column(
+        SAEnum(DocumentProcessingStatus, name="document_processing_status"),
+        nullable=False,
+        default=DocumentProcessingStatus.UPLOADED,
+    )
+    provider_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    provider_version: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    processing_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    extracted_data: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    matching_results: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    confidence_scores: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    candidate_transaction: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    review_flags: Mapped[List[str]] = mapped_column(JSON, nullable=False, default=list)
+    failure_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    failure_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now(), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         server_default=func.now(),
         nullable=False
@@ -134,3 +150,18 @@ class TransactionDocumentLink(Base):
         server_default=func.now(),
         nullable=False
     )
+
+
+class DocumentCorrection(Base):
+    """Append-only reviewer correction; source document bytes remain immutable."""
+    __tablename__ = "document_corrections"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id", ondelete="RESTRICT"), nullable=False, index=True)
+    field_path: Mapped[str] = mapped_column(String(255), nullable=False)
+    old_value: Mapped[Any] = mapped_column(JSON, nullable=True)
+    new_value: Mapped[Any] = mapped_column(JSON, nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    corrected_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    corrected_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)

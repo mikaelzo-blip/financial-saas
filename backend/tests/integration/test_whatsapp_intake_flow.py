@@ -44,7 +44,7 @@ async def wa(client, db_session, monkeypatch, tmp_path):
         return HermesApiClient(transport, lambda: settings.WHATSAPP_TENANT_TOKENS[org].get_secret_value(), "https://saas.test")
     provider = MockWhatsAppProvider()
     provider.media["123"] = ("image/png", b"\x89PNG\r\n\x1a\nunique-whatsapp-image")
-    service = WhatsAppWebhookService(provider, gateway, tenant_client)
+    service = WhatsAppWebhookService(provider, gateway, tenant_client, [str(o.id) for o in organizations])
     app.state.whatsapp_service = service
     phones = ["+6281234567890", "+6282222222222"]
     for user, phone in zip(users, phones):

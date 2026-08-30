@@ -1,4 +1,6 @@
 """Explicit runtime composition. Mock is the default; no provider provisioning."""
+import asyncio
+import logging
 from src.core.config import settings
 from src.services.hermes.client import HermesApiClient, HttpxHermesTransport
 from .mock_provider import MockWhatsAppProvider
@@ -24,4 +26,17 @@ def configured_service():
         if not token:
             raise ValueError("Sender tenant has no machine credential")
         return HermesApiClient(transport, token.get_secret_value, settings.WHATSAPP_SAAS_URL)
-    return WhatsAppWebhookService(provider, gateway, tenant_client)
+    return WhatsAppWebhookService(provider, gateway, tenant_client, list(settings.WHATSAPP_TENANT_TOKENS))
+
+
+async def notification_loop(app):
+    """Poll authoritative processing outcomes without touching database or storage."""
+    while True:
+        service = getattr(app.state, "whatsapp_service", None)
+        if service:
+            try:
+                await service.deliver_pending_notifications()
+            except Exception:
+                # No exception strings: transports may carry sensitive URL/token data.
+                logging.getLogger(__name__).warning("WhatsApp notification poll failed")
+        await asyncio.sleep(10)

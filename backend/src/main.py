@@ -1,4 +1,6 @@
 from contextlib import asynccontextmanager
+from contextlib import suppress
+import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -9,9 +11,14 @@ from src.core.exceptions import register_exception_handlers
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle events."""
-    # Startup actions
-    yield
-    # Shutdown actions
+    from src.services.integrations.whatsapp.runtime import notification_loop
+    worker = asyncio.create_task(notification_loop(app))
+    try:
+        yield
+    finally:
+        worker.cancel()
+        with suppress(asyncio.CancelledError):
+            await worker
 
 
 def create_application() -> FastAPI:

@@ -63,14 +63,14 @@
 **Independent Test**: Trigger a clarification question for an ambiguous project; reply with valid option number; verify candidate project field updated.
 
 ### Tests for User Story 2
-- [ ] T019 [P] [US2] Unit test for clarification session state machine in `backend/tests/unit/test_whatsapp_clarification.py`
-- [ ] T020 [P] [US2] Integration test for interactive numeric reply resolving Review Queue candidate in `backend/tests/integration/test_whatsapp_clarification_flow.py`
+- [X] T019 [P] [US2] Unit test for clarification session state machine in `backend/tests/unit/test_whatsapp_clarification.py`
+- [X] T020 [P] [US2] Integration test for interactive numeric reply resolving Review Queue candidate in `backend/tests/integration/test_whatsapp_clarification_flow.py`
 
 ### Implementation for User Story 2
-- [ ] T021 [P] [US2] Implement `WhatsAppClarificationService` state machine in `backend/src/services/integrations/whatsapp/clarification_service.py`
-- [ ] T022 [US2] Wire interactive option dispatching to `WhatsAppOutboundService` in `backend/src/services/integrations/whatsapp/outbound_service.py`
-- [ ] T023 [US2] Update `WhatsAppWebhookService` to intercept numeric replies and update Review Queue in `backend/src/services/integrations/whatsapp/webhook_service.py`
-- [ ] T024 [US2] Add clarification session expiry cleanup task in `backend/src/services/integrations/whatsapp/clarification_service.py`
+- [X] T021 [P] [US2] Implement `WhatsAppClarificationService` state machine in `backend/src/services/integrations/whatsapp/clarification_service.py`
+- [X] T022 [US2] Wire interactive option dispatching to `WhatsAppOutboundService` in `backend/src/services/integrations/whatsapp/outbound_service.py`
+- [X] T023 [US2] Update `WhatsAppWebhookService` to intercept numeric replies and update Review Queue in `backend/src/services/integrations/whatsapp/webhook_service.py`
+- [X] T024 [US2] Add clarification session expiry cleanup task in `backend/src/services/integrations/whatsapp/clarification_service.py`
 
 **Checkpoint**: User Stories 1 and 2 are fully functional and testable.
 
@@ -83,12 +83,12 @@
 **Independent Test**: Send text `"STATUS"` from a registered supervisor number; verify summarized report text returned.
 
 ### Tests for User Story 3
-- [ ] T025 [P] [US3] Unit test for text command parsing and authorization in `backend/tests/unit/test_whatsapp_command_service.py`
-- [ ] T026 [P] [US3] Integration test for operational status inquiry in `backend/tests/integration/test_whatsapp_status_inquiry.py`
+- [X] T025 [P] [US3] Unit test for text command parsing and authorization in `backend/tests/unit/test_whatsapp_command_service.py`
+- [X] T026 [P] [US3] Integration test for operational status inquiry in `backend/tests/integration/test_whatsapp_status_inquiry.py`
 
 ### Implementation for User Story 3
-- [ ] T027 [US3] Implement `WhatsAppCommandService` parsing commands (`STATUS`, `HELP`, `RINGKASAN`) in `backend/src/services/integrations/whatsapp/command_service.py`
-- [ ] T028 [US3] Wire command router to `WhatsAppWebhookService` in `backend/src/services/integrations/whatsapp/webhook_service.py`
+- [X] T027 [US3] Implement `WhatsAppCommandService` parsing commands (`STATUS`, `HELP`, `RINGKASAN`) in `backend/src/services/integrations/whatsapp/command_service.py`
+- [X] T028 [US3] Wire command router to `WhatsAppWebhookService` in `backend/src/services/integrations/whatsapp/webhook_service.py`
 
 ---
 

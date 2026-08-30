@@ -9,14 +9,35 @@ from .media_service import WhatsAppMediaService
 from .sender_service import WhatsAppSenderService
 from .outbound_service import WhatsAppOutboundService
 from .provider import ProviderError
+from .command_service import WhatsAppCommandService
+from .clarification_service import WhatsAppClarificationService
 
 
 class WhatsAppWebhookService:
-    def __init__(self, provider, gateway, tenant_client):
+    def __init__(self, provider, gateway, tenant_client, organization_ids=None):
         self.provider, self.gateway, self.tenant_client = provider, gateway, tenant_client
         self.senders, self.media = WhatsAppSenderService(gateway), WhatsAppMediaService(provider)
         self.outbound = WhatsAppOutboundService(provider)
         self._rejected = {}
+        self.organization_ids = organization_ids or []
+        self.clarifications = WhatsAppClarificationService()
+        self.commands = WhatsAppCommandService()
+
+    async def deliver_pending_notifications(self):
+        for org in self.organization_ids:
+            client = self.tenant_client(org)
+            await self.clarifications.expire(client)
+            result = await client.channel_request("notifications", {})
+            for notice in result["notices"]:
+                claim = await client.channel_request("notifications/claim", {k: notice[k] for k in ("key", "phone_number", "document_id", "body")})
+                if not claim["claimed"]:
+                    continue
+                delivered = True
+                try:
+                    await self.outbound.text(notice["phone_number"], notice["body"], notice["buttons"])
+                except ProviderError:
+                    delivered = False
+                await client.channel_request("notifications/finish", {"key": notice["key"], "delivered": delivered})
 
     async def handle(self, event):
         age = (datetime.now(timezone.utc) - event.timestamp).total_seconds()
@@ -46,7 +67,9 @@ class WhatsAppWebhookService:
                 body = self.outbound.receipt(outcome)
                 finish.update(document_id=str(outcome.document_id), hermes_submission_id=str(outcome.correlation_id) if outcome.correlation_id else None, media_size_bytes=len(media.content))
             else:
-                body = "Kirim foto nota atau PDF. Persetujuan transaksi tetap melalui aplikasi SaaS."
+                body = await self.clarifications.reply(event, client)
+                if body is None:
+                    body = await self.commands.reply(event.text, sender, client)
             finish["outbound_wamid"] = await self.outbound.text(event.sender_phone, body)
             finish["outbound_text"] = body
         except ProviderError:

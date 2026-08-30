@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { SkeletonLoader } from '../../components/feedback/SkeletonLoader';
 import { formatIDR } from '../../utils/formatters';
+import { ReportHeader } from '../../components/reports/ReportHeader';
 
 export const ARAgingPage: React.FC = () => {
   const today = new Date().toISOString().split('T')[0];
@@ -54,6 +55,7 @@ export const ARAgingPage: React.FC = () => {
             <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
             Perbarui
           </Button>
+          <ReportHeader reportType="receivables-aging" params={{ as_of_date: asOfDate }} disabled={!data} />
         </div>
       </div>
 

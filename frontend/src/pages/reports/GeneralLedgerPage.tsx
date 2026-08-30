@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { reportsApi } from '../../api/reports';
 import { masterApi } from '../../api/master';
@@ -10,14 +11,16 @@ import { Select } from '../../components/ui/Select';
 import { SkeletonLoader } from '../../components/feedback/SkeletonLoader';
 import { formatIDR } from '../../utils/formatters';
 import { ChartOfAccountResponse } from '../../types/api';
+import { ReportHeader } from '../../components/reports/ReportHeader';
 
 export const GeneralLedgerPage: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const today = new Date().toISOString().split('T')[0];
   const firstDayOfYear = `${new Date().getFullYear()}-01-01`;
 
-  const [accountCode, setAccountCode] = useState<string>('1101');
-  const [startDate, setStartDate] = useState<string>(firstDayOfYear);
-  const [endDate, setEndDate] = useState<string>(today);
+  const [accountCode, setAccountCode] = useState<string>(searchParams.get('account_code') || '1101');
+  const [startDate, setStartDate] = useState<string>(searchParams.get('start_date') || firstDayOfYear);
+  const [endDate, setEndDate] = useState<string>(searchParams.get('end_date') || today);
 
   // Fetch active COA accounts for selector
   const { data: coaList } = useQuery({
@@ -47,14 +50,12 @@ export const GeneralLedgerPage: React.FC = () => {
             Rincian mutasi transaksi dan saldo berjalan per akun buku besar.
           </p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => refetch()}
-          disabled={isFetching}
-        >
-          <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
-          Segarkan
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />Segarkan
+          </Button>
+          <ReportHeader reportType="general-ledger" params={{ account_code: accountCode, start_date: startDate, end_date: endDate }} disabled={!data} />
+        </div>
       </div>
 
       {/* Filter Card */}

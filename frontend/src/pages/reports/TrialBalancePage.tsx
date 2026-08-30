@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { SkeletonLoader } from '../../components/feedback/SkeletonLoader';
 import { formatIDR } from '../../utils/formatters';
+import { ReportHeader } from '../../components/reports/ReportHeader';
 
 export const TrialBalancePage: React.FC = () => {
   const today = new Date().toISOString().split('T')[0];
@@ -41,6 +42,7 @@ export const TrialBalancePage: React.FC = () => {
             <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
             Muat Ulang
           </Button>
+          <ReportHeader reportType="trial-balance" params={{ as_of_date: asOfDate }} disabled={!data || !data.is_balanced} />
         </div>
       </div>
 

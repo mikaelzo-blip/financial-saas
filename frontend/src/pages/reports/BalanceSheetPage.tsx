@@ -8,6 +8,7 @@ import { Input } from '../../components/ui/Input';
 import { SkeletonLoader } from '../../components/feedback/SkeletonLoader';
 import { IntegrityAlertBanner } from '../../components/reports/IntegrityAlertBanner';
 import { formatIDR } from '../../utils/formatters';
+import { ReportHeader } from '../../components/reports/ReportHeader';
 
 export const BalanceSheetPage: React.FC = () => {
   const today = new Date().toISOString().split('T')[0];
@@ -42,22 +43,7 @@ export const BalanceSheetPage: React.FC = () => {
             <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
             Perbarui
           </Button>
-          <a
-            href={`/api/v1/reports/balance-sheet/export?format=xlsx&as_of_date=${asOfDate}`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
-          >
-            Export Excel (.xlsx)
-          </a>
-          <a
-            href={`/api/v1/reports/balance-sheet/export?format=pdf&as_of_date=${asOfDate}`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
-          >
-            Export PDF
-          </a>
+          <ReportHeader reportType="balance-sheet" params={{ as_of_date: asOfDate }} disabled={!data || !data.is_balanced} />
         </div>
       </div>
 

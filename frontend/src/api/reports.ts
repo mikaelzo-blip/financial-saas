@@ -14,7 +14,46 @@ import {
   DashboardSummaryResponse
 } from '../types/reporting';
 
+export type ReportExportType =
+  | 'profit-loss'
+  | 'balance-sheet'
+  | 'cash-flow'
+  | 'trial-balance'
+  | 'general-ledger'
+  | 'receivables-aging'
+  | 'payables-aging'
+  | 'project-profitability';
+
+export type ReportExportFormat = 'xlsx' | 'pdf';
+
+export interface ReportDownload {
+  blob: Blob;
+  filename: string;
+}
+
+const filenameFromDisposition = (value: string | undefined, fallback: string): string => {
+  const match = value?.match(/filename\*?=(?:UTF-8''|")?([^";]+)/i);
+  return match ? decodeURIComponent(match[1].replace(/"$/, '')) : fallback;
+};
+
 export const reportsApi = {
+  downloadReport: async (
+    reportType: ReportExportType,
+    format: ReportExportFormat,
+    params: Record<string, string | undefined> = {}
+  ): Promise<ReportDownload> => {
+    const response = await apiClient.get<Blob>(`/reports/export/${reportType}`, {
+      params: { ...params, format },
+      responseType: 'blob',
+    });
+    return {
+      blob: response.data,
+      filename: filenameFromDisposition(
+        response.headers['content-disposition'],
+        `${reportType}.${format}`
+      ),
+    };
+  },
   getIntegrityReport: async (asOfDate?: string): Promise<IntegrityReportResponse> => {
     const params = asOfDate ? { as_of_date: asOfDate } : {};
     const res = await apiClient.get<IntegrityReportResponse>('/reports/integrity', { params });

@@ -179,11 +179,11 @@
 
 **Purpose**: Implement server-side Excel (`openpyxl`) and PDF export services ensuring 100% numerical match with on-screen reports.
 
-- [ ] T068 [P] Implement `ExportService` generating formatted `.xlsx` workbooks with formula totals in `backend/src/services/reporting/export_service.py`
-- [ ] T069 [P] Implement PDF report generator in `backend/src/services/reporting/pdf_export_service.py`
-- [ ] T070 Implement binary file stream export endpoint `GET /reports/export/{report_type}` in `backend/src/api/v1/reports.py`
-- [ ] T071 Add Export toolbar buttons (Excel / PDF) in `frontend/src/components/reports/ReportHeader.tsx`
-- [ ] T072 [P] Unit test for Excel export numeric reconciliation against backend DTO totals in `backend/tests/unit/test_export_reconciliation.py`
+- [X] T068 [P] Implement `ExportService` generating formatted `.xlsx` workbooks with formula totals in `backend/src/services/reporting/export_service.py`
+- [X] T069 [P] Implement PDF report generator in `backend/src/services/reporting/pdf_export_service.py`
+- [X] T070 Implement binary file stream export endpoint `GET /reports/export/{report_type}` in `backend/src/api/v1/reports.py`
+- [X] T071 Add Export toolbar buttons (Excel / PDF) in `frontend/src/components/reports/ReportHeader.tsx`
+- [X] T072 [P] Unit test for Excel export numeric reconciliation against backend DTO totals in `backend/tests/unit/test_export_reconciliation.py`
 
 ---
 
@@ -191,11 +191,11 @@
 
 **Purpose**: Execute full regression suite validating mathematical balancing, double-entry equality, multi-tenant isolation, and quickstart scenarios.
 
-- [ ] T073 [P] Backend integration test validating 100% SAK reconciliation across all statements in `backend/tests/integration/test_reporting_reconciliation.py`
-- [ ] T074 [P] Backend multi-tenant data isolation test for reporting endpoints in `backend/tests/integration/test_reporting_isolation.py`
-- [ ] T075 [P] Frontend integration test verifying reporting route navigation in `frontend/tests/pages/ReportingRoutes.test.tsx`
-- [ ] T076 Wire all `/reports/*` routes and sidebar navigation links in `frontend/src/App.tsx` and `frontend/src/components/layout/AppLayout.tsx`
-- [ ] T077 Execute complete Quickstart verification scenarios A through G per `quickstart.md` and confirm clean builds across backend and frontend
+- [X] T073 [P] Backend integration test validating 100% SAK reconciliation across all statements in `backend/tests/integration/test_reporting_reconciliation.py`
+- [X] T074 [P] Backend multi-tenant data isolation test for reporting endpoints in `backend/tests/integration/test_reporting_isolation.py`
+- [X] T075 [P] Frontend integration test verifying reporting route navigation in `frontend/tests/pages/ReportingRoutes.test.tsx`
+- [X] T076 Wire all `/reports/*` routes and sidebar navigation links in `frontend/src/App.tsx` and `frontend/src/components/layout/AppLayout.tsx`
+- [X] T077 Execute complete Quickstart verification scenarios A through G per `quickstart.md` and confirm clean builds across backend and frontend
 
 ---
 

@@ -26,13 +26,17 @@ def configured_service():
         if not token:
             raise ValueError("Sender tenant has no machine credential")
         return HermesApiClient(transport, token.get_secret_value, settings.WHATSAPP_SAAS_URL)
-    return WhatsAppWebhookService(provider, gateway, tenant_client, list(settings.WHATSAPP_TENANT_TOKENS))
+    return WhatsAppWebhookService(provider, gateway, tenant_client, list(settings.WHATSAPP_TENANT_TOKENS), settings.WHATSAPP_ORG_MESSAGES_PER_MINUTE)
 
 
 async def notification_loop(app):
     """Poll authoritative processing outcomes without touching database or storage."""
     while True:
         service = getattr(app.state, "whatsapp_service", None)
+        if service is None:
+            service = configured_service()
+            if service:
+                app.state.whatsapp_service = service
         if service:
             try:
                 await service.deliver_pending_notifications()

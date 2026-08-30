@@ -62,6 +62,7 @@ class WhatsAppSourceMetadata(BaseModel):
 
 @router.post("/documents/upload", response_model=DocumentResponse, status_code=status.HTTP_202_ACCEPTED)
 async def upload_document(
+    request: Request,
     response: Response,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
@@ -74,6 +75,8 @@ async def upload_document(
     db: AsyncSession = Depends(get_db),
 ) -> DocumentResponse:
     """Reuse Feature 005 immutable intake; this surface cannot approve or post."""
+    if whatsapp_machine_organization(request) is not None and source_channel != "WHATSAPP":
+        raise HTTPException(403, "WhatsApp credential requires validated sender metadata")
     metadata = {}
     sender = None
     if source_channel == "WHATSAPP":

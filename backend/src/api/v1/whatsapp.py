@@ -6,6 +6,8 @@ from fastapi.responses import PlainTextResponse
 
 from src.core.config import settings
 from src.services.integrations.whatsapp.security import valid_handshake, valid_signature
+from src.services.hermes.retry import HermesApiError
+from src.services.integrations.whatsapp.provider import ProviderError
 
 router = APIRouter(prefix="/integrations/whatsapp", tags=["WhatsApp"])
 
@@ -39,6 +41,9 @@ async def webhook(request: Request):
         events = service.provider.parse(json.loads(body))
     except (ValueError, KeyError, TypeError, AttributeError, OverflowError):
         raise HTTPException(422, "Invalid WhatsApp payload") from None
-    for event in events:
-        await service.handle(event)
+    try:
+        for event in events:
+            await service.handle(event)
+    except (HermesApiError, ProviderError, ValueError):
+        raise HTTPException(503, "WhatsApp delivery temporarily unavailable") from None
     return {"status": "success"}

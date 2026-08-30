@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime, timezone, timedelta
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, JSON, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Index, JSON, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -26,11 +26,12 @@ class WhatsAppMessageLog(Base):
     __tablename__ = "whatsapp_message_logs"
     __table_args__ = (
         UniqueConstraint("organization_id", "wamid", name="uq_wa_log_org_wamid"),
+        CheckConstraint("organization_id IS NOT NULL OR (document_id IS NULL AND hermes_submission_id IS NULL AND coalesce(error_message, '') = 'UNREGISTERED_SENDER')", name="wa_unregistered_no_financial_refs"),
         Index("idx_wa_log_org_created", "organization_id", "created_at"),
         Index("idx_wa_log_phone", "phone_number"),
     )
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("organizations.id"), nullable=True)
     wamid: Mapped[str] = mapped_column(String(128), nullable=False)
     direction: Mapped[str] = mapped_column(String(16), nullable=False)
     phone_number: Mapped[str] = mapped_column(String(32), nullable=False)

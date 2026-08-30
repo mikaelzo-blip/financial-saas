@@ -24,7 +24,7 @@ def upgrade():
     op.create_index("idx_wa_sender_org", "whatsapp_sender_mappings", ["organization_id", "is_active"])
     op.create_table("whatsapp_message_logs",
         sa.Column("id", sa.UUID(), primary_key=True),
-        sa.Column("organization_id", sa.UUID(), sa.ForeignKey("organizations.id"), nullable=False),
+        sa.Column("organization_id", sa.UUID(), sa.ForeignKey("organizations.id"), nullable=True),
         sa.Column("wamid", sa.String(128), nullable=False),
         sa.Column("direction", sa.String(16), nullable=False),
         sa.Column("phone_number", sa.String(32), nullable=False),
@@ -37,6 +37,7 @@ def upgrade():
         sa.Column("error_message", sa.Text()),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.UniqueConstraint("organization_id", "wamid", name="uq_wa_log_org_wamid"),
+        sa.CheckConstraint("organization_id IS NOT NULL OR (document_id IS NULL AND hermes_submission_id IS NULL AND coalesce(error_message, '') = 'UNREGISTERED_SENDER')", name="wa_unregistered_no_financial_refs"),
     )
     op.create_index("idx_wa_log_org_created", "whatsapp_message_logs", ["organization_id", "created_at"])
     op.create_index("idx_wa_log_phone", "whatsapp_message_logs", ["phone_number"])

@@ -1,5 +1,7 @@
 """SaaS-owned state endpoints. Only this boundary accesses channel persistence."""
 import uuid
+from decimal import Decimal, InvalidOperation
+from typing import Literal
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,7 +16,7 @@ from src.models.user import User
 from src.models.whatsapp import WhatsAppSenderMapping, WhatsAppMessageLog, WhatsAppClarificationSession
 from src.models.document import Document, DocumentCorrection
 from src.models.project import Project
-from src.models.enums import DocumentProcessingStatus, ProjectStatus
+from src.models.enums import DocumentProcessingStatus, ProjectStatus, CostCategory
 from src.schemas.document import TransactionCandidate
 from src.schemas.whatsapp import SenderCreate, SenderResponse, InboundMessage
 from src.services.audit_service import AuditService
@@ -69,10 +71,69 @@ class PhoneRequest(BaseModel):
     phone_number: str = Field(pattern=r"^\+[1-9][0-9]{7,14}$")
 
 
+class DocumentRequest(PhoneRequest):
+    document_id: uuid.UUID
+
+
+@router.post(PREFIX + "/documents/get")
+async def channel_document(data: DocumentRequest, org: uuid.UUID = Depends(require_whatsapp_machine), db: AsyncSession = Depends(get_db)):
+    sender = await active_sender(db, data.phone_number, org)
+    doc = await db.scalar(select(Document).where(Document.organization_id == org, Document.id == data.document_id))
+    if not sender or not doc or (sender.role_in_org == "OPERATOR" and doc.created_by != sender.user_id):
+        raise HTTPException(404, "Document unavailable")
+    return {"document_id": str(doc.id), "document_code": doc.document_code, "processing_status": doc.processing_status.value}
+
+
 @router.post(PREFIX + "/resolve", dependencies=[Depends(require_adapter)])
 async def resolve_sender(data: PhoneRequest, db: AsyncSession = Depends(get_db)):
     mapping = await active_sender(db, data.phone_number)
     return {"sender": SenderResponse.model_validate(mapping).model_dump(mode="json") if mapping else None}
+
+
+class RejectionRequest(PhoneRequest):
+    wamid: str = Field(min_length=1, max_length=128)
+    message_type: Literal["TEXT", "IMAGE", "DOCUMENT", "INTERACTIVE_REPLY"] = "TEXT"
+
+
+@router.post(PREFIX + "/rejections/claim", dependencies=[Depends(require_adapter)])
+async def claim_rejection(data: RejectionRequest, db: AsyncSession = Depends(get_db)):
+    if await active_sender(db, data.phone_number):
+        raise HTTPException(409, "Sender is registered")
+    mapping = await db.scalar(select(WhatsAppSenderMapping).where(WhatsAppSenderMapping.phone_number == data.phone_number))
+    record_id = uuid.uuid5(uuid.NAMESPACE_URL, "whatsapp-rejection:" + data.phone_number + ":" + data.wamid)
+    if await db.get(WhatsAppMessageLog, record_id):
+        return {"claimed": False}
+    try:
+        async with db.begin_nested():
+            db.add(WhatsAppMessageLog(id=record_id, organization_id=mapping.organization_id if mapping else None,
+                wamid=data.wamid, direction="INBOUND", phone_number=data.phone_number, message_type=data.message_type,
+                delivery_status="REJECTED", error_message="UNREGISTERED_SENDER"))
+            await db.flush()
+    except IntegrityError:
+        return {"claimed": False}
+    await db.commit()
+    return {"claimed": True}
+
+
+class RejectionFinish(RejectionRequest):
+    outbound_wamid: str = Field(min_length=1, max_length=128)
+    delivered: bool
+
+
+@router.post(PREFIX + "/rejections/finish", dependencies=[Depends(require_adapter)])
+async def finish_rejection(data: RejectionFinish, db: AsyncSession = Depends(get_db)):
+    inbound_id = uuid.uuid5(uuid.NAMESPACE_URL, "whatsapp-rejection:" + data.phone_number + ":" + data.wamid)
+    inbound = await db.get(WhatsAppMessageLog, inbound_id)
+    if not inbound or inbound.error_message != "UNREGISTERED_SENDER":
+        raise HTTPException(404, "Rejection not found")
+    record_id = uuid.uuid5(uuid.NAMESPACE_URL, "whatsapp-rejection-outbound:" + str(inbound_id))
+    if not await db.get(WhatsAppMessageLog, record_id):
+        db.add(WhatsAppMessageLog(id=record_id, organization_id=inbound.organization_id, wamid=data.outbound_wamid,
+            direction="OUTBOUND", phone_number=data.phone_number, message_type="TEXT",
+            delivery_status="DELIVERED" if data.delivered else "FAILED", error_message="UNREGISTERED_SENDER",
+            raw_text="Nomor Anda belum terdaftar pada sistem keuangan. Silakan hubungi Administrator organisasi Anda."))
+    await db.commit()
+    return {"status": "success"}
 
 
 @router.post(PREFIX + "/messages/claim")
@@ -99,6 +160,7 @@ class LogUpdate(PhoneRequest):
     hermes_submission_id: uuid.UUID | None = None
     outbound_wamid: str | None = Field(default=None, max_length=128)
     outbound_text: str | None = Field(default=None, max_length=4096)
+    outbound_status: Literal["DELIVERED", "FAILED"] = "DELIVERED"
     media_size_bytes: int | None = Field(default=None, ge=0, le=25 * 1024 * 1024)
 
 
@@ -118,7 +180,7 @@ async def finish_message(data: LogUpdate, org: uuid.UUID = Depends(require_whats
         existing = await db.scalar(select(WhatsAppMessageLog.id).where(WhatsAppMessageLog.organization_id == org, WhatsAppMessageLog.wamid == data.outbound_wamid))
         if not existing:
             db.add(WhatsAppMessageLog(organization_id=org, wamid=data.outbound_wamid, direction="OUTBOUND", phone_number=data.phone_number,
-                message_type="TEXT", raw_text=data.outbound_text, delivery_status="DELIVERED", document_id=data.document_id))
+                message_type="TEXT", raw_text=data.outbound_text, delivery_status=data.outbound_status, document_id=data.document_id))
     await db.commit()
     return {"status": "success"}
 
@@ -188,12 +250,29 @@ async def clarification_reply(data: ClarificationReply, org: uuid.UUID = Depends
         if not project:
             raise HTTPException(422, "Project unavailable")
         field, value = "project_id", str(project.id)
+    elif session.question_type == "CONFIRM_AMOUNT":
+        # The user confirms an existing extraction, never types a new amount.
+        try:
+            amount = Decimal(value)
+            evidence = Decimal(str(doc.extracted_data.get("total_amount")))
+        except (InvalidOperation, TypeError):
+            raise HTTPException(422, "Amount evidence unavailable") from None
+        if not amount.is_finite() or amount <= 0 or amount != evidence:
+            raise HTTPException(422, "Amount must match source extraction")
+        field, value = "amount", str(amount)
+    elif session.question_type == "SELECT_CATEGORY":
+        try:
+            value = CostCategory(value).value
+        except ValueError:
+            raise HTTPException(422, "Category unavailable") from None
+        field = "cost_category"
     else:
         # No arbitrary amounts, account selection or categories from chat text.
         raise HTTPException(422, "This clarification requires the SaaS Review Queue")
     old_value = doc.candidate_transaction.get(field)
-    candidate.project_id = project.id
-    doc.candidate_transaction = candidate.model_dump(mode="json")
+    candidate_data = candidate.model_dump(mode="json")
+    candidate_data[field] = value
+    doc.candidate_transaction = TransactionCandidate.model_validate(candidate_data).model_dump(mode="json")
     # Preserve every review flag and REVIEW_REQUIRED status for final human review.
     db.add(DocumentCorrection(organization_id=org, document_id=doc.id, field_path=field, old_value=old_value,
         new_value=value, reason="WhatsApp clarification (review still required)", corrected_by=sender.user_id))
@@ -201,7 +280,50 @@ async def clarification_reply(data: ClarificationReply, org: uuid.UUID = Depends
     await AuditService(db).log_event(org, "Document", doc.id, "WHATSAPP_CLARIFICATION", sender.user_id,
         old_values={field: old_value}, new_values={field: value}, reason="Clarification only; approval not granted")
     await db.commit()
-    return {"reply": "✅ Terima kasih, proyek berhasil diperbarui. Persetujuan tetap melalui Review Queue SaaS."}
+    label = {"project_id": "proyek", "amount": "nominal", "cost_category": "kategori"}[field]
+    return {"reply": f"✅ Terima kasih, {label} berhasil diperbarui. Persetujuan tetap melalui Review Queue SaaS."}
+
+
+class PromptRequest(DocumentRequest):
+    question_type: Literal["SELECT_PROJECT", "CONFIRM_AMOUNT", "SELECT_CATEGORY"]
+
+
+@router.post(PREFIX + "/clarifications/open")
+async def open_clarification(data: PromptRequest, org: uuid.UUID = Depends(require_whatsapp_machine), db: AsyncSession = Depends(get_db)):
+    sender = await active_sender(db, data.phone_number, org)
+    doc = await db.scalar(select(Document).where(Document.id == data.document_id, Document.organization_id == org))
+    own_message = await db.scalar(select(WhatsAppMessageLog.id).where(WhatsAppMessageLog.organization_id == org,
+        WhatsAppMessageLog.phone_number == data.phone_number, WhatsAppMessageLog.document_id == data.document_id, WhatsAppMessageLog.direction == "INBOUND"))
+    if not sender or not doc or not own_message:
+        raise HTTPException(404, "Document unavailable")
+    if doc.processing_status != DocumentProcessingStatus.REVIEW_REQUIRED or doc.candidate_transaction.get("converted_transaction_id"):
+        raise HTTPException(409, "Document not awaiting review")
+    await db.scalar(select(WhatsAppSenderMapping).where(WhatsAppSenderMapping.id == sender.id).with_for_update())
+    await expire_sessions(db, org)
+    pending = await db.scalar(select(WhatsAppClarificationSession).where(WhatsAppClarificationSession.organization_id == org,
+        WhatsAppClarificationSession.phone_number == data.phone_number, WhatsAppClarificationSession.status == "PENDING"))
+    if pending:
+        return {"session_id": str(pending.id)}
+    if data.question_type == "SELECT_PROJECT":
+        projects = (await db.scalars(select(Project).where(Project.organization_id == org, Project.project_status == ProjectStatus.ACTIVE).order_by(Project.project_code).limit(3))).all()
+        options = {str(i): str(project.id) for i, project in enumerate(projects, 1)}
+    elif data.question_type == "SELECT_CATEGORY":
+        options = {str(i): category.value for i, category in enumerate(CostCategory, 1)}
+    else:
+        try:
+            amount = Decimal(str(doc.extracted_data.get("total_amount")))
+        except InvalidOperation:
+            raise HTTPException(422, "Amount evidence unavailable") from None
+        if not amount.is_finite() or amount <= 0:
+            raise HTTPException(422, "Amount evidence unavailable")
+        options = {"1": str(amount)}
+    if not options:
+        raise HTTPException(409, "No safe choices available")
+    session = WhatsAppClarificationSession(organization_id=org, phone_number=data.phone_number, document_id=doc.id,
+        question_type=data.question_type, options_payload=options)
+    db.add(session)
+    await db.commit()
+    return {"session_id": str(session.id)}
 
 
 @router.post(PREFIX + "/notifications")
@@ -220,12 +342,15 @@ async def pending_notifications(org: uuid.UUID = Depends(require_whatsapp_machin
         key = "result-" + str(doc.id)
         buttons = []
         body = f"[{doc.document_code}] Hasil ekstraksi: {doc.processing_status.value}. Review dan persetujuan melalui SaaS."
+        session = await db.scalar(select(WhatsAppClarificationSession).where(WhatsAppClarificationSession.organization_id == org,
+            WhatsAppClarificationSession.document_id == doc.id, WhatsAppClarificationSession.phone_number == sender.phone_number,
+            WhatsAppClarificationSession.status == "PENDING"))
         if doc.processing_status == DocumentProcessingStatus.REVIEW_REQUIRED and {"PROJECT_UNKNOWN", "PROJECT_AMBIGUOUS"}.intersection(doc.review_flags):
             # Serialize session creation per sender; never associate numeric replies to two documents.
             await db.scalar(select(WhatsAppSenderMapping).where(WhatsAppSenderMapping.id == sender.id).with_for_update())
-            session = await db.scalar(select(WhatsAppClarificationSession).where(WhatsAppClarificationSession.organization_id == org,
+            previous = await db.scalar(select(WhatsAppClarificationSession.id).where(WhatsAppClarificationSession.organization_id == org,
                 WhatsAppClarificationSession.document_id == doc.id, WhatsAppClarificationSession.phone_number == sender.phone_number))
-            if session and session.status != "PENDING":
+            if previous and not session:
                 continue
             if not session:
                 active = await db.scalar(select(WhatsAppClarificationSession.id).where(WhatsAppClarificationSession.organization_id == org,
@@ -238,14 +363,20 @@ async def pending_notifications(org: uuid.UUID = Depends(require_whatsapp_machin
                         question_type="SELECT_PROJECT", options_payload={str(i): str(project.id) for i, project in enumerate(projects, 1)})
                     db.add(session)
                     await db.flush()
-            if session:
-                key = "prompt-" + str(session.id)
-                body = f"[{doc.document_code}] Pilih proyek untuk klarifikasi (bukan persetujuan):"
-                for choice, project_id in session.options_payload.items():
-                    project = await db.scalar(select(Project).where(Project.id == uuid.UUID(project_id), Project.organization_id == org))
-                    if project:
-                        body += f"\n{choice}: {project.project_name}"
-                        buttons.append({"id": str(session.id) + ":" + choice, "title": choice})
+        if session:
+            key = "prompt-" + str(session.id)
+            body = f"[{doc.document_code}] Pilih jawaban klarifikasi {session.question_type} (bukan persetujuan):"
+            for choice, value in session.options_payload.items():
+                label = value
+                if session.question_type == "SELECT_PROJECT":
+                    project = await db.scalar(select(Project).where(Project.id == uuid.UUID(value), Project.organization_id == org))
+                    if not project:
+                        continue
+                    label = project.project_name
+                body += f"\n{choice}: {label}"
+                buttons.append({"id": str(session.id) + ":" + choice, "title": choice})
+            if len(buttons) > 3:
+                buttons = []  # Numeric list for providers with three-button limits.
         if not await db.scalar(select(WhatsAppMessageLog.id).where(WhatsAppMessageLog.organization_id == org, WhatsAppMessageLog.wamid == key)):
             notices.append({"key": key, "phone_number": sender.phone_number, "document_id": str(doc.id), "body": body, "buttons": buttons})
     await db.commit()

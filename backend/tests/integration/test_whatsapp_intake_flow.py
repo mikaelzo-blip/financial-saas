@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import time
+import asyncio
 
 import httpx
 import pytest
@@ -38,6 +39,23 @@ async def wa(client, db_session, monkeypatch, tmp_path):
         pass
     monkeypatch.setattr(hermes, "process_document_background", background)
     app = client._transport.app
+    # SQLite fixture shares a connection: serialize individual API transactions,
+    # while webhook orchestration/downloads still run concurrently.
+    from src.core.database import get_db
+    database_lock = asyncio.Lock()
+    async def scoped_db():
+        async with database_lock:
+            try:
+                yield db_session
+                await db_session.commit()
+            except Exception:
+                await db_session.rollback()
+                # Rollback expires ORM fixtures; reload asynchronously before tests
+                # inspect their IDs (production uses a fresh session per request).
+                for instance in list(db_session.identity_map.values()):
+                    await db_session.refresh(instance)
+                raise
+    app.dependency_overrides[get_db] = scoped_db
     transport = HttpxHermesTransport("https://saas.test", transport=httpx.ASGITransport(app=app))
     gateway = HermesApiClient(transport, lambda: "test-adapter", "https://saas.test")
     def tenant_client(org):
@@ -114,3 +132,41 @@ async def test_tenant_token_cannot_claim_other_sender(wa):
     event = {"wamid": "wamid.forged-claim", "sender_phone": wa["phones"][1], "timestamp": "2026-08-30T00:00:00Z", "message_type": "TEXT"}
     response = await wa["client"].post("/api/v1/hermes/whatsapp/messages/claim", headers={"Authorization": "Bearer test-tenant-0", "X-Organization-ID": str(wa["orgs"][1].id)}, json=event)
     assert response.status_code == 403
+    response = await wa["client"].post("/api/v1/hermes/documents/upload", headers={"Authorization": "Bearer test-tenant-0", "Idempotency-Key": "wa-forged-no-sender-metadata"}, files={"file": ("doc.pdf", b"%PDF-1.4", "application/pdf")})
+    assert response.status_code == 403
+
+
+async def test_download_failure_is_logged_and_requests_resend(wa, db_session):
+    wa["provider"].media.clear()
+    response = await send(wa)
+    assert response.status_code == 200
+    log = await db_session.scalar(select(WhatsAppMessageLog).where(WhatsAppMessageLog.direction == "INBOUND"))
+    assert log.delivery_status == "DOWNLOAD_FAILED"
+    assert "kirim ulang" in wa["provider"].outbound[-1].body_text
+    assert await db_session.scalar(select(func.count()).select_from(Document)) == 0
+
+
+async def test_real_feature005_pipeline_stages_transfer_for_review(wa, db_session, monkeypatch):
+    from decimal import Decimal
+    from src.api.v1 import hermes
+    from src.models.enums import DocumentType, DocumentProcessingStatus
+    from src.models import JournalEntry
+    from src.schemas.document import StructuredExtraction, ConfidenceScores
+    from src.services.documents.extraction import ExtractionResult, ScriptedExtractionProvider
+    from src.services.documents.pipeline import DocumentPipeline
+    from src.services.document_service import DocumentService
+    provider = ScriptedExtractionProvider(ExtractionResult(
+        DocumentType.TRANSFER_PROOF, StructuredExtraction(total_amount=Decimal("18500000.01"), destination_account_name="Budi"),
+        ConfidenceScores(ocr_confidence=1, document_type_confidence=1, entity_confidence=0, project_confidence=0, amount_confidence=1), "offline-test", "1"))
+    async def process(document_id):
+        doc = await db_session.get(Document, document_id)
+        await DocumentPipeline(db_session, provider).process(doc, DocumentService(db_session).storage.get_file_path(doc.storage_path))
+        await db_session.commit()
+    monkeypatch.setattr(hermes, "process_document_background", process)
+    response = await send(wa)
+    assert response.status_code == 200
+    doc = await db_session.scalar(select(Document))
+    assert doc.processing_status == DocumentProcessingStatus.REVIEW_REQUIRED
+    assert doc.extracted_data["total_amount"] == "18500000.01"
+    assert doc.review_flags
+    assert await db_session.scalar(select(func.count()).select_from(JournalEntry)) == 0

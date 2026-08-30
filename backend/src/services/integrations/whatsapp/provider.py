@@ -32,6 +32,8 @@ class WhatsAppProvider(ABC):
     def parse(self, payload: dict) -> list[InboundMessage]:
         if payload.get("object") != "whatsapp_business_account":
             raise ValueError("Unsupported webhook object")
+        if not isinstance(payload.get("entry"), list):
+            raise ValueError("Webhook entries are required")
         events = []
         for entry in payload.get("entry", []):
             for change in entry.get("changes", []):

@@ -96,12 +96,12 @@
 
 **Purpose**: Hardening, denial-of-service protection, strict multi-tenant verification, and execution of Quickstart Scenarios A through F.
 
-- [ ] T029 [P] Implement sliding-window rate limiting middleware in `backend/src/services/integrations/whatsapp/rate_limiter.py`
-- [ ] T030 [P] Integration test for multi-tenant data isolation in `backend/tests/integration/test_whatsapp_isolation.py`
-- [ ] T031 [P] Integration test for rate limiting enforcement in `backend/tests/unit/test_whatsapp_rate_limiter.py`
+- [X] T029 [P] Implement sliding-window rate limiting middleware in `backend/src/services/integrations/whatsapp/rate_limiter.py`
+- [X] T030 [P] Integration test for multi-tenant data isolation in `backend/tests/integration/test_whatsapp_isolation.py`
+- [X] T031 [P] Integration test for rate limiting enforcement in `backend/tests/unit/test_whatsapp_rate_limiter.py`
 - [X] T032 Register WhatsApp API router in `backend/src/api/v1/__init__.py`
-- [ ] T033 Execute complete Quickstart verification scenarios A through F per `quickstart.md`
-- [ ] T034 [P] Update API documentation and deployment guide in `docs/`
+- [X] T033 Execute complete Quickstart verification scenarios A through F per `quickstart.md`
+- [X] T034 [P] Update API documentation and deployment guide in `docs/`
 
 ---
 

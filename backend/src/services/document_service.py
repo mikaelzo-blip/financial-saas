@@ -95,8 +95,8 @@ class DocumentService:
         """
         if source_channel == "WEB_UPLOAD":
             source_channel = "WEB"
-        if source_channel not in {"WEB", "API"}:
-            raise ValueError("source_channel must be WEB or API")
+        if source_channel not in {"WEB", "API", "WHATSAPP"}:
+            raise ValueError("source_channel must be WEB, API or WHATSAPP")
         file_hash = compute_sha256(file_obj)
 
         # Exact duplicate detection

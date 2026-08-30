@@ -30,7 +30,11 @@ async def webhook(request: Request):
         raise HTTPException(401, "Invalid webhook signature")
     service = getattr(request.app.state, "whatsapp_service", None)
     if service is None:
-        raise HTTPException(503, "WhatsApp adapter is not configured")
+        from src.services.integrations.whatsapp.runtime import configured_service
+        service = configured_service()
+        if service is None:
+            raise HTTPException(503, "WhatsApp adapter is not configured")
+        request.app.state.whatsapp_service = service
     try:
         events = service.provider.parse(json.loads(body))
     except (ValueError, KeyError, TypeError, AttributeError, OverflowError):

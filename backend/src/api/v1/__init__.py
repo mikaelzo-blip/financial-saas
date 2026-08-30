@@ -9,6 +9,7 @@ from src.api.v1.review import router as review_router
 from src.api.v1.project_costing import router as project_costing_router
 from src.api.v1.reports import router as reports_router
 from src.api.v1.whatsapp import router as whatsapp_router
+from src.api.v1.whatsapp_state import router as whatsapp_state_router
 
 api_router = APIRouter()
 api_router.include_router(projects_router)
@@ -21,5 +22,6 @@ api_router.include_router(review_router)
 api_router.include_router(project_costing_router)
 api_router.include_router(reports_router)
 api_router.include_router(whatsapp_router)
+api_router.include_router(whatsapp_state_router)
 
 __all__ = ["api_router"]

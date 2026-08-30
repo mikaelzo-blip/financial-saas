@@ -40,17 +40,17 @@
 **Independent Test**: Send mock webhook with photo and caption from a registered number; verify document ingested into Feature 005 and confirmation reply returned.
 
 ### Tests for User Story 1
-- [ ] T010 [P] [US1] Unit test for phone sender mapping and tenant resolver in `backend/tests/unit/test_whatsapp_sender_service.py`
-- [ ] T011 [P] [US1] Unit test for media stream downloading and MIME validation in `backend/tests/unit/test_whatsapp_media_service.py`
-- [ ] T012 [P] [US1] Integration test for inbound media webhook and idempotency in `backend/tests/integration/test_whatsapp_intake_flow.py`
+- [X] T010 [P] [US1] Unit test for phone sender mapping and tenant resolver in `backend/tests/unit/test_whatsapp_sender_service.py`
+- [X] T011 [P] [US1] Unit test for media stream downloading and MIME validation in `backend/tests/unit/test_whatsapp_media_service.py`
+- [X] T012 [P] [US1] Integration test for inbound media webhook and idempotency in `backend/tests/integration/test_whatsapp_intake_flow.py`
 
 ### Implementation for User Story 1
-- [ ] T013 [P] [US1] Implement `WhatsAppSenderService` for phone-to-tenant resolution in `backend/src/services/integrations/whatsapp/sender_service.py`
-- [ ] T014 [P] [US1] Implement `WhatsAppMediaService` for secure binary streaming in `backend/src/services/integrations/whatsapp/media_service.py`
-- [ ] T015 [US1] Implement `WhatsAppWebhookService` orchestrating media download and Hermes API forwarding in `backend/src/services/integrations/whatsapp/webhook_service.py`
-- [ ] T016 [US1] Implement `WhatsAppOutboundService` for dispatching formatted receipt notices in `backend/src/services/integrations/whatsapp/outbound_service.py`
-- [ ] T017 [US1] Implement webhook GET (handshake) and POST (ingest) endpoints in `backend/src/api/v1/whatsapp.py`
-- [ ] T018 [US1] Implement admin sender mapping endpoints (`GET /post /delete /senders`) in `backend/src/api/v1/whatsapp.py`
+- [X] T013 [P] [US1] Implement `WhatsAppSenderService` for phone-to-tenant resolution in `backend/src/services/integrations/whatsapp/sender_service.py`
+- [X] T014 [P] [US1] Implement `WhatsAppMediaService` for secure binary streaming in `backend/src/services/integrations/whatsapp/media_service.py`
+- [X] T015 [US1] Implement `WhatsAppWebhookService` orchestrating media download and Hermes API forwarding in `backend/src/services/integrations/whatsapp/webhook_service.py`
+- [X] T016 [US1] Implement `WhatsAppOutboundService` for dispatching formatted receipt notices in `backend/src/services/integrations/whatsapp/outbound_service.py`
+- [X] T017 [US1] Implement webhook GET (handshake) and POST (ingest) endpoints in `backend/src/api/v1/whatsapp.py`
+- [X] T018 [US1] Implement admin sender mapping endpoints (`GET /post /delete /senders`) in `backend/src/api/v1/whatsapp.py`
 
 **Checkpoint**: At this point, User Story 1 MVP is fully testable and operational.
 

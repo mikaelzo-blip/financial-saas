@@ -1,0 +1,182 @@
+openapi: 3.0.3
+info:
+  title: Financial Reporting & Management Dashboard API
+  version: 1.0.0
+  description: Authoritative SAK financial statement endpoints and reporting services.
+paths:
+  /api/v1/reports/profit-loss:
+    get:
+      summary: Get Profit & Loss statement
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: compare_with
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [PREVIOUS_PERIOD, PREVIOUS_YEAR, BUDGET]
+      responses:
+        '200':
+          description: Standard SAK Profit & Loss Report
+  
+  /api/v1/reports/balance-sheet:
+    get:
+      summary: Get Balance Sheet statement as-of date
+      parameters:
+        - name: as_of_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Standard SAK Balance Sheet Report with integrity verification
+
+  /api/v1/reports/cash-flow:
+    get:
+      summary: Get Cash Flow statement (Direct Method)
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Cash Flow Report
+
+  /api/v1/reports/trial-balance:
+    get:
+      summary: Get Trial Balance
+      parameters:
+        - name: as_of_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Balanced Trial Balance
+
+  /api/v1/reports/general-ledger:
+    get:
+      summary: Get General Ledger entries for an account
+      parameters:
+        - name: account_code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: project_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: General ledger lines with running balance
+
+  /api/v1/reports/receivables-aging:
+    get:
+      summary: Get Accounts Receivable Aging report
+      parameters:
+        - name: as_of_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Customer invoice aging buckets
+
+  /api/v1/reports/payables-aging:
+    get:
+      summary: Get Accounts Payable Aging report
+      parameters:
+        - name: as_of_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Vendor bill aging buckets
+
+  /api/v1/reports/export/{report_type}:
+    get:
+      summary: Export authoritative report to Excel (.xlsx) or PDF (.pdf)
+      parameters:
+        - name: report_type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [profit-loss, balance-sheet, cash-flow, trial-balance, general-ledger, receivables-aging, payables-aging, project-profitability]
+        - name: format
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [xlsx, pdf]
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: as_of_date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Binary file stream with Content-Disposition attachment

@@ -1,11 +1,11 @@
 # Project Status
 
-- **Current origin/main**: `a1100d6` — Hermes setup repair merged through PR #12
-- **Completed features**: 001 Contractor Finance System; 002 Core Financial Domain; 003 Core Operational UI; 004 Financial Reporting; 005 Document Intelligence; 006 Hermes Automation; 007 WhatsApp Integration; 008 AI Management Insights; 009 Production Readiness Foundation
-- **Current feature**: None; repository-controlled readiness work is complete
-- **Current branch**: `codex/hermes-setup-fix` (Hermes environment repair)
-- **Latest verified checkpoint**: Hermes setup repair commit `d9eb258`; no application/business files changed; local safety and connectivity checks passed
-- **Tests**: backend 175 passed; frontend 13 files / 32 tests passed; pip check, Alembic offline chain, lint, typecheck, production build, and repository safety passed
-- **CI**: PR #12 Quality Gates passed and PR merged
+- **Current origin/main**: `107001d` — setup verification merged through PR #13
+- **Completed features**: 001 Contractor Finance System; 002 Core Financial Domain; 003 Core Operational UI; 004 Financial Reporting; 005 Document Intelligence; 006 Hermes Automation; 007 WhatsApp Integration; 008 AI Management Insights; 009 Production Readiness Foundation; 010 Dependency Security Gates
+- **Current feature**: 010 Dependency Security Gates
+- **Current branch**: `hermes/010-dependency-security-gates`
+- **Latest verified checkpoint**: Feature 010 10/10 tasks complete; 0 Critical / 0 High; pip-audit and npm audit automated in CI; PyJWT migration verified
+- **Tests**: backend 176 passed; frontend 13 files / 32 tests passed; pip check, locked pip-audit, npm audit, Alembic offline chain, lint, typecheck, production build, and repository safety passed
+- **CI**: Feature 010 PR pending creation
 - **Outstanding blockers**: No repository blocker. Real deployment, managed services, TLS/DNS, production credentials, Meta activation, external AI data egress, UAT sign-off, and live restore drills remain explicit approval/resource boundaries.
-- **Next action**: Trust the merged project skill in `C:\Projects\financial-saas-hermes` before the next Hermes feature session
+- **Next action**: Push `hermes/010-dependency-security-gates`, open PR, merge after green CI, and synchronize main

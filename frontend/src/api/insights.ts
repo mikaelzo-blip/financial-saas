@@ -18,8 +18,12 @@ export interface Insight {
 }
 
 export interface InsightPeriod { start_date: string; end_date: string }
+export interface FinancialQAResponse { session_id: string; answer_text: string; classified_intent: string; source_references: string[]; confidence_score: 'HIGH'|'MEDIUM'|'LOW' }
 
 export const insightsApi = {
   executive: async (period: InsightPeriod, signal?: AbortSignal): Promise<Insight> =>
     (await apiClient.get<Insight>('/insights/executive-summary', {params: period, signal})).data,
+  project: async (projectId: string): Promise<Insight> => (await apiClient.get<Insight>(`/insights/projects/${projectId}`)).data,
+  ask: async (query_text: string, session_id?: string): Promise<FinancialQAResponse> => (await apiClient.post<FinancialQAResponse>('/insights/query', {query_text, session_id})).data,
+  anomalies: async () => (await apiClient.get<{anomalies: Insight['anomalies_detected']}>('/insights/anomalies')).data,
 };

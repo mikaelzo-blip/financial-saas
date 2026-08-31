@@ -19,6 +19,7 @@ class GroundedPayload(BaseModel):
     metric_sources: dict[str, str] = Field(default_factory=dict)
     source_references: list[str] = Field(default_factory=list)
     integrity_valid: bool = True
+    evidence_labels: dict[str, str] = Field(default_factory=dict)
 
     def cache_key(self) -> str:
         # Generation timestamps and provider latency are deliberately excluded.
@@ -72,6 +73,15 @@ class GroundingService:
                     name = prefix + 'cost_' + line.cost_category
                     payload.factual_metrics[name] = line.amount
                     payload.metric_sources[name] = source_name + '.cost_breakdown.' + line.cost_category
+            if source_key == 'ar':
+                for index, invoice in enumerate(sorted(dto.invoices, key=lambda item: item.days_overdue, reverse=True)[:10]):
+                    key_prefix = f'ar_invoice_{index}_'
+                    payload.factual_metrics[key_prefix + 'outstanding'] = invoice.outstanding_amount
+                    payload.factual_metrics[key_prefix + 'days_overdue'] = Decimal(invoice.days_overdue)
+                    payload.metric_sources[key_prefix + 'outstanding'] = source_name + f'.invoices[{index}].outstanding_amount'
+                    payload.metric_sources[key_prefix + 'days_overdue'] = source_name + f'.invoices[{index}].days_overdue'
+                    from src.services.ai.sanitizer import sanitize_text
+                    payload.evidence_labels[key_prefix + 'label'] = sanitize_text(invoice.invoice_number)
         if insight_type == 'EXECUTIVE_SUMMARY':
             for name in ('revenue', 'net_profit', 'cash_balance'):
                 payload.factual_metrics.setdefault(name, None)

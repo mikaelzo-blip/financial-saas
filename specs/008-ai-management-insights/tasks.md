@@ -62,14 +62,14 @@
 **Independent Test**: Request project insight for a project with high accrual profit but negative cash flow; verify liquidity warning is generated.
 
 ### Tests for User Story 2
-- [ ] T018 [P] [US2] Unit test for project margin evaluation and cash vs profit distinction in `backend/tests/unit/test_ai_project_health.py`
-- [ ] T019 [P] [US2] Integration test for `GET /api/v1/insights/projects/{project_id}` in `backend/tests/integration/test_ai_project_health_api.py`
+- [X] T018 [P] [US2] Unit test for project margin evaluation and cash vs profit distinction in `backend/tests/unit/test_ai_project_health.py`
+- [X] T019 [P] [US2] Integration test for `GET /api/v1/insights/projects/{project_id}` in `backend/tests/integration/test_ai_project_health_api.py`
 
 ### Implementation for User Story 2
-- [ ] T020 [P] [US2] Implement prompt templates for project health in `backend/src/services/ai/prompt_templates.py`
-- [ ] T021 [US2] Implement `AIInsightService.get_project_health` in `backend/src/services/ai/insight_service.py`
-- [ ] T022 [US2] Implement endpoint `GET /api/v1/insights/projects/{project_id}` in `backend/src/api/v1/insights.py`
-- [ ] T023 [P] [US2] Implement `ProjectHealthCard` component in `frontend/src/components/ai/ProjectHealthCard.tsx`
+- [X] T020 [P] [US2] Implement prompt templates for project health in `backend/src/services/ai/prompt_templates.py`
+- [X] T021 [US2] Implement `AIInsightService.get_project_health` in `backend/src/services/ai/insight_service.py`
+- [X] T022 [US2] Implement endpoint `GET /api/v1/insights/projects/{project_id}` in `backend/src/api/v1/insights.py`
+- [X] T023 [P] [US2] Implement `ProjectHealthCard` component in `frontend/src/components/ai/ProjectHealthCard.tsx`
 
 ---
 
@@ -80,14 +80,14 @@
 **Independent Test**: Query "Piutang mana yang kritis?"; verify model quotes invoices over 90 days from `ARAgingReportResponse`.
 
 ### Tests for User Story 3
-- [ ] T024 [P] [US3] Unit test for `IntentClassifier` in `backend/tests/unit/test_ai_intent_classifier.py`
-- [ ] T025 [P] [US3] Integration test for `POST /api/v1/insights/query` in `backend/tests/integration/test_ai_qa_api.py`
+- [X] T024 [P] [US3] Unit test for `IntentClassifier` in `backend/tests/unit/test_ai_intent_classifier.py`
+- [X] T025 [P] [US3] Integration test for `POST /api/v1/insights/query` in `backend/tests/integration/test_ai_qa_api.py`
 
 ### Implementation for User Story 3
-- [ ] T026 [P] [US3] Implement `IntentClassifier` routing in `backend/src/services/ai/intent_classifier.py`
-- [ ] T027 [US3] Implement `AIInsightService.answer_query` with session persistence in `backend/src/services/ai/insight_service.py`
-- [ ] T028 [US3] Implement endpoint `POST /api/v1/insights/query` in `backend/src/api/v1/insights.py`
-- [ ] T029 [P] [US3] Implement `FinancialQABox` drawer component in `frontend/src/components/ai/FinancialQABox.tsx`
+- [X] T026 [P] [US3] Implement `IntentClassifier` routing in `backend/src/services/ai/intent_classifier.py`
+- [X] T027 [US3] Implement `AIInsightService.answer_query` with session persistence in `backend/src/services/ai/insight_service.py`
+- [X] T028 [US3] Implement endpoint `POST /api/v1/insights/query` in `backend/src/api/v1/insights.py`
+- [X] T029 [P] [US3] Implement `FinancialQABox` drawer component in `frontend/src/components/ai/FinancialQABox.tsx`
 
 ---
 
@@ -111,8 +111,8 @@
 
 **Purpose**: Multi-tenant isolation verification, prompt sanitization hardening, and Quickstart Scenarios A through G.
 
-- [ ] T034 [P] Implement prompt injection sanitization filters in `backend/src/services/ai/sanitizer.py`
-- [ ] T035 [P] Unit test for prompt injection defense in `backend/tests/unit/test_ai_prompt_sanitization.py`
+- [X] T034 [P] Implement prompt injection sanitization filters in `backend/src/services/ai/sanitizer.py`
+- [X] T035 [P] Unit test for prompt injection defense in `backend/tests/unit/test_ai_prompt_sanitization.py`
 - [ ] T036 [P] Integration test for strict multi-tenant isolation in `backend/tests/integration/test_ai_isolation.py`
 - [ ] T037 [P] Integration test for SHA-256 payload cache hit in `backend/tests/integration/test_ai_caching.py`
 - [X] T038 Register AI Insights API router in `backend/src/api/v1/__init__.py`

@@ -29,6 +29,11 @@ class DeterministicFallbackEngine:
         if facts.get('ar_over_90', 0):
             sentences.append(f'Piutang lewat jatuh tempo lebih dari sembilan puluh hari: {facts["ar_over_90"]}.')
             recommendations.append('Prioritaskan peninjauan penagihan piutang yang paling lama jatuh tempo.')
+        for key, label in payload.evidence_labels.items():
+            if key.endswith('_label'):
+                base = key.removesuffix('_label')
+                if facts.get(base + '_outstanding') is not None:
+                    sentences.append(f'{label}: outstanding {facts[base+"_outstanding"]}, overdue {facts.get(base+"_days_overdue")}.')
         if facts.get('ap_over_90', 0):
             sentences.append(f'Utang lewat jatuh tempo lebih dari sembilan puluh hari: {facts["ap_over_90"]}.')
             recommendations.append('Tinjau jatuh tempo vendor dan ketersediaan kas; pembayaran tetap memerlukan persetujuan.')

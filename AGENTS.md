@@ -19,14 +19,17 @@ Preserve all approved business, accounting, audit, security, and tenancy decisio
 ## Responsibilities
 
 - Spec Kit owns specification, clarification, technical planning, task generation, and consistency analysis.
-- Codex is the primary software engineering and execution agent: implementation, migrations, tests, debugging, builds, validation, and local git checkpoints.
-- Hermes is a future operational automation/orchestration client. It is not the development agent or accounting engine and must use authenticated SaaS APIs.
+- Hermes is the primary development orchestrator: research, Spec Kit execution, implementation, verification, review, delivery, and synchronization.
+- GitHub CI is an independent verification gate. Codex and AGY are optional external reviewers or repair agents, not mandatory workflow participants.
+- Hermes is an orchestration client, not the accounting engine; deterministic backend accounting rules remain authoritative.
 
 ## Required Workflow
 
 For the active feature, continue from actual repository state and run the applicable lifecycle without manual prompt handoffs:
 
-`speckit-clarify -> speckit-plan -> speckit-tasks -> speckit-analyze -> speckit-implement -> final speckit-analyze`
+`research -> specify -> clarify -> plan -> tasks -> analyze -> implementation -> tests -> review -> commit -> push -> Pull Request -> GitHub CI -> automatic squash merge -> synchronize main`
+
+Use the Hermes Spec Kit integration and its global `speckit-*` skills. The project-local orchestration procedure is `.hermes/skills/financial-saas-orchestrator/SKILL.md`.
 
 Resolve clarifications from authoritative artifacts when already implied. Stop for user input only when a genuinely new business policy or external credential/resource is required.
 
@@ -69,36 +72,41 @@ Before feature completion require:
 - 100% Spec Kit requirement coverage.
 
 
-## Autonomous Git Workflow
+## Hermes Delivery Workflow
 
-Codex may autonomously, after the relevant verification checkpoint passes:
+Hermes may autonomously, after the relevant verification checkpoint passes:
 
-- inspect git status and diff
-- create local commits
-- push only the current `codex/*` feature branch to origin
-- create multiple checkpoint commits while implementing a feature
+- create `hermes/*` feature branches
+- edit repository files, implement application code, and run local/non-destructive migrations
+- run tests, lint, type checks, builds, and repository safety checks
+- commit and push `hermes/*` branches
+- create PRs, repair CI failures, and merge verified PRs
 
-Codex must only auto-push after the relevant checkpoint passes its required:
+Automatic squash merge is permitted only when required tasks are complete, all applicable tests and migration/frontend gates pass, repository safety passes, GitHub CI passes, the PR is mergeable, and there are zero Critical findings, zero High findings, financial invariant violations, or tenant/security violations.
+
+Hermes must stop before real production deployment, destructive production database operations, paid external service activation, production credential changes, real WhatsApp Business provisioning, sending real financial data to external AI providers, or irreversible production infrastructure actions.
+
+Hermes must only auto-push after the relevant checkpoint passes its required:
 - tests
 - lint
 - type checks
 - builds
 - migration validation where applicable
 
-Codex MUST NOT autonomously:
+Hermes MUST NOT autonomously:
 
-- push directly to `main` (verified checkpoints may auto-push only to `codex/*` branches)
+- push directly to `main` (verified checkpoints may auto-push only to `hermes/*` branches)
 - force-push
 - rewrite published Git history
 - delete remote branches
-- merge into `main`
 - create or merge production releases
 - modify GitHub repository security/settings
 - publish secrets
 - deploy to production
 
 If the current branch is `main`, create or switch to an appropriate
-`codex/<feature-name>` branch before autonomous implementation.
+`hermes/<feature-name>` branch before autonomous implementation. Merges into
+`main` are allowed only through the verified PR gates above.
 
 Use concise checkpoint commits.
 

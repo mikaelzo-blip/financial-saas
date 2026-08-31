@@ -40,6 +40,14 @@ class Settings(BaseSettings):
     WHATSAPP_TENANT_TOKENS: dict[str, SecretStr] = Field(default_factory=dict)
     WHATSAPP_ORG_MESSAGES_PER_MINUTE: int = Field(default=200, ge=20)
 
+    # Feature 008: no external egress is enabled by configuration.
+    AI_INSIGHT_PROVIDER: str = "mock"
+    AI_INSIGHT_API_KEY: Optional[SecretStr] = None
+    AI_INSIGHT_CACHE_TTL_SECONDS: int = Field(default=3600, ge=1, le=3600)
+    AI_INSIGHT_TIMEOUT_SECONDS: float = Field(default=0.2, gt=0, le=0.3)
+    AI_INSIGHT_MAX_TOKENS: int = Field(default=500, ge=100, le=500)
+    AI_INSIGHT_QA_MAX_TOKENS: int = Field(default=1000, ge=100, le=1000)
+
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
 

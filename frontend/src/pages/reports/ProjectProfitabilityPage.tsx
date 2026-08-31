@@ -10,6 +10,7 @@ import { SkeletonLoader } from '../../components/feedback/SkeletonLoader';
 import { formatIDR } from '../../utils/formatters';
 import { ProjectResponse } from '../../types/api';
 import { ReportHeader } from '../../components/reports/ReportHeader';
+import { ProjectHealthCard } from '../../components/ai/ProjectHealthCard';
 
 export const ProjectProfitabilityPage: React.FC = () => {
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
@@ -65,6 +66,7 @@ export const ProjectProfitabilityPage: React.FC = () => {
           />
         </div>
       </Card>
+      {selectedProjectId && <ProjectHealthCard projectId={selectedProjectId} />}
 
       {isLoading ? (
         <SkeletonLoader count={8} />

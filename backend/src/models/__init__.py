@@ -25,6 +25,7 @@ from src.models.payable import VendorBill, VendorPaymentAllocation, VendorAdvanc
 from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation
 from src.models.hermes import HermesSubmission
 from src.models.whatsapp import WhatsAppSenderMapping, WhatsAppMessageLog, WhatsAppClarificationSession
+from src.models.ai_insight import AIInsightLog, AIConversationSession, AIConversationMessage
 
 __all__ = [
     "UserRole",

@@ -6,6 +6,6 @@
 - **Current branch**: `codex/hermes-setup-fix` (Hermes environment repair)
 - **Latest verified checkpoint**: Hermes setup repair commit `a0ae7d1`; no application/business files changed; local safety and connectivity checks passed
 - **Tests**: backend 175 passed; frontend 13 files / 32 tests passed; pip check, Alembic offline chain, lint, typecheck, production build, and repository safety passed
-- **CI**: PR #10 Quality Gates passed and PR merged
+- **CI**: PR #12 Quality Gates passed and PR merged
 - **Outstanding blockers**: No repository blocker. Real deployment, managed services, TLS/DNS, production credentials, Meta activation, external AI data egress, UAT sign-off, and live restore drills remain explicit approval/resource boundaries.
-- **Next action**: Complete the Hermes setup PR, then trust the merged project skill in `C:\Projects\financial-saas-hermes` before the next Hermes feature session
+- **Next action**: Trust the merged project skill in `C:\Projects\financial-saas-hermes` before the next Hermes feature session

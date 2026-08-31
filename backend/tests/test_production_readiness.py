@@ -1,3 +1,4 @@
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -19,7 +20,7 @@ def production_settings(**overrides):
         "DATABASE_URL": "postgresql+asyncpg://app:secret@db.internal/financial_saas",
         "SYNC_DATABASE_URL": "postgresql://app:secret@db.internal/financial_saas",
         "SECRET_KEY": "a-production-signing-secret-with-at-least-32-characters",
-        "STORAGE_DIR": "C:/financial-saas/documents",
+        "STORAGE_DIR": str((Path.cwd() / "production-documents").resolve()),
         "BACKEND_CORS_ORIGINS": ["https://finance.example.com"],
     }
     values.update(overrides)

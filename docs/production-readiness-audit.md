@@ -29,7 +29,7 @@ The system is **not production-ready**. Core financial invariants and automated 
 | Security | Security headers | READY | Frame, content-type, referrer, permissions, and CSP headers are emitted; HSTS remains ingress-owned after TLS approval. |
 | Security | Rate limiting | PARTIAL | WhatsApp has bounded rate limiting; login and general API abuse controls are absent. |
 | Security | Webhook authentication | READY | WhatsApp handshake and raw-body HMAC validation fail closed with size limits and tests. |
-| Security | Dependency security | PARTIAL | Lockfiles and `pip check`/`npm audit` evidence exist; no automated vulnerability scanner or update policy. |
+| Security | Dependency security | READY | CI runs locked `pip-audit` in strict mode and `npm audit --omit=dev --audit-level=high`; known vulnerability remediation uses PyJWT without ignore flags. |
 | Observability | Structured logging | READY | Metadata-only JSON request logs and correlation IDs exclude bodies, query strings, credentials, and financial values. |
 | Observability | Health checks | READY | `/health` is a database-independent liveness probe. |
 | Observability | Readiness checks | READY | `/ready` executes a database probe and returns 503 on failure. |

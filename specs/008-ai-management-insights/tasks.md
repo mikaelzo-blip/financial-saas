@@ -98,12 +98,12 @@
 **Independent Test**: Feed data with anomalous 300% travel expense spike; verify `UNUSUAL_EXPENSE_SPIKE` signal returned.
 
 ### Tests for User Story 4
-- [ ] T030 [P] [US3] Unit test for anomaly signal rules in `backend/tests/unit/test_ai_anomaly_detector.py`
-- [ ] T031 [P] [US3] Integration test for `GET /api/v1/insights/anomalies` in `backend/tests/integration/test_ai_anomalies_api.py`
+- [X] T030 [P] [US3] Unit test for anomaly signal rules in `backend/tests/unit/test_ai_anomaly_detector.py`
+- [X] T031 [P] [US3] Integration test for `GET /api/v1/insights/anomalies` in `backend/tests/integration/test_ai_anomalies_api.py`
 
 ### Implementation for User Story 4
-- [ ] T032 [US4] Implement heuristic anomaly detector in `backend/src/services/ai/anomaly_detector.py`
-- [ ] T033 [US4] Implement endpoint `GET /api/v1/insights/anomalies` in `backend/src/api/v1/insights.py`
+- [X] T032 [US4] Implement heuristic anomaly detector in `backend/src/services/ai/anomaly_detector.py`
+- [X] T033 [US4] Implement endpoint `GET /api/v1/insights/anomalies` in `backend/src/api/v1/insights.py`
 
 ---
 
@@ -113,11 +113,11 @@
 
 - [X] T034 [P] Implement prompt injection sanitization filters in `backend/src/services/ai/sanitizer.py`
 - [X] T035 [P] Unit test for prompt injection defense in `backend/tests/unit/test_ai_prompt_sanitization.py`
-- [ ] T036 [P] Integration test for strict multi-tenant isolation in `backend/tests/integration/test_ai_isolation.py`
-- [ ] T037 [P] Integration test for SHA-256 payload cache hit in `backend/tests/integration/test_ai_caching.py`
+- [X] T036 [P] Integration test for strict multi-tenant isolation in `backend/tests/integration/test_ai_isolation.py`
+- [X] T037 [P] Integration test for SHA-256 payload cache hit in `backend/tests/integration/test_ai_caching.py`
 - [X] T038 Register AI Insights API router in `backend/src/api/v1/__init__.py`
 - [X] T039 Implement typed API client in `frontend/src/api/insights.ts`
-- [ ] T040 Execute complete Quickstart verification scenarios A through G per `quickstart.md`
+- [X] T040 Execute complete Quickstart verification scenarios A through G per `quickstart.md`
 
 ---
 

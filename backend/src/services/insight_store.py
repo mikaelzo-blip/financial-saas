@@ -2,6 +2,8 @@
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from src.models.ai_insight import AIInsightLog
+from src.models.audit import AuditLog
+from uuid import uuid5, NAMESPACE_URL
 from src.schemas.ai_insight import AIInsightResponse
 
 
@@ -35,3 +37,4 @@ class InsightStore:
             tokens_used=response.provider_metadata.tokens_used, latency_ms=response.provider_metadata.latency_ms,
             expires_at=datetime.now(timezone.utc) + timedelta(seconds=ttl)))
         await self.db.flush()
+        self.db.add(AuditLog(organization_id=self.organization_id, entity_name='AIInsight', entity_id=uuid5(NAMESPACE_URL, payload.cache_key()), action='INSIGHT_GENERATED', old_values=None, new_values={'insight_type': payload.insight_type, 'provider': response.provider_metadata.provider}, actor_id=None, reason='Advisory insight audit'))

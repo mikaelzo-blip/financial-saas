@@ -20,3 +20,12 @@ async def executive_grounding(db, org, start, end):
         'integrity': await IntegrityService.run_diagnostics(db, org, end),
     }
     return GroundingService.build(org, start, end, dtos)
+
+async def executive_comparison_grounding(db, org, start, end, previous_start, previous_end):
+    current = await executive_grounding(db, org, start, end)
+    previous = await executive_grounding(db, org, previous_start, previous_end)
+    current.factual_metrics.update({'previous_' + key: value for key, value in previous.factual_metrics.items()})
+    current.metric_sources.update({'previous_' + key: value for key, value in previous.metric_sources.items()})
+    current.source_references.extend('Previous ' + source for source in previous.source_references)
+    current.source_references.sort()
+    return current

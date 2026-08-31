@@ -7,7 +7,7 @@ from src.models.user import User
 from src.schemas.ai_insight import AIInsightResponse
 from src.services.ai.insight_service import AIInsightService
 from src.services.insight_store import InsightStore
-from src.services.insight_reporting import executive_grounding
+from src.services.insight_reporting import executive_grounding, executive_comparison_grounding
 from src.services.ai.intent_classifier import IntentClassifier
 from src.services.ai.sanitizer import sanitize_text
 from src.services.ai.project_service import project_grounding
@@ -33,10 +33,10 @@ def resolve_dates(start, end):
 
 
 @router.get('/executive-summary', response_model=AIInsightResponse)
-async def executive_summary(start_date: date | None = None, end_date: date | None = None, refresh: bool = False,
+async def executive_summary(start_date: date | None = None, end_date: date | None = None, compare_start_date: date | None = None, compare_end_date: date | None = None, refresh: bool = False,
                             user: User = Depends(require_insight_user), db: AsyncSession = Depends(get_db)):
     start, end = resolve_dates(start_date, end_date)
-    payload = await executive_grounding(db, user.organization_id, start, end)
+    payload = await (executive_comparison_grounding(db, user.organization_id, start, end, compare_start_date, compare_end_date) if compare_start_date and compare_end_date else executive_grounding(db, user.organization_id, start, end))
     return await AIInsightService(InsightStore(db, user.organization_id)).get_executive_summary(payload, refresh)
 
 
@@ -80,4 +80,12 @@ async def financial_query(request: FinancialQAQueryRequest, user: User = Depends
 @router.get('/anomalies')
 async def anomalies(user: User = Depends(require_insight_user), db: AsyncSession = Depends(get_db)):
     end = date.today(); payload = await executive_grounding(db, user.organization_id, end.replace(day=1), end)
-    return {'anomalies': [item.model_dump() for item in AnomalyDetector.detect(payload.factual_metrics)]}
+    from sqlalchemy import select, func
+    from src.models.document import Document
+    from src.models.transaction import Transaction, TransactionReviewFlag
+    failed = await db.scalar(select(func.count()).select_from(Document).where(Document.organization_id == user.organization_id, Document.processing_status == 'FAILED')) or 0
+    review = await db.scalar(select(func.count()).select_from(TransactionReviewFlag).join(Transaction).where(Transaction.organization_id == user.organization_id, TransactionReviewFlag.resolved_at.is_(None))) or 0
+    detected = [item.model_dump() for item in AnomalyDetector.detect(payload.factual_metrics)]
+    if failed: detected.append({'code':'DOCUMENT_PROCESSING_EXCEPTIONS','severity':'WARNING','description':f'{failed} dokumen gagal diproses; tinjau antrean.','metric_reference':'Document.processing_status'})
+    if review: detected.append({'code':'REVIEW_QUEUE_BACKLOG','severity':'INFO','description':f'{review} flag review belum terselesaikan.','metric_reference':'TransactionReviewFlag.is_resolved'})
+    return {'anomalies': detected}

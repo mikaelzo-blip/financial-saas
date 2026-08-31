@@ -1,17 +1,23 @@
-from contextlib import asynccontextmanager
-from contextlib import suppress
+from contextlib import asynccontextmanager, suppress
 import asyncio
-from fastapi import FastAPI
+
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
+from src.core.database import get_db
 from src.core.exceptions import register_exception_handlers
+from src.core.middleware import ProductionHTTPMiddleware
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle events."""
     from src.services.integrations.whatsapp.runtime import notification_loop
+
     worker = asyncio.create_task(notification_loop(app))
     try:
         yield
@@ -30,34 +36,34 @@ def create_application() -> FastAPI:
         openapi_url=f"{settings.API_V1_STR}/openapi.json",
         docs_url=f"{settings.API_V1_STR}/docs",
         redoc_url=f"{settings.API_V1_STR}/redoc",
-        lifespan=lifespan
+        lifespan=lifespan,
     )
-
-    # Configure CORS
+    app.add_middleware(ProductionHTTPMiddleware)
     if settings.BACKEND_CORS_ORIGINS:
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
-            allow_credentials=True,
+            allow_origins=settings.BACKEND_CORS_ORIGINS,
+            allow_credentials="*" not in settings.BACKEND_CORS_ORIGINS,
             allow_methods=["*"],
             allow_headers=["*"],
         )
 
-    # Register global exception handlers
     register_exception_handlers(app)
-
-    # Mount API v1 router
     from src.api.v1 import api_router
+
     app.include_router(api_router, prefix=settings.API_V1_STR)
 
-    # Base healthcheck endpoint
     @app.get("/health", tags=["System"])
     async def health_check():
-        return {
-            "status": "healthy",
-            "environment": settings.ENVIRONMENT,
-            "project": settings.PROJECT_NAME
-        }
+        return {"status": "healthy", "environment": settings.ENVIRONMENT, "project": settings.PROJECT_NAME}
+
+    @app.get("/ready", tags=["System"])
+    async def readiness_check(db: AsyncSession = Depends(get_db)):
+        try:
+            await db.execute(text("SELECT 1"))
+        except Exception:
+            return JSONResponse(status_code=503, content={"status": "not_ready"})
+        return {"status": "ready"}
 
     return app
 

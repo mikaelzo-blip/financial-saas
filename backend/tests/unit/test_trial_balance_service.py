@@ -92,4 +92,19 @@ async def test_trial_balance_debit_equals_credit(db_session: AsyncSession):
     assert tb.difference == Decimal("0.00")
     assert tb.total_ending_debit == Decimal("50000000.00")
     assert tb.total_ending_credit == Decimal("50000000.00")
+    assert set(tb.model_dump()) == {
+        "organization_name",
+        "as_of_date",
+        "start_date",
+        "end_date",
+        "lines",
+        "total_opening_debit",
+        "total_opening_credit",
+        "total_period_debit",
+        "total_period_credit",
+        "total_ending_debit",
+        "total_ending_credit",
+        "is_balanced",
+        "difference",
+    }
     assert len(tb.lines) == 2

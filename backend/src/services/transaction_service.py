@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.transaction import Transaction, TransactionAllocation, TransactionReviewFlag
 from src.models.document import TransactionDocumentLink
 from src.models.counterparty import Counterparty
+from src.models.coa import PaymentAccount
 from src.models.project import Project
 from src.models.enums import (
     TransactionType,
@@ -177,6 +178,26 @@ class TransactionService:
                 raise EntityNotFoundException("Project", project_id)
             if project.customer_id != customer.id:
                 raise InvariantViolationException("Customer invoice customer must match the customer assigned to the project.")
+
+        if data.transaction_type == TransactionType.CUSTOMER_PAYMENT:
+            if not data.counterparty_id:
+                raise InvariantViolationException("Customer payment requires a customer.")
+            customer = await self.session.scalar(select(Counterparty).where(
+                Counterparty.id == data.counterparty_id,
+                Counterparty.organization_id == organization_id,
+            ))
+            if not customer:
+                raise EntityNotFoundException("Customer Counterparty", data.counterparty_id)
+            if not customer.is_customer:
+                raise InvariantViolationException("Customer payment counterparty must be a customer.")
+            if data.payment_account_id:
+                payment_account = await self.session.scalar(select(PaymentAccount).where(
+                    PaymentAccount.id == data.payment_account_id,
+                    PaymentAccount.organization_id == organization_id,
+                    PaymentAccount.is_active == True,
+                ))
+                if not payment_account:
+                    raise EntityNotFoundException("Active Payment Account", data.payment_account_id)
 
         # Invoice numbers are tenant-unique regardless of date or amount.
         duplicate_candidate = None

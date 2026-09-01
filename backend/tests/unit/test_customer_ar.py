@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.organization import Organization
 from src.models.counterparty import Counterparty
 from src.models.project import Project
-from src.models.enums import ProjectStatus, TransactionType
+from src.models.enums import ProjectStatus, TransactionType, WorkflowStatus
 from src.models.transaction import Transaction
 from src.services.receivable_service import CustomerARService
 from src.core.exceptions import InvariantViolationException
@@ -70,7 +70,9 @@ async def test_due_date_priority_and_overpayment_rejection(db_session: AsyncSess
         transaction_type=TransactionType.CUSTOMER_PAYMENT,
         transaction_date=date(2026, 3, 20),
         amount=Decimal("120000000.00"),
-        description="Pembayaran Berlebih"
+        counterparty_id=customer.id,
+        description="Pembayaran Berlebih",
+        workflow_status=WorkflowStatus.POSTED,
     )
     db_session.add(pay_trx)
     await db_session.commit()

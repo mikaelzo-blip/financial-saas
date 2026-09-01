@@ -29,6 +29,7 @@ export const CustomerPaymentAllocationModal: React.FC<CustomerPaymentAllocationM
     new Date().toISOString().split('T')[0]
   );
   const [referenceNo, setReferenceNo] = useState('');
+  const [description, setDescription] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const { data: paymentAccounts = [] } = useQuery({
@@ -64,6 +65,7 @@ export const CustomerPaymentAllocationModal: React.FC<CustomerPaymentAllocationM
         amount: payAmount,
         payment_date: paymentDate,
         reference_no: referenceNo || undefined,
+        description,
       });
       success(`Pembayaran invoice ${invoice.invoice_number} berhasil dicatat.`);
       onSuccess();
@@ -131,6 +133,14 @@ export const CustomerPaymentAllocationModal: React.FC<CustomerPaymentAllocationM
           value={referenceNo}
           onChange={(e) => setReferenceNo(e.target.value)}
           placeholder="Contoh: TRF-BCA-98124"
+        />
+
+        <Input
+          label="Keterangan Pembayaran *"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Contoh: Pelunasan invoice proyek"
+          required
         />
 
         <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">

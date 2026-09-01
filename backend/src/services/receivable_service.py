@@ -7,6 +7,8 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation
+from src.models.transaction import Transaction
+from src.models.enums import TransactionType, WorkflowStatus
 from src.models.organization import Organization
 from src.models.counterparty import Counterparty
 from src.models.project import Project
@@ -122,32 +124,61 @@ class CustomerARService:
         Allocates customer payment against one or multiple customer invoices.
         If allocated amount exceeds outstanding balance, raises InvariantViolationException (routes to review).
         """
-        created_allocations = []
-        for inv_id, amount in invoice_allocations:
-            inv = await self.get_invoice(organization_id, inv_id)
-            current_outstanding = inv.calculate_outstanding_amount()
+        if not invoice_allocations:
+            raise InvariantViolationException("Customer payment requires at least one invoice allocation.")
+        payment = await self.session.scalar(select(Transaction).where(
+            Transaction.id == payment_transaction_id,
+            Transaction.organization_id == organization_id,
+        ))
+        if not payment:
+            raise EntityNotFoundException("Customer Payment Transaction", payment_transaction_id)
+        if payment.transaction_type != TransactionType.CUSTOMER_PAYMENT:
+            raise InvariantViolationException("Only CUSTOMER_PAYMENT transactions can be allocated to customer invoices.")
+        if not payment.counterparty_id:
+            raise InvariantViolationException("Customer payment requires a customer counterparty before allocation.")
 
-            if amount > current_outstanding:
+        allocation_by_invoice: Dict[uuid.UUID, Decimal] = {}
+        for invoice_id, amount in invoice_allocations:
+            if amount <= Decimal("0.00"):
+                raise InvariantViolationException("Customer payment allocations must be greater than zero.")
+            allocation_by_invoice[invoice_id] = allocation_by_invoice.get(invoice_id, Decimal("0.00")) + amount
+        existing_payment_total = await self.session.scalar(select(
+            func.coalesce(func.sum(CustomerPaymentAllocation.allocated_amount), Decimal("0.00"))
+        ).where(CustomerPaymentAllocation.payment_transaction_id == payment_transaction_id))
+        requested_total = sum(allocation_by_invoice.values(), Decimal("0.00"))
+        if Decimal(str(existing_payment_total)) + requested_total > payment.amount:
+            raise InvariantViolationException("Customer payment allocations exceed the posted payment amount.")
+
+        invoices: Dict[uuid.UUID, CustomerInvoice] = {}
+        for invoice_id, amount in allocation_by_invoice.items():
+            invoice = await self.get_invoice(organization_id, invoice_id)
+            if invoice.status == "CANCELLED":
+                raise InvariantViolationException(f"Cancelled invoice {invoice.invoice_code} cannot receive a payment allocation.")
+            if invoice.customer_id != payment.counterparty_id:
+                raise InvariantViolationException("Customer payment and invoice must belong to the same customer.")
+            outstanding = invoice.calculate_outstanding_amount()
+            if outstanding == Decimal("0.00"):
+                raise InvariantViolationException(f"Invoice {invoice.invoice_code} is already fully paid.")
+            if amount > outstanding:
                 raise InvariantViolationException(
-                    f"Customer payment amount ({amount}) exceeds outstanding balance ({current_outstanding}) on {inv.invoice_code}. Flagged AMOUNT_MISMATCH for review.",
-                    details={
-                        "invoice_id": str(inv_id),
-                        "allocated_amount": str(amount),
-                        "outstanding": str(current_outstanding),
-                        "excess": str(amount - current_outstanding)
-                    }
+                    f"Customer payment amount ({amount}) exceeds outstanding balance ({outstanding}) on {invoice.invoice_code}. Flagged AMOUNT_MISMATCH for review.",
+                    details={"invoice_id": str(invoice_id), "allocated_amount": str(amount), "outstanding": str(outstanding), "excess": str(amount - outstanding)},
                 )
+            invoices[invoice_id] = invoice
 
-            alloc = CustomerPaymentAllocation(
-                invoice_id=inv_id,
-                payment_transaction_id=payment_transaction_id,
-                allocated_amount=amount
-            )
+        if payment.workflow_status != WorkflowStatus.POSTED:
+            raise InvariantViolationException("Customer payment must be posted before allocation.")
+
+        created_allocations = []
+        for invoice_id, amount in allocation_by_invoice.items():
+            invoice = invoices[invoice_id]
+            alloc = CustomerPaymentAllocation(invoice_id=invoice_id, payment_transaction_id=payment_transaction_id, allocated_amount=amount)
             self.session.add(alloc)
             created_allocations.append(alloc)
-
-            new_outstanding = current_outstanding - amount
-            inv.status = "PAID" if new_outstanding == Decimal("0.00") else "PARTIALLY_PAID"
+            existing_invoice_total = sum(
+                (allocation.allocated_amount for allocation in invoice.allocations), Decimal("0.00")
+            )
+            invoice.status = "PAID" if invoice.total_amount - existing_invoice_total - amount == Decimal("0.00") else "PARTIALLY_PAID"
 
         await self.session.flush()
         return created_allocations

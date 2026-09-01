@@ -33,6 +33,7 @@ export const receivablesApi = {
     amount: number;
     payment_date: string;
     reference_no?: string;
+    description: string;
   }) => {
     const res = await apiClient.post('/customer-payments', data);
     return res.data;

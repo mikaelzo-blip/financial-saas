@@ -5,6 +5,7 @@ import { projectsApi, ProjectCreateInput } from '../../api/projects';
 import { useToast } from '../../components/feedback/Toast';
 import { Card } from '../../components/ui/Card';
 import { ProjectForm } from '../../components/forms/ProjectForm';
+import { parseApiError } from '../../api/errorHandler';
 
 export const ProjectCreatePage: React.FC = () => {
   const navigate = useNavigate();
@@ -17,8 +18,8 @@ export const ProjectCreatePage: React.FC = () => {
       const project = await projectsApi.create(data);
       success(`Proyek ${project.project_name} (${project.project_code}) berhasil dibuat.`);
       navigate(`/projects/${project.id}`);
-    } catch (err: any) {
-      error(err.response?.data?.detail || 'Gagal menyimpan proyek.');
+    } catch (err: unknown) {
+      error(`Gagal menyimpan proyek: ${parseApiError(err).message}`);
     } finally {
       setIsLoading(false);
     }

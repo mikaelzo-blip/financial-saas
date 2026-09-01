@@ -13,6 +13,7 @@ from src.api.v1.review import router as review_router
 from src.api.v1.transactions import router as transactions_router
 from src.api.v1.whatsapp import router as whatsapp_router
 from src.api.v1.whatsapp_state import router as whatsapp_state_router
+from src.api.v1.counterparties import router as counterparties_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -21,6 +22,7 @@ api_router.include_router(whatsapp_router)
 api_router.include_router(whatsapp_state_router)
 
 application_router = APIRouter(dependencies=[Depends(require_application_user)])
+application_router.include_router(counterparties_router)
 application_router.include_router(projects_router)
 application_router.include_router(reference_data_router)
 application_router.include_router(documents_router)

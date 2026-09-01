@@ -68,11 +68,17 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Alembic migration failed.' }
 } finally { Pop-Location }
 
-Push-Location $Frontend
-try {
-    npm ci
-    if ($LASTEXITCODE -ne 0) { throw 'Frontend dependency installation failed.' }
-} finally { Pop-Location }
+$packageLockHash = (Get-FileHash (Join-Path $Frontend 'package-lock.json') -Algorithm SHA256).Hash
+$packageLockHashFile = Join-Path $Frontend 'node_modules\.financial-saas-package-lock.sha256'
+$installedPackageLockHash = if (Test-Path $packageLockHashFile) { (Get-Content $packageLockHashFile -Raw).Trim() } else { '' }
+if (-not (Test-Path (Join-Path $Frontend 'node_modules\.bin\vite.cmd')) -or $installedPackageLockHash -ne $packageLockHash) {
+    Push-Location $Frontend
+    try {
+        npm ci
+        if ($LASTEXITCODE -ne 0) { throw 'Frontend dependency installation failed.' }
+        Set-Content $packageLockHashFile $packageLockHash
+    } finally { Pop-Location }
+}
 
 if (-not (Test-TrackedProcess 'backend' 'src.main:app' $Python)) {
     $process = Start-Process -FilePath $Python -ArgumentList '-m','uvicorn','src.main:app','--host','127.0.0.1','--port','8000' -WorkingDirectory $Backend -RedirectStandardOutput (Join-Path $Runtime 'backend.log') -RedirectStandardError (Join-Path $Runtime 'backend.error.log') -PassThru

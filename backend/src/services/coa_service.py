@@ -2,6 +2,7 @@ import uuid
 from typing import List, Optional
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.models.coa import ChartOfAccount, PaymentAccount
 from src.models.enums import AccountType
@@ -135,7 +136,12 @@ class PaymentAccountService:
         if active_only:
             filters.append(PaymentAccount.is_active == True)
 
-        stmt = select(PaymentAccount).where(and_(*filters)).order_by(PaymentAccount.name.asc())
+        stmt = (
+            select(PaymentAccount)
+            .options(selectinload(PaymentAccount.coa_account))
+            .where(and_(*filters))
+            .order_by(PaymentAccount.name.asc())
+        )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
@@ -163,6 +169,7 @@ class PaymentAccountService:
             account_number=data.account_number,
             is_active=True
         )
+        account.coa_account = parent_coa
         self.session.add(account)
         await self.session.flush()
         return account

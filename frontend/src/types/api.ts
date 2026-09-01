@@ -203,12 +203,15 @@ export interface CounterpartyResponse {
 export interface PaymentAccountResponse {
   id: string;
   organization_id: string;
-  account_code: string;
-  account_name: string;
+  coa_account_id: string;
+  coa_account_code: string;
+  coa_account_name: string;
+  name: string;
   account_type: string;
   bank_name?: string;
   account_number?: string;
   is_active: boolean;
+  created_at: string;
 }
 
 export interface ChartOfAccountResponse {

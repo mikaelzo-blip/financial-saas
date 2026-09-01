@@ -105,7 +105,7 @@ export const VendorPaymentAllocationModal: React.FC<VendorPaymentAllocationModal
           <option value="">-- Pilih Rekening Pengeluaran --</option>
           {paymentAccounts.map((acc) => (
             <option key={acc.id} value={acc.id}>
-              {acc.account_name} ({acc.account_code})
+              {acc.name} ({acc.coa_account_code})
             </option>
           ))}
         </Select>

@@ -105,7 +105,7 @@ export const CustomerPaymentAllocationModal: React.FC<CustomerPaymentAllocationM
           <option value="">-- Pilih Rekening Kas/Bank --</option>
           {paymentAccounts.map((acc) => (
             <option key={acc.id} value={acc.id}>
-              {acc.account_name} ({acc.account_code})
+              {acc.name} ({acc.coa_account_code})
             </option>
           ))}
         </Select>

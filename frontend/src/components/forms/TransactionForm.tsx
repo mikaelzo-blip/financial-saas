@@ -208,7 +208,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           <option value="">-- Pilih Akun Kas / Bank --</option>
           {paymentAccounts.map((acc) => (
             <option key={acc.id} value={acc.id}>
-              {acc.account_name} ({acc.account_code})
+              {acc.name} ({acc.coa_account_code})
             </option>
           ))}
         </Select>

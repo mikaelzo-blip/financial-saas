@@ -15,17 +15,17 @@ export const PaymentAccountsPage: React.FC = () => {
 
   const columns: Column<PaymentAccountResponse>[] = [
     {
-      key: 'account_code',
+      key: 'coa_account_code',
       header: 'Kode Akun',
       sortable: true,
       render: (a) => (
         <span className="font-mono text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
-          {a.account_code}
+          {a.coa_account_code}
         </span>
       ),
     },
     {
-      key: 'account_name',
+      key: 'name',
       header: 'Nama Akun / Rekening',
       sortable: true,
       render: (a) => (
@@ -36,7 +36,7 @@ export const PaymentAccountsPage: React.FC = () => {
             <Building className="h-4 w-4 text-blue-600" />
           )}
           <div>
-            <p className="font-semibold text-slate-900">{a.account_name}</p>
+            <p className="font-semibold text-slate-900">{a.name}</p>
             {a.bank_name && (
               <p className="text-[11px] text-slate-500">
                 {a.bank_name} {a.account_number ? `• No: ${a.account_number}` : ''}
@@ -79,7 +79,7 @@ export const PaymentAccountsPage: React.FC = () => {
           keyExtractor={(a) => a.id}
           isLoading={isLoading}
           searchPlaceholder="Cari nama akun atau bank..."
-          searchKeys={['account_name', 'account_code', 'bank_name']}
+          searchKeys={['name', 'coa_account_code', 'bank_name']}
           emptyTitle="Belum ada akun kas/bank terdaftar"
           emptyDescription="Akun kas dan bank dibuat melalui inisialisasi master data."
         />

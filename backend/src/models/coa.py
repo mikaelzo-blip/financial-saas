@@ -132,3 +132,15 @@ class PaymentAccount(Base):
 
     def __repr__(self) -> str:
         return f"<PaymentAccount {self.name} -> COA {self.coa_account_id}>"
+
+    @property
+    def coa_account_code(self) -> str:
+        return self.coa_account.account_code
+
+    @property
+    def coa_account_name(self) -> str:
+        return self.coa_account.account_name
+
+    @property
+    def account_type(self) -> AccountType:
+        return self.coa_account.account_type

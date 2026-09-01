@@ -9,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.transaction import Transaction
 from src.models.journal import JournalEntry, JournalLine
 from src.models.coa import ChartOfAccount
-from src.models.enums import WorkflowStatus
+from src.models.enums import TransactionType, WorkflowStatus
+from src.services.audit_service import AuditService
+from src.services.receivable_service import CustomerARService
 from src.services.posting_rules import PostingRuleRegistry, GeneratedJournalLeg
 from src.core.exceptions import EntityNotFoundException, InvariantViolationException
 
@@ -127,9 +129,39 @@ class AccountingEngine:
             )
             self.session.add(line)
 
+        if transaction.transaction_type == TransactionType.CUSTOMER_INVOICE:
+            project_ids = {allocation.project_id for allocation in transaction.allocations if allocation.project_id}
+            if len(project_ids) != 1 or not transaction.counterparty_id:
+                raise InvariantViolationException(
+                    "Customer invoice posting requires one project and customer."
+                )
+            await CustomerARService(self.session).issue_customer_invoice(
+                organization_id=organization_id,
+                customer_id=transaction.counterparty_id,
+                project_id=project_ids.pop(),
+                invoice_date=transaction.transaction_date,
+                total_amount=transaction.amount,
+                transaction_id=transaction.id,
+                invoice_code=transaction.reference_no,
+            )
+
         # Mark transaction as POSTED
+        old_status = transaction.workflow_status.value
         transaction.workflow_status = WorkflowStatus.POSTED
         transaction.posted_at = datetime.now()
+
+        await AuditService(self.session).log_event(
+            organization_id,
+            "Transaction",
+            transaction.id,
+            "POST",
+            actor_id,
+            old_values={"workflow_status": old_status},
+            new_values={
+                "workflow_status": WorkflowStatus.POSTED.value,
+                "journal_entry_id": str(journal_entry.id),
+            },
+        )
 
         await self.session.flush()
 

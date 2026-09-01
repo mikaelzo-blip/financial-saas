@@ -16,6 +16,14 @@ from src.schemas.reporting import (
 from src.services.reporting.base import get_organization_name
 
 
+def classify_asset_report_group(account_code: str, report_group: str | None) -> str:
+    if account_code == "1201":
+        return "CURRENT_ASSETS"
+    if report_group in {"FIXED_ASSETS", "Aset Tetap"}:
+        return "FIXED_ASSETS"
+    return "FIXED_ASSETS" if account_code.startswith("15") else "CURRENT_ASSETS"
+
+
 class BalanceSheetService:
     @staticmethod
     async def get_balance_sheet(
@@ -75,7 +83,7 @@ class BalanceSheetService:
                 # Normal balance DEBIT
                 net = dr - cr
                 if net != Decimal("0.00") or code in ["1101", "1102"]:
-                    if code.startswith("12"):
+                    if classify_asset_report_group(code, acc.report_group) == "FIXED_ASSETS":
                         tot_fa += net
                         fixed_assets_lines.append(ReportLineItem(account_code=code, line_name=acc.account_name, amount=net))
                     else:

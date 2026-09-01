@@ -9,7 +9,14 @@ from src.models.coa import ChartOfAccount
 from src.models.journal import JournalEntry, JournalLine
 from src.models.enums import AccountType, NormalBalance, TransactionType, WorkflowStatus
 from src.models.transaction import Transaction
-from src.services.reporting.balance_sheet_service import BalanceSheetService
+from src.services.reporting.balance_sheet_service import BalanceSheetService, classify_asset_report_group
+
+
+def test_accounts_receivable_is_a_current_asset():
+    assert classify_asset_report_group("1201", "CURRENT_ASSETS") == "CURRENT_ASSETS"
+    assert classify_asset_report_group("1201", "Piutang Usaha") == "CURRENT_ASSETS"
+    assert classify_asset_report_group("1201.01", "FIXED_ASSETS") == "FIXED_ASSETS"
+    assert classify_asset_report_group("1501", "Aset Tetap") == "FIXED_ASSETS"
 
 
 @pytest.mark.asyncio
@@ -34,6 +41,7 @@ async def test_balance_sheet_accounting_equation(db_session: AsyncSession):
         normal_balance=NormalBalance.DEBIT,
         report_group="FIXED_ASSETS"
     )
+
     acc_utang = ChartOfAccount(
         organization_id=org.id,
         account_code="2101.01",

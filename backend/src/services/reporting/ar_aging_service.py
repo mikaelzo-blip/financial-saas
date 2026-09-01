@@ -34,7 +34,8 @@ class ARAgingService:
         ).where(
             and_(
                 CustomerInvoice.organization_id == organization_id,
-                CustomerInvoice.invoice_date <= as_of
+                CustomerInvoice.invoice_date <= as_of,
+                CustomerInvoice.status != "CANCELLED",
             )
         ).order_by(CustomerInvoice.due_date.asc())
 

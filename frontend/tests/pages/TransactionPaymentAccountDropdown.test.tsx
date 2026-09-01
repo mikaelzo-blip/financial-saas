@@ -67,10 +67,9 @@ it('submits the selected persisted payment-account UUID without fallback', async
   renderForm(onSubmit);
   const user = userEvent.setup();
 
-  await user.selectOptions(
-    await screen.findByLabelText('Akun Kas / Bank Pembayaran *'),
-    'account-mandiri-uuid',
-  );
+  const select = await screen.findByLabelText('Akun Kas / Bank Pembayaran *');
+  expect(await screen.findByRole('option', { name: 'Bank Mandiri (1101)' })).toBeInTheDocument();
+  await user.selectOptions(select, 'account-mandiri-uuid');
   await user.type(screen.getByLabelText('Nominal Transaksi (Rp) *'), '5000000');
   await user.type(screen.getByLabelText('Keterangan Transaksi *'), 'Pembelian material');
   await user.click(screen.getByRole('button', { name: 'Simpan Transaksi' }));

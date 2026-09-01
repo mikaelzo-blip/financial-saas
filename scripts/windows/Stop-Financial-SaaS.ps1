@@ -14,10 +14,14 @@ foreach ($entry in @(
     $processId = (Get-Content $pidFile -Raw).Trim()
     if ($processId -match '^\d+$') {
         $process = Get-CimInstance Win32_Process -Filter "ProcessId = $processId" -ErrorAction SilentlyContinue
-        if ($process -and $process.CommandLine -like "*$($entry.Match)*" -and
-            $entry.Executable -and $process.ExecutablePath -eq $entry.Executable) {
-            Stop-Process -Id $processId -Force
-        }
+        $targets = @($process) + @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+            $_.ParentProcessId -eq [int]$processId
+        })
+        $target = $targets | Where-Object {
+            $_ -and $_.CommandLine -like "*$($entry.Match)*" -and
+            $entry.Executable -and $_.ExecutablePath -eq $entry.Executable
+        } | Select-Object -First 1
+        if ($target) { Stop-Process -Id $target.ProcessId -Force }
     }
     Remove-Item $pidFile -Force
 }

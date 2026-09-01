@@ -15,12 +15,15 @@ function Test-TrackedProcess([string]$Name, [string]$ExpectedCommand, [string]$E
     $processId = (Get-Content $pidFile -Raw).Trim()
     if ($processId -notmatch '^\d+$') { Remove-Item $pidFile -Force; return $false }
     $process = Get-CimInstance Win32_Process -Filter "ProcessId = $processId" -ErrorAction SilentlyContinue
-    if (-not $process -or $process.CommandLine -notlike "*$ExpectedCommand*" -or
-        ($ExpectedExecutable -and $process.ExecutablePath -ne $ExpectedExecutable)) {
-        Remove-Item $pidFile -Force
-        return $false
-    }
-    return $true
+    if ($process -and $process.CommandLine -like "*$ExpectedCommand*" -and
+        (-not $ExpectedExecutable -or $process.ExecutablePath -eq $ExpectedExecutable)) { return $true }
+    $child = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.ParentProcessId -eq [int]$processId -and $_.CommandLine -like "*$ExpectedCommand*" -and
+        (-not $ExpectedExecutable -or $_.ExecutablePath -eq $ExpectedExecutable)
+    } | Select-Object -First 1
+    if ($child) { Set-Content $pidFile $child.ProcessId; return $true }
+    Remove-Item $pidFile -Force
+    return $false
 }
 
 function Wait-Http([string]$Url, [int]$Seconds = 60) {
@@ -83,6 +86,8 @@ if (-not (Test-Path (Join-Path $Frontend 'node_modules\.bin\vite.cmd')) -or $ins
 if (-not (Test-TrackedProcess 'backend' 'src.main:app' $Python)) {
     $process = Start-Process -FilePath $Python -ArgumentList '-m','uvicorn','src.main:app','--host','127.0.0.1','--port','8000' -WorkingDirectory $Backend -RedirectStandardOutput (Join-Path $Runtime 'backend.log') -RedirectStandardError (Join-Path $Runtime 'backend.error.log') -PassThru
     Set-Content (Join-Path $Runtime 'backend.pid') $process.Id
+    Start-Sleep -Milliseconds 500
+    Test-TrackedProcess 'backend' 'src.main:app' $Python | Out-Null
 }
 $health = Wait-Http 'http://127.0.0.1:8000/health'
 $ready = Wait-Http 'http://127.0.0.1:8000/ready'

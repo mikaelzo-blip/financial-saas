@@ -116,7 +116,7 @@ class GeneralLedgerService:
                     transaction_id=str(je.transaction_id) if je.transaction_id else None,
                     description=jl.notes or je.description,
                     project_code=proj.project_code if proj else None,
-                    project_name=proj.name if proj else None,
+                    project_name=proj.project_name if proj else None,
                     debit=dr,
                     credit=cr,
                     running_balance=current_running,

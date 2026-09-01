@@ -11,11 +11,12 @@ export function parseApiError(error: unknown): ApiError {
   if (error instanceof AxiosError) {
     const status = error.response?.status;
     const data = error.response?.data;
+    const backendMessage = data?.error?.message || (typeof data?.detail === 'string' ? data.detail : undefined);
 
     // 409 Duplicate Entity
     if (status === 409) {
       return {
-        message: data?.detail || 'Dokumen atau entitas ini sudah ada di sistem.',
+        message: backendMessage || 'Dokumen atau entitas ini sudah ada di sistem.',
         statusCode: 409,
         isDuplicate: true,
       };
@@ -29,7 +30,7 @@ export function parseApiError(error: unknown): ApiError {
         fieldErrors[fieldName] = err.msg || 'Format input tidak valid';
       });
       return {
-        message: 'Mohon periksa kembali input formulir.',
+        message: Object.entries(fieldErrors).map(([field, message]) => `${field}: ${message}`).join('; '),
         statusCode: 422,
         fieldErrors,
       };
@@ -38,7 +39,7 @@ export function parseApiError(error: unknown): ApiError {
     // 403 Forbidden
     if (status === 403) {
       return {
-        message: data?.detail || 'Anda tidak memiliki hak akses untuk aksi ini.',
+        message: backendMessage || 'Anda tidak memiliki hak akses untuk aksi ini.',
         statusCode: 403,
       };
     }
@@ -52,7 +53,7 @@ export function parseApiError(error: unknown): ApiError {
     }
 
     return {
-      message: data?.detail || error.message || 'Terjadi kesalahan pada sistem backend.',
+      message: backendMessage || error.message || 'Terjadi kesalahan pada sistem backend.',
       statusCode: status,
     };
   }

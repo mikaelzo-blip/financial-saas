@@ -52,6 +52,9 @@ class PaymentAccountResponse(BaseModel):
     id: uuid.UUID
     organization_id: uuid.UUID
     coa_account_id: uuid.UUID
+    coa_account_code: str
+    coa_account_name: str
+    account_type: AccountType
     name: str
     bank_name: Optional[str] = None
     account_number: Optional[str] = None

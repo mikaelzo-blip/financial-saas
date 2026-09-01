@@ -16,3 +16,8 @@ it('does not replace customer API failures with hardcoded demo data', async () =
   vi.spyOn(apiClient, 'get').mockRejectedValue(new Error('Network failure'));
   await expect(masterApi.getCustomers()).rejects.toThrow('Network failure');
 });
+
+it('does not replace payment-account API failures with hardcoded demo data', async () => {
+  vi.spyOn(apiClient, 'get').mockRejectedValue(new Error('Network failure'));
+  await expect(masterApi.getPaymentAccounts()).rejects.toThrow('Network failure');
+});

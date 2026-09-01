@@ -47,7 +47,8 @@ class DashboardService:
         ar_invoices_stmt = select(CustomerInvoice).where(
             and_(
                 CustomerInvoice.organization_id == organization_id,
-                CustomerInvoice.invoice_date <= as_of
+                CustomerInvoice.invoice_date <= as_of,
+                CustomerInvoice.status != "CANCELLED",
             )
         )
         invoices = (await session.execute(ar_invoices_stmt)).scalars().all()

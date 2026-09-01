@@ -64,9 +64,17 @@ class CustomerARService:
         total_amount: Decimal,
         explicit_due_date: Optional[date] = None,
         override_reason: Optional[str] = None,
-        transaction_id: Optional[uuid.UUID] = None
+        transaction_id: Optional[uuid.UUID] = None,
+        invoice_code: Optional[str] = None
     ) -> CustomerInvoice:
-        code = await self.generate_invoice_code(organization_id, invoice_date)
+        if transaction_id:
+            existing = await self.session.scalar(select(CustomerInvoice).where(
+                CustomerInvoice.organization_id == organization_id,
+                CustomerInvoice.transaction_id == transaction_id,
+            ))
+            if existing:
+                return await self.get_invoice(organization_id, existing.id)
+        code = invoice_code or await self.generate_invoice_code(organization_id, invoice_date)
         due_date, reason = await self.calculate_effective_due_date(
             organization_id, invoice_date, explicit_due_date, override_reason
         )

@@ -70,6 +70,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     transactionType === 'CUSTOMER_INVOICE' ||
     transactionType === 'CUSTOMER_PAYMENT' ||
     transactionType === 'CUSTOMER_ADVANCE';
+  const requiresPaymentAccount = transactionType !== 'CUSTOMER_INVOICE';
 
   const counterparties = isCustomerType ? customers : vendors;
 
@@ -124,7 +125,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         transaction_date: transactionDate,
         amount: totalNominal,
         counterparty_id: counterpartyId || undefined,
-        payment_account_id: paymentAccountId || undefined,
+        payment_account_id: requiresPaymentAccount ? paymentAccountId || undefined : undefined,
         reference_no: referenceNo || undefined,
         description,
         document_ids: documentIds,
@@ -141,7 +142,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         transaction_date: transactionDate,
         amount: totalNominal,
         counterparty_id: counterpartyId || undefined,
-        payment_account_id: paymentAccountId || undefined,
+        payment_account_id: requiresPaymentAccount ? paymentAccountId || undefined : undefined,
         reference_no: referenceNo || undefined,
         description,
         document_ids: documentIds,
@@ -200,10 +201,11 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         />
 
         <Select
-          label="Akun Kas / Bank Pembayaran *"
+          label={`Akun Kas / Bank Pembayaran${requiresPaymentAccount ? ' *' : ''}`}
           value={paymentAccountId}
           onChange={(e) => setPaymentAccountId(e.target.value)}
-          required
+          required={requiresPaymentAccount}
+          disabled={!requiresPaymentAccount}
         >
           <option value="">-- Pilih Akun Kas / Bank --</option>
           {paymentAccounts.map((acc) => (

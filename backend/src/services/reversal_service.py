@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.transaction import Transaction
 from src.models.journal import JournalEntry, JournalLine
+from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation
 from src.models.enums import TransactionType, WorkflowStatus
 from src.services.accounting_engine import AccountingEngine
 from src.services.audit_service import AuditService
@@ -88,6 +89,19 @@ class ReversalService:
                 f"Transaction {original_trx.transaction_code} has already been reversed by entry {original_je.reversal_entry_id}."
             )
 
+        invoice = None
+        if original_trx.transaction_type == TransactionType.CUSTOMER_INVOICE:
+            invoice = await self.session.scalar(select(CustomerInvoice).where(
+                CustomerInvoice.organization_id == organization_id,
+                CustomerInvoice.transaction_id == original_trx.id,
+            ))
+            if invoice and await self.session.scalar(select(CustomerPaymentAllocation.id).where(
+                CustomerPaymentAllocation.invoice_id == invoice.id,
+            ).limit(1)):
+                raise InvariantViolationException(
+                    "Cannot reverse a customer invoice with allocated customer payments. Reverse the payments first."
+                )
+
         r_date = reversal_date or date.today()
         rev_trx_code = await self.generate_reversal_code(organization_id, r_date)
 
@@ -149,6 +163,9 @@ class ReversalService:
         original_je.is_reversed = True
         original_je.reversal_entry_id = rev_je.id
         original_trx.workflow_status = WorkflowStatus.REVERSED
+
+        if invoice:
+            invoice.status = "CANCELLED"
 
         # 6. Audit Trail Logging
         await self.audit.log_event(

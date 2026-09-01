@@ -174,7 +174,8 @@ class ProjectCostService:
             .where(
                 and_(
                     CustomerInvoice.organization_id == organization_id,
-                    CustomerInvoice.project_id == project_id
+                    CustomerInvoice.project_id == project_id,
+                    CustomerInvoice.status != "CANCELLED",
                 )
             )
         )
@@ -189,7 +190,8 @@ class ProjectCostService:
             .where(
                 and_(
                     CustomerInvoice.organization_id == organization_id,
-                    CustomerInvoice.project_id == project_id
+                    CustomerInvoice.project_id == project_id,
+                    CustomerInvoice.status != "CANCELLED",
                 )
             )
         )

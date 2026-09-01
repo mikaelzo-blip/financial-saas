@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.transaction import Transaction, TransactionAllocation, TransactionReviewFlag
 from src.models.document import TransactionDocumentLink
+from src.models.counterparty import Counterparty
+from src.models.project import Project
 from src.models.enums import (
     TransactionType,
     WorkflowStatus,
@@ -144,15 +146,55 @@ class TransactionService:
                 )
             ]
 
-        # Check heuristic duplicate
-        duplicate_candidate = await self.duplicate_service.check_duplicate_candidate(
-            organization_id=organization_id,
-            transaction_date=data.transaction_date,
-            amount=data.amount,
-            counterparty_id=data.counterparty_id,
-            payment_account_id=data.payment_account_id
-            ,reference_no=data.reference_no
-        )
+        if data.transaction_type == TransactionType.CUSTOMER_INVOICE:
+            if data.reference_no and len(data.reference_no) > 50:
+                raise InvariantViolationException("Customer invoice number must not exceed 50 characters.")
+            if data.allocations and any(allocation.project_id is None for allocation in resolved_allocations):
+                raise InvariantViolationException(
+                    "Customer invoice requires every allocation to reference one project."
+                )
+            project_ids = {allocation.project_id for allocation in resolved_allocations if allocation.project_id}
+            if data.project_id:
+                project_ids.add(data.project_id)
+            if not data.counterparty_id or len(project_ids) != 1:
+                raise InvariantViolationException(
+                    "Customer invoice requires customer and one project."
+                )
+            customer = await self.session.scalar(select(Counterparty).where(
+                Counterparty.id == data.counterparty_id,
+                Counterparty.organization_id == organization_id,
+            ))
+            if not customer:
+                raise EntityNotFoundException("Customer Counterparty", data.counterparty_id)
+            if not customer.is_customer:
+                raise InvariantViolationException("Customer invoice counterparty must be a customer.")
+            project_id = project_ids.pop()
+            project = await self.session.scalar(select(Project).where(
+                Project.id == project_id,
+                Project.organization_id == organization_id,
+            ))
+            if not project:
+                raise EntityNotFoundException("Project", project_id)
+            if project.customer_id != customer.id:
+                raise InvariantViolationException("Customer invoice customer must match the customer assigned to the project.")
+
+        # Invoice numbers are tenant-unique regardless of date or amount.
+        duplicate_candidate = None
+        if data.transaction_type == TransactionType.CUSTOMER_INVOICE and data.reference_no:
+            duplicate_candidate = await self.session.scalar(select(Transaction).where(
+                Transaction.organization_id == organization_id,
+                Transaction.transaction_type == TransactionType.CUSTOMER_INVOICE,
+                Transaction.reference_no == data.reference_no,
+            ).limit(1))
+        if not duplicate_candidate:
+            duplicate_candidate = await self.duplicate_service.check_duplicate_candidate(
+                organization_id=organization_id,
+                transaction_date=data.transaction_date,
+                amount=data.amount,
+                counterparty_id=data.counterparty_id,
+                payment_account_id=data.payment_account_id,
+                reference_no=data.reference_no,
+            )
 
         initial_status = WorkflowStatus.STAGED
         review_flags_to_add: List[TransactionReviewFlag] = []

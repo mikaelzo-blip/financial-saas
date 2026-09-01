@@ -1,11 +1,12 @@
 # Project Status
 
-- **Current origin/main**: `de712c4` — UAT finding #1 project/customer fix merged through PR #20
-- **Completed features**: 001 Contractor Finance System; 002 Core Financial Domain; 003 Core Operational UI; 004 Financial Reporting; 005 Document Intelligence; 006 Hermes Automation; 007 WhatsApp Integration; 008 AI Management Insights; 009 Production Readiness Foundation; 010 Dependency Security Gates; UAT Finding #1
-- **Current feature**: Local UAT finding #2 — payment-account dropdown labels and mapping
-- **Current branch**: `hermes/uat-payment-account-labels`
-- **Latest verified checkpoint**: payment account API serialization, COA mapping properties, frontend forms, and dropdown regression tests implemented
-- **Tests**: frontend typecheck, production npm audit, repository safety checks passed; PR verification pending
-- **CI**: Pending for UAT finding #2 PR
-- **Outstanding blockers**: PR/CI/merge, runtime synchronization, and direct cash purchase transaction creation remain. Production and external-service boundaries remain unchanged.
-- **Next action**: Open PR #21, verify GitHub CI, squash merge, synchronize local runtime, then execute and verify the direct cash purchase transaction.
+- **Current origin/main baseline**: `f8e2dd8`
+- **Completed features**: 001 Contractor Finance System; 002 Core Financial Domain; 003 Core Operational UI; 004 Financial Reporting; 005 Document Intelligence; 006 Hermes Automation; 007 WhatsApp Integration; 008 AI Management Insights; 009 Production Readiness Foundation; 010 Dependency Security Gates; UAT Findings #1-#3
+- **Current feature**: Local UAT #4 — Customer Invoice and Accounts Receivable
+- **Current branch**: `hermes/uat-4-customer-invoice`
+- **Latest verified checkpoint**: `CUSTOMER_INVOICE` manual entry posts Policy B (Dr 1201 / Cr 4101), creates tenant-scoped AR, preserves cash and project cost, and keeps document/WhatsApp candidates on the same authoritative transaction workflow.
+- **UAT data**: `INV-DEMO-001`, Rp25,000,000, outstanding Rp25,000,000, cash Rp95,000,000, project cost Rp5,000,000, revenue Rp25,000,000.
+- **Tests**: 191 backend tests passed; frontend tests, typecheck, lint, build, production audit, migration SQL generation, repository safety, and accounting consistency gates passed.
+- **Accounting integrity**: total debit equals total credit; Assets Rp120,000,000 = Liabilities Rp0 + Equity Rp120,000,000.
+- **Outstanding blockers**: GitHub PR, mandatory CI, squash merge, and runtime worktree synchronization.
+- **Next UAT**: UAT #5 — Customer Payment allocation and cash receipt against `INV-DEMO-001`; do not create duplicate revenue recognition.

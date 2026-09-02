@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.organization import Organization
 from src.models.counterparty import Counterparty
 from src.models.project import Project
-from src.models.enums import ProjectStatus, TransactionType
+from src.models.enums import ProjectStatus, TransactionType, WorkflowStatus
 from src.models.transaction import Transaction
 from src.services.payable_service import VendorAPService
 from src.core.exceptions import InvariantViolationException
@@ -45,6 +45,8 @@ async def test_vendor_bill_and_payment_allocations(db_session: AsyncSession):
         transaction_type=TransactionType.PAY_VENDOR_BILL,
         transaction_date=date(2026, 2, 15),
         amount=Decimal("20000000.00"),
+        workflow_status=WorkflowStatus.POSTED,
+        counterparty_id=vendor.id,
         description="Cicilan 1 Besi"
     )
     db_session.add(pay_trx1)
@@ -65,6 +67,8 @@ async def test_vendor_bill_and_payment_allocations(db_session: AsyncSession):
         transaction_type=TransactionType.PAY_VENDOR_BILL,
         transaction_date=date(2026, 2, 20),
         amount=Decimal("35000000.00"),
+        workflow_status=WorkflowStatus.POSTED,
+        counterparty_id=vendor.id,
         description="Excess Payment"
     )
     db_session.add(pay_trx_excess)

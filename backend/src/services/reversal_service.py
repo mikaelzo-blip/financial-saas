@@ -92,6 +92,8 @@ class ReversalService:
 
         invoice = None
         bill = None
+        affected_invoices = []
+        affected_bills = []
         if original_trx.transaction_type == TransactionType.CUSTOMER_INVOICE:
             invoice = await self.session.scalar(select(CustomerInvoice).where(
                 CustomerInvoice.organization_id == organization_id,
@@ -114,6 +116,28 @@ class ReversalService:
                 raise InvariantViolationException(
                     "Cannot reverse a vendor bill with allocated vendor payments. Reverse the payments first."
                 )
+        elif original_trx.transaction_type == TransactionType.CUSTOMER_PAYMENT:
+            # Customer payment reversal: remove its allocations and restore customer invoice statuses
+            cpa_stmt = select(CustomerPaymentAllocation).options(
+                selectinload(CustomerPaymentAllocation.invoice).selectinload(CustomerInvoice.allocations)
+            ).where(CustomerPaymentAllocation.payment_transaction_id == original_trx.id)
+            cpa_rows = (await self.session.scalars(cpa_stmt)).all()
+            for alloc in cpa_rows:
+                inv = alloc.invoice
+                if inv not in affected_invoices:
+                    affected_invoices.append(inv)
+                await self.session.delete(alloc)
+        elif original_trx.transaction_type in (TransactionType.PAY_VENDOR_BILL, TransactionType.PAY_SUBCONTRACTOR):
+            # Vendor payment reversal: remove its allocations and restore vendor bill statuses
+            vpa_stmt = select(VendorPaymentAllocation).options(
+                selectinload(VendorPaymentAllocation.bill).selectinload(VendorBill.allocations)
+            ).where(VendorPaymentAllocation.payment_transaction_id == original_trx.id)
+            vpa_rows = (await self.session.scalars(vpa_stmt)).all()
+            for alloc in vpa_rows:
+                b = alloc.bill
+                if b not in affected_bills:
+                    affected_bills.append(b)
+                await self.session.delete(alloc)
 
         r_date = reversal_date or date.today()
         rev_trx_code = await self.generate_reversal_code(organization_id, r_date)
@@ -181,6 +205,26 @@ class ReversalService:
             invoice.status = "CANCELLED"
         if bill:
             bill.status = "CANCELLED"
+
+        for inv in affected_invoices:
+            # Refresh allocations and recalculate status
+            paid = sum((a.allocated_amount for a in inv.allocations if a.payment_transaction_id != original_trx.id), Decimal("0.00"))
+            if paid == Decimal("0.00"):
+                inv.status = "UNPAID"
+            elif paid < inv.total_amount:
+                inv.status = "PARTIALLY_PAID"
+            else:
+                inv.status = "PAID"
+
+        for b in affected_bills:
+            # Refresh allocations and recalculate status
+            paid = sum((a.allocated_amount for a in b.allocations if a.payment_transaction_id != original_trx.id), Decimal("0.00"))
+            if paid == Decimal("0.00"):
+                b.status = "UNPAID"
+            elif paid < b.total_amount:
+                b.status = "PARTIALLY_PAID"
+            else:
+                b.status = "PAID"
 
         # 6. Audit Trail Logging
         await self.audit.log_event(

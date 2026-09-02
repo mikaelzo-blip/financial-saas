@@ -35,7 +35,8 @@ class APAgingService:
         ).where(
             and_(
                 VendorBill.organization_id == organization_id,
-                VendorBill.bill_date <= as_of
+                VendorBill.bill_date <= as_of,
+                VendorBill.status != "CANCELLED",
             )
         ).order_by(VendorBill.due_date.asc())
 

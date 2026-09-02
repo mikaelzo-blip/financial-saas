@@ -14,14 +14,19 @@ def build_candidate(document_id: uuid.UUID, document_type: DocumentType,
         return None
     proposed = None
     category = None
+    force_review = document_type in {DocumentType.TRANSFER_PROOF, DocumentType.RECEIPT}
     if document_type == DocumentType.TRANSFER_PROOF:
-        # Evidence of cash movement alone is never evidence of expense.
-        proposed = TransactionType.PAY_VENDOR_BILL if matches.get("counterparty_id") else None
+        # Direction is a proposal only; evidence of cash movement never proves expense.
+        role = matches.get("counterparty_role")
+        proposed = (TransactionType.CUSTOMER_PAYMENT if role == "CUSTOMER" else
+                    TransactionType.PAY_VENDOR_BILL if role == "VENDOR" else None)
+    elif document_type == DocumentType.RECEIPT:
+        proposed, category = TransactionType.DIRECT_PURCHASE, CostCategory.MAT
     elif document_type == DocumentType.VENDOR_INVOICE:
         proposed, category = TransactionType.VENDOR_BILL, CostCategory.MAT
     elif document_type == DocumentType.CUSTOMER_INVOICE:
         proposed = TransactionType.CUSTOMER_INVOICE
-    status = CandidateStatus.REVIEW_REQUIRED if flags else CandidateStatus.READY_FOR_APPROVAL
+    status = CandidateStatus.REVIEW_REQUIRED if flags or force_review else CandidateStatus.READY_FOR_APPROVAL
     return TransactionCandidate(id=uuid.uuid5(uuid.NAMESPACE_URL, f"document:{document_id}"),
         proposed_transaction_type=proposed,
         counterparty_id=matches.get("counterparty_id"), project_id=matches.get("project_id"),

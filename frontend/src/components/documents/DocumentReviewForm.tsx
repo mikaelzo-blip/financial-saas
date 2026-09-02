@@ -2,9 +2,14 @@ import React, { useState } from 'react';
 import { Button } from '../ui/Button';
 import { DocumentResponse } from '../../types/api';
 
-interface Props { document: DocumentResponse; onSave: (changes: Record<string, unknown>, reason: string) => Promise<void>; onApprove: () => Promise<void>; }
+interface Props {
+  document: DocumentResponse;
+  onSave: (changes: Record<string, unknown>, reason: string) => Promise<void>;
+  onApprove: () => Promise<void>;
+  onReject: (reason: string) => Promise<void>;
+}
 
-export const DocumentReviewForm: React.FC<Props> = ({ document, onSave, onApprove }) => {
+export const DocumentReviewForm: React.FC<Props> = ({ document, onSave, onApprove, onReject }) => {
   const candidate = document.candidate_transaction;
   const [projectId, setProjectId] = useState(String(candidate.project_id ?? ''));
   const [counterpartyId, setCounterpartyId] = useState(String(candidate.counterparty_id ?? ''));
@@ -18,6 +23,6 @@ export const DocumentReviewForm: React.FC<Props> = ({ document, onSave, onApprov
     <label className="block text-sm">Counterparty ID<input className="mt-1 w-full rounded border p-2" value={counterpartyId} onChange={e => setCounterpartyId(e.target.value)} /></label>
     <label className="block text-sm">Alasan koreksi<input className="mt-1 w-full rounded border p-2" value={reason} onChange={e => setReason(e.target.value)} /></label>
     <pre className="max-h-56 overflow-auto rounded bg-slate-950 p-3 text-xs text-slate-100">{JSON.stringify(document.extracted_data, null, 2)}</pre>
-    <div className="flex gap-2"><Button onClick={save} isLoading={busy}>Simpan Koreksi</Button><Button variant="secondary" onClick={onApprove} disabled={document.review_flags.length > 0}>Setujui & Buat Transaksi</Button></div>
+    <div className="flex gap-2"><Button onClick={save} isLoading={busy}>Simpan Koreksi</Button><Button variant="secondary" onClick={onApprove} disabled={document.review_flags.length > 0}>Setujui & Buat Transaksi</Button><Button variant="danger" onClick={() => onReject(reason)}>Tolak Kandidat</Button></div>
   </section>;
 };

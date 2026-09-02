@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import AsyncSessionLocal
 from src.models.document import Document
-from src.models.enums import DocumentProcessingStatus
+from src.models.enums import CandidateStatus, DocumentProcessingStatus
 from src.schemas.document import StructuredExtraction
 from src.services.documents.candidate import build_candidate, derive_flags
 from src.services.documents.confidence import below_threshold
@@ -14,7 +14,15 @@ from src.services.documents.extraction import ExtractionProvider, get_extraction
 from src.services.documents.matching import match_entities
 from src.services.document_service import DocumentService
 from src.services.duplicate_service import DuplicateDetectionService
+from src.services.audit_service import AuditService
 from src.models.enums import ReviewFlag
+
+
+def document_status_for(candidate, flags: list[str]) -> DocumentProcessingStatus:
+    if (flags or not candidate or not candidate.proposed_transaction_type
+            or candidate.status == CandidateStatus.REVIEW_REQUIRED):
+        return DocumentProcessingStatus.REVIEW_REQUIRED
+    return DocumentProcessingStatus.READY_FOR_APPROVAL
 
 
 class DocumentPipeline:
@@ -53,8 +61,20 @@ class DocumentPipeline:
                     candidate.status = candidate.status.REVIEW_REQUIRED
             document.review_flags = flags
             document.candidate_transaction = candidate.model_dump(mode="json") if candidate else {}
-            document.processing_status = (DocumentProcessingStatus.REVIEW_REQUIRED if flags
-                else DocumentProcessingStatus.READY_FOR_APPROVAL)
+            document.processing_status = document_status_for(candidate, flags)
+            audit = AuditService(self.session)
+            await audit.log_event(document.organization_id, "Document", document.id, "DOCUMENT_CLASSIFIED",
+                new_values={"document_type": effective_type.value,
+                            "confidence": str(result.confidence.document_type_confidence)})
+            await audit.log_event(document.organization_id, "Document", document.id, "DOCUMENT_EXTRACTED",
+                new_values={"provider_name": result.provider_name, "provider_version": result.provider_version,
+                            "fields": sorted(data.model_dump(exclude_none=True, exclude={"raw_text"}))})
+            if candidate:
+                await audit.log_event(document.organization_id, "Document", document.id, "CANDIDATE_PROPOSED",
+                    new_values={"candidate_id": str(candidate.id),
+                                "transaction_type": (candidate.proposed_transaction_type.value
+                                                     if candidate.proposed_transaction_type else None),
+                                "review_flags": flags})
         except Exception as exc:
             document.processing_status = DocumentProcessingStatus.FAILED
             document.failure_code = type(exc).__name__

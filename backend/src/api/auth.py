@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.config import settings
 from src.core.database import get_db
 from src.core.security import create_access_token, decode_access_token, verify_password
 from src.models.organization import Organization
@@ -89,12 +88,6 @@ async def get_session(request: Request, db: AsyncSession = Depends(get_db)):
     return session_payload(user, organization)
 
 
-async def require_application_user(request: Request, db: AsyncSession = Depends(get_db)) -> User | None:
-    """Bind production requests to an active JWT principal.
-
-    Development keeps legacy header fixtures until their APIs are migrated;
-    staging and production always fail closed.
-    """
-    if settings.ENVIRONMENT.lower() not in {"staging", "production"}:
-        return None
+async def require_application_user(request: Request, db: AsyncSession = Depends(get_db)) -> User:
+    """Bind every browser application request to its active JWT principal."""
     return await authenticated_user(request, db)

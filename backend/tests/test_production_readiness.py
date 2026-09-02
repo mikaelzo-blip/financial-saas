@@ -91,8 +91,12 @@ async def test_login_returns_tenant_bound_jwt_and_rejects_bad_credentials(client
     assert invalid.json()["detail"] == unknown.json()["detail"]
 
 
+@pytest.mark.parametrize("environment", ["development", "production"])
 @pytest.mark.asyncio
-async def test_production_api_rejects_missing_or_forged_tenant_identity(client, db_session, monkeypatch):
+async def test_application_api_rejects_missing_or_forged_tenant_identity(
+    security_client, db_session, monkeypatch, environment
+):
+    client = security_client
     from src.core.config import settings
 
     organization = Organization(slug="tenant-bound", legal_name="Tenant Bound")
@@ -112,7 +116,7 @@ async def test_production_api_rejects_missing_or_forged_tenant_identity(client, 
         json={"email": user.email, "password": "CorrectHorseBatteryStaple!"},
     )
     token = login.json()["access_token"]
-    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+    monkeypatch.setattr(settings, "ENVIRONMENT", environment)
 
     assert (await client.get("/api/v1/projects")).status_code == 401
     forged = {

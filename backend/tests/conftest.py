@@ -4,6 +4,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from src.api.auth import require_application_user
 from src.core.database import Base, get_db
 from src.main import create_application
 
@@ -34,7 +35,26 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest.fixture
-async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+async def authenticated_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    app = create_application()
+
+    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[require_application_user] = lambda: None
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+
+@pytest.fixture
+async def client(authenticated_client: AsyncClient) -> AsyncGenerator[AsyncClient, None]:
+    yield authenticated_client
+
+
+@pytest.fixture
+async def security_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     app = create_application()
 
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:

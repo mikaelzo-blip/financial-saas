@@ -14,6 +14,7 @@ from src.api.v1.transactions import router as transactions_router
 from src.api.v1.whatsapp import router as whatsapp_router
 from src.api.v1.whatsapp_state import router as whatsapp_state_router
 from src.api.v1.counterparties import router as counterparties_router
+from src.api.v1.payables import router as payables_router, vendor_payments_router
 from src.api.v1.receivables import customer_payments_router, router as receivables_router
 
 api_router = APIRouter()
@@ -24,6 +25,8 @@ api_router.include_router(whatsapp_state_router)
 
 application_router = APIRouter(dependencies=[Depends(require_application_user)])
 application_router.include_router(counterparties_router)
+application_router.include_router(payables_router)
+application_router.include_router(vendor_payments_router)
 application_router.include_router(receivables_router)
 application_router.include_router(customer_payments_router)
 application_router.include_router(projects_router)

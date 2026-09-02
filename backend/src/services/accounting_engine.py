@@ -10,7 +10,9 @@ from src.models.transaction import Transaction
 from src.models.journal import JournalEntry, JournalLine
 from src.models.coa import ChartOfAccount
 from src.models.enums import TransactionType, WorkflowStatus
+from src.models.payable import VendorBill
 from src.services.audit_service import AuditService
+from src.services.payable_service import VendorAPService
 from src.services.receivable_service import CustomerARService
 from src.services.posting_rules import PostingRuleRegistry, GeneratedJournalLeg
 from src.core.exceptions import EntityNotFoundException, InvariantViolationException
@@ -144,6 +146,34 @@ class AccountingEngine:
                 transaction_id=transaction.id,
                 invoice_code=transaction.reference_no,
             )
+
+        if transaction.transaction_type == TransactionType.VENDOR_BILL:
+            project_ids = {allocation.project_id for allocation in transaction.allocations if allocation.project_id}
+            if not transaction.counterparty_id:
+                raise InvariantViolationException(
+                    "Vendor bill posting requires a counterparty."
+                )
+            project_id = project_ids.pop() if len(project_ids) == 1 else None
+            effective_due_date, _ = await VendorAPService(self.session).calculate_effective_due_date(
+                organization_id=organization_id,
+                vendor_id=transaction.counterparty_id,
+                bill_date=transaction.transaction_date,
+            )
+            bill_code = transaction.reference_no or await VendorAPService(self.session).generate_bill_code(
+                organization_id, transaction.transaction_date
+            )
+            bill = VendorBill(
+                organization_id=organization_id,
+                bill_code=bill_code,
+                vendor_id=transaction.counterparty_id,
+                project_id=project_id,
+                bill_date=transaction.transaction_date,
+                due_date=effective_due_date,
+                total_amount=transaction.amount,
+                transaction_id=transaction.id,
+                status="UNPAID",
+            )
+            self.session.add(bill)
 
         # Mark transaction as POSTED
         old_status = transaction.workflow_status.value

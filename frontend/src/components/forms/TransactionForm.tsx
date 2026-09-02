@@ -70,7 +70,9 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
     transactionType === 'CUSTOMER_INVOICE' ||
     transactionType === 'CUSTOMER_PAYMENT' ||
     transactionType === 'CUSTOMER_ADVANCE';
-  const requiresPaymentAccount = transactionType !== 'CUSTOMER_INVOICE';
+  const requiresPaymentAccount =
+    transactionType !== 'CUSTOMER_INVOICE' &&
+    transactionType !== 'VENDOR_BILL';
 
   const counterparties = isCustomerType ? customers : vendors;
 

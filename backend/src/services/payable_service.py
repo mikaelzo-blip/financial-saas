@@ -1,11 +1,12 @@
 import uuid
 from typing import List, Optional, Tuple, Dict, Any
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from sqlalchemy import select, func, and_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.models.organization import Organization
 from src.models.payable import VendorBill, VendorPaymentAllocation, VendorAdvance
 from src.models.counterparty import Counterparty
 from src.models.project import Project
@@ -32,6 +33,24 @@ class VendorAPService:
         count = await self.session.scalar(stmt) or 0
         next_seq = count + 1
         return f"{prefix}{next_seq:06d}"
+
+    async def calculate_effective_due_date(
+        self,
+        organization_id: uuid.UUID,
+        vendor_id: Optional[uuid.UUID] = None,
+        bill_date: Optional[date] = None,
+        explicit_due_date: Optional[date] = None,
+        override_reason: Optional[str] = None
+    ) -> Tuple[date, Optional[str]]:
+        if explicit_due_date:
+            return explicit_due_date, override_reason or "EXPLICIT_CONTRACTUAL_OVERRIDE"
+
+        b_date = bill_date or date.today()
+        org_stmt = select(Organization).where(Organization.id == organization_id)
+        org = await self.session.scalar(org_stmt)
+        term_days = org.default_payment_term_days if org else 30
+        computed_date = b_date + timedelta(days=term_days)
+        return computed_date, None
 
     async def generate_advance_code(self, organization_id: uuid.UUID, advance_date: Optional[date] = None) -> str:
         year = (advance_date or date.today()).year

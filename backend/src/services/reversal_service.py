@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.transaction import Transaction
 from src.models.journal import JournalEntry, JournalLine
 from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation
+from src.models.payable import VendorBill, VendorPaymentAllocation
 from src.models.enums import TransactionType, WorkflowStatus
 from src.services.accounting_engine import AccountingEngine
 from src.services.audit_service import AuditService
@@ -90,6 +91,7 @@ class ReversalService:
             )
 
         invoice = None
+        bill = None
         if original_trx.transaction_type == TransactionType.CUSTOMER_INVOICE:
             invoice = await self.session.scalar(select(CustomerInvoice).where(
                 CustomerInvoice.organization_id == organization_id,
@@ -100,6 +102,17 @@ class ReversalService:
             ).limit(1)):
                 raise InvariantViolationException(
                     "Cannot reverse a customer invoice with allocated customer payments. Reverse the payments first."
+                )
+        elif original_trx.transaction_type == TransactionType.VENDOR_BILL:
+            bill = await self.session.scalar(select(VendorBill).where(
+                VendorBill.organization_id == organization_id,
+                VendorBill.transaction_id == original_trx.id,
+            ))
+            if bill and await self.session.scalar(select(VendorPaymentAllocation.id).where(
+                VendorPaymentAllocation.bill_id == bill.id,
+            ).limit(1)):
+                raise InvariantViolationException(
+                    "Cannot reverse a vendor bill with allocated vendor payments. Reverse the payments first."
                 )
 
         r_date = reversal_date or date.today()
@@ -166,6 +179,8 @@ class ReversalService:
 
         if invoice:
             invoice.status = "CANCELLED"
+        if bill:
+            bill.status = "CANCELLED"
 
         # 6. Audit Trail Logging
         await self.audit.log_event(

@@ -80,7 +80,7 @@ export const SettingsPage: React.FC = () => {
           <div className="max-w-xl space-y-4">
             <Input
               label="Nama Perusahaan"
-              value={user?.organizationName || 'PT Kontraktor Utama Indonesia'}
+              value={user?.organizationName || ''}
               disabled
             />
             <Input label="Sektor Usaha" value="Konstruksi & Sipil" disabled />

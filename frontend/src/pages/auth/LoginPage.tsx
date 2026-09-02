@@ -7,14 +7,16 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 
 export const LoginPage: React.FC = () => {
+  const location = useLocation();
   const [email, setEmail] = useState('operator@kontraktor.co.id');
   const [password, setPassword] = useState('password123');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    (location.state as { sessionError?: string } | null)?.sessionError || null,
+  );
 
   const { login } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const from = (location.state as any)?.from?.pathname || '/dashboard';
 

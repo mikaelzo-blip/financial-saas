@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '../../src/store/AuthContext';
 import { ExecutiveSummaryCard } from '../../src/components/ai/ExecutiveSummaryCard';
 import { insightsApi, type Insight } from '../../src/api/insights';
+import { authApi } from '../../src/api/auth';
 
 vi.mock('../../src/api/insights', () => ({ insightsApi: { executive: vi.fn() } }));
 
@@ -19,7 +20,12 @@ const result: Insight = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  localStorage.setItem('financial_user_session', JSON.stringify({ userId: 'user-a', organizationId: 'org-a', accessToken: 'test' }));
+  const session = {
+    userId: 'user-a', email: 'user@example.test', fullName: 'User', role: 'MANAGER' as const,
+    organizationId: 'org-a', organizationName: 'Organization A', accessToken: 'test',
+  };
+  localStorage.setItem('financial_user_session', JSON.stringify(session));
+  vi.spyOn(authApi, 'getSession').mockResolvedValue(session);
 });
 
 function mount() {

@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/App';
+import { authApi } from '../../src/api/auth';
 
 vi.mock('../../src/pages/reports/ProfitLossPage', () => ({ ProfitLossPage: () => <h1>Profit Loss Route</h1> }));
 vi.mock('../../src/pages/reports/BalanceSheetPage', () => ({ BalanceSheetPage: () => <h1>Balance Sheet Route</h1> }));
@@ -15,10 +16,12 @@ vi.mock('../../src/pages/reports/BudgetVsActualPage', () => ({ BudgetVsActualPag
 
 describe('reporting routes and sidebar navigation', () => {
   beforeEach(() => {
-    localStorage.setItem('financial_user_session', JSON.stringify({
-      userId: 'manager', email: 'manager@example.test', fullName: 'Manager', role: 'MANAGER',
+    const session = {
+      userId: 'manager', email: 'manager@example.test', fullName: 'Manager', role: 'MANAGER' as const,
       organizationId: 'org-a', organizationName: 'PT Route Test', accessToken: 'token',
-    }));
+    };
+    localStorage.setItem('financial_user_session', JSON.stringify(session));
+    vi.spyOn(authApi, 'getSession').mockResolvedValue(session);
   });
 
   it.each([

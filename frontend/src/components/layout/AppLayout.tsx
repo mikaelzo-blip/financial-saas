@@ -106,7 +106,7 @@ export const AppLayout: React.FC = () => {
             Perusahaan Aktif
           </p>
           <p className="truncate text-xs font-semibold text-white mt-0.5">
-            {user?.organizationName || 'PT Kontraktor Utama'}
+            {user?.organizationName}
           </p>
         </div>
 

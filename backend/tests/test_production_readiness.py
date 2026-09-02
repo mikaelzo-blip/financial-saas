@@ -69,8 +69,21 @@ async def test_login_returns_tenant_bound_jwt_and_rejects_bad_credentials(client
     assert response.status_code == 200
     body = response.json()
     assert body["user"]["organization_id"] == str(organization.id)
+    assert body["user"]["organization_name"] == organization.legal_name
     assert body["user"]["id"] == str(user.id)
     assert body["access_token"]
+
+    session = await client.get(
+        "/api/v1/auth/session",
+        headers={
+            "Authorization": f"Bearer {body['access_token']}",
+            "X-Organization-ID": str(organization.id),
+            "X-User-ID": str(user.id),
+        },
+    )
+    assert session.status_code == 200
+    assert session.json()["user"]["organization_id"] == str(organization.id)
+    assert session.json()["user"]["organization_name"] == organization.legal_name
 
     invalid = await client.post("/api/v1/auth/login", json={"email": user.email, "password": "wrong-password"})
     unknown = await client.post("/api/v1/auth/login", json={"email": "unknown@example.test", "password": "wrong-password"})

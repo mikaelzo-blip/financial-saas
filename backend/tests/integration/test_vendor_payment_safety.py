@@ -245,3 +245,26 @@ async def test_vendor_payment_cross_tenant_and_invalid_account(client: AsyncClie
     }
     resp = await client.post("/api/v1/vendor-payments", json=payload_invalid_acc, headers=headers_a)
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_vendor_allocation_rejects_wrong_vendor_payment(db_session: AsyncSession):
+    org, vendor_a, project, payment_account = await setup_test_tenant(db_session, "vendor-match")
+    vendor_b = Counterparty(organization_id=org.id, name="PT Vendor Kedua", is_vendor=True, is_customer=False)
+    db_session.add(vendor_b); await db_session.flush()
+    bill_transaction = await TransactionService(db_session).create_transaction(org.id, TransactionCreate(
+        transaction_type=TransactionType.VENDOR_BILL, transaction_date=date(2026, 9, 2),
+        amount=Decimal("1000.00"), counterparty_id=vendor_b.id, project_id=project.id,
+        cost_category=CostCategory.MAT, reference_no="VINV-WRONG-VENDOR", description="Vendor B bill",
+    ))
+    await AccountingEngine(db_session).post_transaction(org.id, bill_transaction.id)
+    bill = await db_session.scalar(select(VendorBill).where(VendorBill.transaction_id == bill_transaction.id))
+    payment = await TransactionService(db_session).create_transaction(org.id, TransactionCreate(
+        transaction_type=TransactionType.PAY_VENDOR_BILL, transaction_date=date(2026, 9, 2),
+        amount=Decimal("1000.00"), counterparty_id=vendor_a.id, payment_account_id=payment_account.id,
+        reference_no="VPAY-WRONG-VENDOR", description="Vendor A payment",
+    ))
+    await AccountingEngine(db_session).post_transaction(org.id, payment.id)
+
+    with pytest.raises(InvariantViolationException, match="same vendor"):
+        await VendorAPService(db_session).allocate_vendor_payment(org.id, payment.id, [(bill.id, Decimal("1000.00"))])

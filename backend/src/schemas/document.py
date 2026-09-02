@@ -25,6 +25,14 @@ class LineItem(BaseModel):
     amount: Optional[Decimal] = None
 
 
+class ExtractedField(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    value: Any = None
+    confidence: Decimal = Field(ge=0, le=1)
+    evidence: Optional[str] = None
+    validation_status: str = Field(pattern="^(VALID|AMBIGUOUS|INVALID|MISSING)$")
+
+
 class StructuredExtraction(BaseModel):
     model_config = ConfigDict(extra="forbid")
     document_number: Optional[str] = None
@@ -51,7 +59,7 @@ class StructuredExtraction(BaseModel):
     project_reference: Optional[str] = None
     line_items: List[LineItem] = Field(default_factory=list)
     raw_text: Optional[str] = None
-    field_evidence: Dict[str, Any] = Field(default_factory=dict)
+    field_evidence: Dict[str, ExtractedField] = Field(default_factory=dict)
 
 
 class TransactionCandidate(BaseModel):
@@ -61,6 +69,7 @@ class TransactionCandidate(BaseModel):
     counterparty_id: Optional[uuid.UUID] = None
     project_id: Optional[uuid.UUID] = None
     payment_account_id: Optional[uuid.UUID] = None
+    allocation_target_id: Optional[uuid.UUID] = None
     cost_category: Optional[CostCategory] = None
     expense_category: Optional[ExpenseCategory] = None
     transaction_date: Optional[date] = None
@@ -75,6 +84,10 @@ class TransactionCandidate(BaseModel):
 class DocumentCorrectionRequest(BaseModel):
     changes: Dict[str, Any]
     reason: str = Field(min_length=1)
+
+
+class DocumentRejectionRequest(BaseModel):
+    reason: str = Field(min_length=3)
 
 
 class DocumentResponse(BaseModel):

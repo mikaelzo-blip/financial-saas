@@ -45,6 +45,11 @@ export const documentsApi = {
     return res.data;
   },
 
+  reject: async (id: string, reason: string): Promise<DocumentResponse> => {
+    const res = await apiClient.post<DocumentResponse>(`/documents/${id}/reject`, { reason });
+    return res.data;
+  },
+
   retry: async (id: string): Promise<DocumentResponse> => {
     const res = await apiClient.post<DocumentResponse>(`/documents/${id}/retry`);
     return res.data;

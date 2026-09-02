@@ -193,12 +193,14 @@ class DocumentProcessingStatus(str, Enum):
     REVIEW_REQUIRED = "REVIEW_REQUIRED"
     READY_FOR_APPROVAL = "READY_FOR_APPROVAL"
     PROCESSED = "PROCESSED"
+    REJECTED = "REJECTED"
     FAILED = "FAILED"
 
 
 class DocumentSourceChannel(str, Enum):
     WEB = "WEB"
     API = "API"
+    WHATSAPP = "WHATSAPP"
 
 
 class CandidateStatus(str, Enum):
@@ -206,3 +208,4 @@ class CandidateStatus(str, Enum):
     REVIEW_REQUIRED = "REVIEW_REQUIRED"
     READY_FOR_APPROVAL = "READY_FOR_APPROVAL"
     CONVERTED = "CONVERTED"
+    REJECTED = "REJECTED"

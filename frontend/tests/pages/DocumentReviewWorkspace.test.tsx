@@ -15,7 +15,8 @@ const document: DocumentResponse = {
 
 test('shows evidence flags, excludes accounting controls, and records correction reason', async () => {
   const onSave = vi.fn().mockResolvedValue(undefined); const onApprove = vi.fn().mockResolvedValue(undefined);
-  render(<DocumentReviewForm document={document} onSave={onSave} onApprove={onApprove} />);
+  const onReject = vi.fn().mockResolvedValue(undefined);
+  render(<DocumentReviewForm document={document} onSave={onSave} onApprove={onApprove} onReject={onReject} />);
   expect(screen.getByText('PROJECT_UNKNOWN')).toBeInTheDocument();
   expect(screen.queryByLabelText(/debit/i)).not.toBeInTheDocument();
   expect(screen.queryByLabelText(/credit/i)).not.toBeInTheDocument();
@@ -23,4 +24,6 @@ test('shows evidence flags, excludes accounting controls, and records correction
   await userEvent.click(screen.getByRole('button', { name: 'Simpan Koreksi' }));
   expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ project_id: '33333333-3333-3333-3333-333333333333' }), 'Verifikasi dokumen sumber');
   expect(screen.getByRole('button', { name: 'Setujui & Buat Transaksi' })).toBeDisabled();
+  await userEvent.click(screen.getByRole('button', { name: 'Tolak Kandidat' }));
+  expect(onReject).toHaveBeenCalledWith('Verifikasi dokumen sumber');
 });

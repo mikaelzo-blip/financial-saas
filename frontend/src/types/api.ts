@@ -177,7 +177,7 @@ export interface DocumentResponse {
   mime_type: string;
   source_channel: string;
   created_at: string;
-  processing_status: 'UPLOADED' | 'HASHED' | 'EXTRACTING' | 'EXTRACTED' | 'MATCHING' | 'REVIEW_REQUIRED' | 'READY_FOR_APPROVAL' | 'PROCESSED' | 'FAILED';
+  processing_status: 'UPLOADED' | 'HASHED' | 'EXTRACTING' | 'EXTRACTED' | 'MATCHING' | 'REVIEW_REQUIRED' | 'READY_FOR_APPROVAL' | 'PROCESSED' | 'REJECTED' | 'FAILED';
   extracted_data: Record<string, unknown>;
   matching_results: Record<string, unknown>;
   confidence_scores: Record<string, string>;

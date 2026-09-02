@@ -1,5 +1,7 @@
 import uuid
 import hashlib
+import re
+from pathlib import Path
 from typing import BinaryIO, Optional, Dict, Any, List
 from datetime import date
 from sqlalchemy import select, func, and_
@@ -9,14 +11,27 @@ from src.models.document import Document, ProjectDocumentLink
 from src.models.project import Project
 from src.models.enums import DocumentType, DocumentProcessingStatus
 from src.services.storage_service import StorageService
+from src.services.audit_service import AuditService
 from src.core.exceptions import EntityNotFoundException, DuplicateEntityException
 from src.core.config import settings
 
 ALLOWED_MIME_SIGNATURES = {
-    "image/jpeg": (b"\xff\xd8\xff",), "image/png": (b"\x89PNG\r\n\x1a\n",),
-    "image/webp": (b"RIFF",), "image/heic": (b"\x00\x00",),
+    "image/jpeg": (bytes.fromhex("ffd8ff"),),
+    "image/png": (bytes.fromhex("89504e470d0a1a0a"),),
+    "image/webp": (b"RIFF",),
+    "image/heic": (bytes.fromhex("0000"),),
     "application/pdf": (b"%PDF-",),
 }
+MIME_EXTENSIONS = {
+    "image/jpeg": {".jpg", ".jpeg"}, "image/png": {".png"}, "image/webp": {".webp"},
+    "image/heic": {".heic"}, "application/pdf": {".pdf"},
+}
+
+
+def safe_original_filename(file_name: str) -> str:
+    name = Path(file_name.replace("\\", "/")).name
+    name = re.sub(r"[^\w. ()\-]", "_", name, flags=re.UNICODE).strip(". ")[:255]
+    return name or "document"
 
 
 def compute_sha256(file_obj: BinaryIO) -> str:
@@ -65,7 +80,8 @@ class DocumentService:
     async def get_document(
         self,
         organization_id: uuid.UUID,
-        document_id: uuid.UUID
+        document_id: uuid.UUID,
+        for_update: bool = False,
     ) -> Document:
         stmt = select(Document).where(
             and_(
@@ -73,6 +89,8 @@ class DocumentService:
                 Document.id == document_id
             )
         )
+        if for_update:
+            stmt = stmt.with_for_update()
         doc = await self.session.scalar(stmt)
         if not doc:
             raise EntityNotFoundException("Document", document_id)
@@ -97,6 +115,12 @@ class DocumentService:
             source_channel = "WEB"
         if source_channel not in {"WEB", "API", "WHATSAPP"}:
             raise ValueError("source_channel must be WEB, API or WHATSAPP")
+        file_name = safe_original_filename(file_name)
+        extension = Path(file_name).suffix.casefold()
+        if mime_type not in ALLOWED_MIME_SIGNATURES:
+            raise ValueError(f"Unsupported document MIME type: {mime_type}")
+        if extension and extension not in MIME_EXTENSIONS[mime_type]:
+            raise ValueError("File extension does not match declared MIME type")
         file_hash = compute_sha256(file_obj)
 
         # Exact duplicate detection
@@ -117,8 +141,6 @@ class DocumentService:
         file_obj.seek(0)
         if file_size < 1 or file_size > settings.DOCUMENT_MAX_SIZE_BYTES:
             raise ValueError(f"Document size must be between 1 and {settings.DOCUMENT_MAX_SIZE_BYTES} bytes")
-        if mime_type not in ALLOWED_MIME_SIGNATURES:
-            raise ValueError(f"Unsupported document MIME type: {mime_type}")
         header = file_obj.read(16)
         file_obj.seek(0)
         if mime_type == "image/webp":
@@ -152,6 +174,11 @@ class DocumentService:
         )
         self.session.add(document)
         await self.session.flush()
+        await AuditService(self.session).log_event(
+            organization_id, "Document", document.id, "DOCUMENT_RECEIVED", created_by,
+            new_values={"source_channel": source_channel, "file_hash": file_hash,
+                        "mime_type": mime_type, "file_size_bytes": file_size},
+        )
 
         # Link to project if provided
         if project_id:
@@ -172,11 +199,14 @@ class DocumentService:
     async def list_documents(
         self,
         organization_id: uuid.UUID,
-        document_type: Optional[DocumentType] = None
+        document_type: Optional[DocumentType] = None,
+        processing_status: Optional[DocumentProcessingStatus] = None,
     ) -> List[Document]:
         filters = [Document.organization_id == organization_id]
         if document_type:
             filters.append(Document.document_type == document_type)
+        if processing_status:
+            filters.append(Document.processing_status == processing_status)
 
         stmt = select(Document).where(and_(*filters)).order_by(Document.created_at.desc())
         result = await self.session.execute(stmt)

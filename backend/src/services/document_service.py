@@ -151,6 +151,13 @@ class DocumentService:
             valid_signature = any(header.startswith(sig) for sig in ALLOWED_MIME_SIGNATURES[mime_type])
         if not valid_signature:
             raise ValueError("File content does not match declared MIME type")
+        project = None
+        if project_id:
+            project = await self.session.scalar(select(Project).where(
+                and_(Project.id == project_id, Project.organization_id == organization_id)
+            ))
+            if not project:
+                raise ValueError("Project is not available in this organization")
 
         # Save to storage
         storage_path = self.storage.save_file(organization_id, file_obj, file_name)
@@ -180,19 +187,10 @@ class DocumentService:
                         "mime_type": mime_type, "file_size_bytes": file_size},
         )
 
-        # Link to project if provided
-        if project_id:
-            prj_stmt = select(Project).where(
-                and_(
-                    Project.id == project_id,
-                    Project.organization_id == organization_id
-                )
-            )
-            prj = await self.session.scalar(prj_stmt)
-            if prj:
-                link = ProjectDocumentLink(project_id=project_id, document_id=document.id)
-                self.session.add(link)
-                await self.session.flush()
+        # Link to the already validated tenant-scoped project if provided.
+        if project:
+            self.session.add(ProjectDocumentLink(project_id=project.id, document_id=document.id))
+            await self.session.flush()
 
         return document
 

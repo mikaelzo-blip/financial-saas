@@ -115,8 +115,12 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
                            user_id: uuid.UUID = Depends(get_current_user_id),
                            db: AsyncSession = Depends(get_db)):
     service = DocumentService(db)
-    document = await service.get_document(org_id, document_id)
+    document = await service.get_document(org_id, document_id, for_update=True)
     await require_reviewer(db, org_id, user_id)
+    if document.processing_status not in {
+        DocumentProcessingStatus.REVIEW_REQUIRED, DocumentProcessingStatus.READY_FOR_APPROVAL
+    }:
+        raise HTTPException(status_code=409, detail="Document is not awaiting review")
     allowed = {"project_id", "counterparty_id", "payment_account_id", "allocation_target_id",
                "proposed_transaction_type", "cost_category", "expense_category", "transaction_date",
                "amount", "description", "external_reference"}

@@ -67,6 +67,7 @@ class PostingRuleRegistry:
                     account_code="1101",
                     debit_amount=Decimal("0.00"),
                     credit_amount=amount,
+                    project_id=allocations[0].project_id if allocations and len(allocations) == 1 else None,
                     counterparty_id=transaction.counterparty_id,
                     notes=transaction.description
                 )

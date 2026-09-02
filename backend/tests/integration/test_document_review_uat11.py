@@ -48,6 +48,12 @@ async def test_document_review_queue_and_rejection_create_no_financial_event(cli
     assert (await client.post(f"/api/v1/documents/{doc.id}/reject", headers=headers,
                               json={"reason": "replay"})).status_code == 409
     assert (await client.post(f"/api/v1/documents/{doc.id}/approve", headers=headers)).status_code == 409
+    stale_correction = await client.post(
+        f"/api/v1/documents/{doc.id}/corrections",
+        headers=headers,
+        json={"changes": {"amount": "1.00"}, "reason": "stale reviewer tab"},
+    )
+    assert stale_correction.status_code == 409
 
 
 @pytest.mark.asyncio

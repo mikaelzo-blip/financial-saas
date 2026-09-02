@@ -8,8 +8,8 @@ import { Input } from '../../components/ui/Input';
 
 export const LoginPage: React.FC = () => {
   const location = useLocation();
-  const [email, setEmail] = useState('operator@kontraktor.co.id');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(
     (location.state as { sessionError?: string } | null)?.sessionError || null,
@@ -34,11 +34,6 @@ export const LoginPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleQuickLogin = (roleEmail: string) => {
-    setEmail(roleEmail);
-    setPassword('password123');
   };
 
   return (
@@ -104,30 +99,6 @@ export const LoginPage: React.FC = () => {
           </Button>
         </form>
 
-        {/* Demo Quick Logins */}
-        <div className="border-t border-slate-800/80 pt-6">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 text-center mb-3">
-            Pilihan Akun Demo (Satu Klik)
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('operator@kontraktor.co.id')}
-              className="rounded-lg border border-slate-800 bg-slate-950/60 p-2 text-left hover:border-slate-700 transition-colors cursor-pointer"
-            >
-              <p className="text-xs font-semibold text-white">Operator</p>
-              <p className="text-[10px] text-slate-400">Entry transaksi & nota</p>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('manager@kontraktor.co.id')}
-              className="rounded-lg border border-slate-800 bg-slate-950/60 p-2 text-left hover:border-slate-700 transition-colors cursor-pointer"
-            >
-              <p className="text-xs font-semibold text-white">Manajer</p>
-              <p className="text-[10px] text-slate-400">Approval & profit proyek</p>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

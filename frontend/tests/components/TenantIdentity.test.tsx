@@ -2,6 +2,7 @@ import React from 'react';
 import { render, renderHook, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { App } from '../../src/App';
 import { authApi } from '../../src/api/auth';
 import { apiClient } from '../../src/api/client';
 import { AppLayout } from '../../src/components/layout/AppLayout';
@@ -52,6 +53,17 @@ describe('authoritative tenant identity', () => {
     expect(result.current.user).toBeNull();
     expect(result.current.sessionError).toBe('Identitas perusahaan tidak dapat diverifikasi. Silakan masuk kembali.');
     expect(localStorage.getItem('financial_user_session')).toBeNull();
+  });
+
+  it('shows an explicit verification error after a stale session redirects to login', async () => {
+    localStorage.setItem('financial_user_session', JSON.stringify(staleSession));
+    vi.spyOn(authApi, 'getSession').mockRejectedValue(new Error('Session validation failed'));
+    window.history.pushState({}, '', '/dashboard');
+
+    render(<App />);
+
+    expect(await screen.findByText('Identitas perusahaan tidak dapat diverifikasi. Silakan masuk kembali.')).toBeInTheDocument();
+    expect(screen.queryByText('Demo Kontraktor')).not.toBeInTheDocument();
   });
 
   it('renders only the organization name paired with the authenticated organization id', async () => {

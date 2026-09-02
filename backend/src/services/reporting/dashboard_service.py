@@ -69,7 +69,8 @@ class DashboardService:
         ap_bills_stmt = select(VendorBill).where(
             and_(
                 VendorBill.organization_id == organization_id,
-                VendorBill.bill_date <= as_of
+                VendorBill.bill_date <= as_of,
+                VendorBill.status != "CANCELLED",
             )
         )
         bills = (await session.execute(ap_bills_stmt)).scalars().all()

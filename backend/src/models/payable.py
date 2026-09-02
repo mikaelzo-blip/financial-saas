@@ -100,6 +100,8 @@ class VendorBill(Base, TimestampMixin):
         return Decimal("0.00")
 
     def calculate_outstanding_amount(self) -> Decimal:
+        if self.status == "CANCELLED":
+            return Decimal("0.00")
         return self.total_amount - self.calculate_paid_amount()
 
     def __repr__(self) -> str:

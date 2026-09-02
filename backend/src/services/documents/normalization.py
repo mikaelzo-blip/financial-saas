@@ -20,7 +20,9 @@ class NormalizedCandidate(BaseModel, Generic[T]):
 def parse_candidate_money(raw: str | None) -> NormalizedCandidate[Decimal]:
     if not raw or not raw.strip():
         return NormalizedCandidate(value=None, confidence=Decimal("0"), evidence=raw, validation_status="MISSING")
-    token = re.sub(r"(?i)^(?:rp|idr)\s*|\s", "", raw.strip())
+    token = re.sub(r"(?i)^(?:.*?(?:rp|idr))?\s*|\s", "", raw.strip())
+    # If there's still non-numeric prefix like "PPN:", strip non-digits at the beginning
+    token = re.sub(r"^[^\d]+", "", token)
     if not re.fullmatch(r"\d[\d.,]*", token):
         return NormalizedCandidate(value=None, confidence=Decimal("0"), evidence=raw, validation_status="INVALID")
     comma, dot = token.count(","), token.count(".")
@@ -38,7 +40,12 @@ def parse_candidate_money(raw: str | None) -> NormalizedCandidate[Decimal]:
         elif len(parts) == 2 and len(parts[1]) == 2:
             normalized = parts[0] + "." + parts[1]
         elif len(parts) == 2 and len(parts[1]) == 3:
-            return NormalizedCandidate(value=None, confidence=Decimal("0.5"), evidence=raw, validation_status="AMBIGUOUS")
+            # When context is Indonesian currency with prefix Rp / IDR or exactly 3 digits (e.g. 125.000),
+            # if the prefix or token had Rp/IDR, it is unambiguous Indonesian Rupiah thousand separator.
+            if re.search(r"(?i)\b(?:rp|idr)\b", raw or ""):
+                normalized = "".join(parts)
+            else:
+                return NormalizedCandidate(value=None, confidence=Decimal("0.5"), evidence=raw, validation_status="AMBIGUOUS")
         else:
             return NormalizedCandidate(value=None, confidence=Decimal("0.5"), evidence=raw, validation_status="AMBIGUOUS")
     else:

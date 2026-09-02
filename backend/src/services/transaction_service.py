@@ -179,17 +179,30 @@ class TransactionService:
             if project.customer_id != customer.id:
                 raise InvariantViolationException("Customer invoice customer must match the customer assigned to the project.")
 
-        if data.transaction_type == TransactionType.CUSTOMER_PAYMENT:
-            if not data.counterparty_id:
-                raise InvariantViolationException("Customer payment requires a customer.")
-            customer = await self.session.scalar(select(Counterparty).where(
-                Counterparty.id == data.counterparty_id,
-                Counterparty.organization_id == organization_id,
-            ))
-            if not customer:
-                raise EntityNotFoundException("Customer Counterparty", data.counterparty_id)
-            if not customer.is_customer:
-                raise InvariantViolationException("Customer payment counterparty must be a customer.")
+        if data.transaction_type in (TransactionType.CUSTOMER_PAYMENT, TransactionType.PAY_VENDOR_BILL):
+            if data.transaction_type == TransactionType.CUSTOMER_PAYMENT:
+                if not data.counterparty_id:
+                    raise InvariantViolationException("Customer payment requires a customer.")
+                customer = await self.session.scalar(select(Counterparty).where(
+                    Counterparty.id == data.counterparty_id,
+                    Counterparty.organization_id == organization_id,
+                ))
+                if not customer:
+                    raise EntityNotFoundException("Customer Counterparty", data.counterparty_id)
+                if not customer.is_customer:
+                    raise InvariantViolationException("Customer payment counterparty must be a customer.")
+            elif data.transaction_type == TransactionType.PAY_VENDOR_BILL:
+                if not data.counterparty_id:
+                    raise InvariantViolationException("Vendor payment requires a vendor.")
+                vendor = await self.session.scalar(select(Counterparty).where(
+                    Counterparty.id == data.counterparty_id,
+                    Counterparty.organization_id == organization_id,
+                ))
+                if not vendor:
+                    raise EntityNotFoundException("Vendor Counterparty", data.counterparty_id)
+                if not vendor.is_vendor:
+                    raise InvariantViolationException("Vendor payment counterparty must be a vendor.")
+
             if data.payment_account_id:
                 payment_account = await self.session.scalar(select(PaymentAccount).where(
                     PaymentAccount.id == data.payment_account_id,

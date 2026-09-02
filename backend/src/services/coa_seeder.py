@@ -24,6 +24,13 @@ STANDARD_COA_DEFINITIONS: List[Dict[str, Any]] = [
         "report_group": "Piutang Usaha"
     },
     {
+        "account_code": "1202",
+        "account_name": "Piutang Retensi",
+        "account_type": AccountType.ASSET,
+        "normal_balance": NormalBalance.DEBIT,
+        "report_group": "Piutang Retensi"
+    },
+    {
         "account_code": "1301",
         "account_name": "Uang Muka Biaya & Vendor",
         "account_type": AccountType.ASSET,

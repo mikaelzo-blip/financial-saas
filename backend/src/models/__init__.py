@@ -22,7 +22,7 @@ from src.models.document import Document, ProjectDocumentLink, TransactionDocume
 from src.models.transaction import Transaction, TransactionAllocation, TransactionReviewFlag
 from src.models.journal import JournalEntry, JournalLine
 from src.models.payable import VendorBill, VendorPaymentAllocation, VendorAdvance
-from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation
+from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation, CustomerRetentionRelease
 from src.models.hermes import HermesSubmission
 from src.models.whatsapp import WhatsAppSenderMapping, WhatsAppMessageLog, WhatsAppClarificationSession
 from src.models.ai_insight import AIInsightLog, AIConversationSession, AIConversationMessage
@@ -63,6 +63,7 @@ __all__ = [
     "VendorAdvance",
     "CustomerInvoice",
     "CustomerPaymentAllocation",
+    "CustomerRetentionRelease",
     "HermesSubmission",
     "WhatsAppSenderMapping", "WhatsAppMessageLog", "WhatsAppClarificationSession",
 ]

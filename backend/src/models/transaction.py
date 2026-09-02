@@ -126,6 +126,16 @@ class Transaction(Base, TimestampMixin):
         ForeignKey("transactions.id", ondelete="RESTRICT"),
         nullable=True
     )
+    retention_rate: Mapped[Decimal] = mapped_column(
+        Numeric(5, 4),
+        nullable=False,
+        default=Decimal("0.0000")
+    )
+    retention_amount: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2),
+        nullable=False,
+        default=Decimal("0.00")
+    )
 
     # Relationships
     organization: Mapped["Organization"] = relationship("Organization")

@@ -34,6 +34,11 @@ class CustomerInvoiceResponse(BaseModel):
     invoice_date: date
     due_date: date
     total_amount: Decimal
+    retention_rate: Decimal = Decimal("0.0000")
+    retention_amount: Decimal = Decimal("0.00")
+    retention_released_amount: Decimal = Decimal("0.00")
+    retention_outstanding: Decimal = Decimal("0.00")
+    collectible_amount: Decimal = Decimal("0.00")
     paid_amount: Decimal
     outstanding_amount: Decimal
     collection_status: str
@@ -100,6 +105,11 @@ async def list_customer_invoices(
             invoice_date=invoice.invoice_date,
             due_date=invoice.due_date,
             total_amount=invoice.total_amount,
+            retention_rate=invoice.retention_rate,
+            retention_amount=invoice.retention_amount,
+            retention_released_amount=invoice.retention_released_amount,
+            retention_outstanding=invoice.calculate_retention_outstanding(),
+            collectible_amount=invoice.calculate_collectible_amount(),
             paid_amount=paid,
             outstanding_amount=outstanding,
             collection_status=collection_status,
@@ -108,6 +118,46 @@ async def list_customer_invoices(
             created_at=invoice.created_at,
         ))
     return response
+
+
+class RetentionReleaseCreate(BaseModel):
+    invoice_id: uuid.UUID
+    release_amount: Decimal
+    release_date: date
+    notes: str | None = None
+
+
+class RetentionReleaseResponse(BaseModel):
+    id: uuid.UUID
+    invoice_id: uuid.UUID
+    release_code: str
+    release_date: date
+    release_amount: Decimal
+    notes: str | None
+
+
+@router.post("/retention-releases", response_model=RetentionReleaseResponse, status_code=201)
+async def release_customer_retention(
+    data: RetentionReleaseCreate,
+    organization_id: uuid.UUID = Depends(get_current_org_id),
+    db: AsyncSession = Depends(get_db),
+):
+    ar_service = CustomerARService(db)
+    release = await ar_service.release_customer_retention(
+        organization_id=organization_id,
+        invoice_id=data.invoice_id,
+        release_amount=data.release_amount,
+        release_date=data.release_date,
+        notes=data.notes,
+    )
+    return RetentionReleaseResponse(
+        id=release.id,
+        invoice_id=release.invoice_id,
+        release_code=release.release_code,
+        release_date=release.release_date,
+        release_amount=release.release_amount,
+        notes=release.notes,
+    )
 
 
 @customer_payments_router.post("", response_model=CustomerPaymentResponse, status_code=201)

@@ -246,6 +246,17 @@ class TransactionService:
         # Generate code
         trx_code = await self.generate_transaction_code(organization_id, data.transaction_date)
 
+        # Compute retention if specified
+        computed_retention_rate = data.retention_rate or Decimal("0.0000")
+        computed_retention_amount = data.retention_amount or Decimal("0.00")
+        if computed_retention_rate > Decimal("0.0000") and computed_retention_amount == Decimal("0.00"):
+            computed_retention_amount = (data.amount * computed_retention_rate).quantize(Decimal("0.01"))
+        elif computed_retention_amount > Decimal("0.00") and computed_retention_rate == Decimal("0.0000"):
+            computed_retention_rate = (computed_retention_amount / data.amount).quantize(Decimal("0.0001"))
+
+        if computed_retention_amount > data.amount:
+            raise InvariantViolationException("Retention amount cannot exceed transaction total amount.")
+
         transaction = Transaction(
             organization_id=organization_id,
             transaction_code=trx_code,
@@ -259,7 +270,9 @@ class TransactionService:
             reference_no=data.reference_no,
             description=data.description,
             source_channel=data.source_channel,
-            created_by=created_by
+            created_by=created_by,
+            retention_rate=computed_retention_rate,
+            retention_amount=computed_retention_amount
         )
         self.session.add(transaction)
         await self.session.flush()

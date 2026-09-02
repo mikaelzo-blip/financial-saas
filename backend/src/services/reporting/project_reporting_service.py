@@ -154,7 +154,7 @@ class ProjectReportingService:
         invoices = (await session.execute(inv_stmt)).scalars().all()
         invoiced_amt = sum((Decimal(str(inv.total_amount)) for inv in invoices), Decimal("0.00"))
         cash_rec = sum((sum((Decimal(str(a.allocated_amount)) for a in inv.allocations), Decimal("0.00")) for inv in invoices), Decimal("0.00"))
-        ar_outstanding = invoiced_amt - cash_rec
+        ar_outstanding = sum((inv.calculate_outstanding_amount() for inv in invoices), Decimal("0.00"))
 
         # Cash Spent (Journal lines on cash/bank accounts with this project_id)
         cash_spent_stmt = select(

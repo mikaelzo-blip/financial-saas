@@ -51,9 +51,9 @@ class ARAgingService:
         lines: List[ARAgingInvoiceLine] = []
 
         for inv in invoices_list:
-            paid_amt = sum((Decimal(str(a.allocated_amount)) for a in inv.allocations), Decimal("0.00"))
-            tot_amt = Decimal(str(inv.total_amount))
-            outstanding = tot_amt - paid_amt
+            outstanding = inv.calculate_outstanding_amount()
+            tot_amt = inv.calculate_collectible_amount()
+            paid_amt = inv.calculate_paid_amount()
 
             if outstanding <= Decimal("0.00"):
                 continue

@@ -67,6 +67,10 @@ class TransactionCreate(BaseModel):
     cost_category: Optional[CostCategory] = None
     expense_category: Optional[ExpenseCategory] = None
 
+    # Retention support for contractor billings
+    retention_rate: Optional[Decimal] = Field(default=Decimal("0.0000"), ge=0, le=1)
+    retention_amount: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0)
+
     # Multi-project explicit split allocations
     allocations: Optional[List[TransactionAllocationInput]] = None
 

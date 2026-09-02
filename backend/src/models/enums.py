@@ -90,6 +90,7 @@ class TransactionType(str, Enum):
     # Customer Billing & Revenue
     CUSTOMER_INVOICE = "CUSTOMER_INVOICE"
     CUSTOMER_PAYMENT = "CUSTOMER_PAYMENT"
+    RETENTION_RELEASE = "RETENTION_RELEASE"
     REVENUE_RECOGNITION = "REVENUE_RECOGNITION"
 
     # Refunds

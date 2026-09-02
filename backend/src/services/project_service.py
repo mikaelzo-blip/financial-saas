@@ -3,11 +3,15 @@ from typing import List, Optional
 from datetime import date
 from decimal import Decimal
 from sqlalchemy import select, func, and_
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.project import Project, ProjectBudget
 from src.models.counterparty import Counterparty
-from src.models.enums import ProjectStatus, CostCategory, BillingStatus, CollectionStatus
+from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation
+from src.models.payable import VendorBill, VendorPaymentAllocation
+from src.models.transaction import Transaction
+from src.models.enums import ProjectStatus, CostCategory, BillingStatus, CollectionStatus, WorkflowStatus
 from src.schemas.project import ProjectCreate, ProjectUpdate, ProjectStatusUpdate, ProjectBudgetCreate
 from src.core.exceptions import EntityNotFoundException, InvariantViolationException
 
@@ -172,10 +176,81 @@ class ProjectService:
         update: ProjectStatusUpdate
     ) -> Project:
         """
-        Transitions project status with lifecycle validation.
+        Transitions project status with lifecycle validation and financial closure guards.
         """
         project = await self.get_project(organization_id, project_id)
         validate_project_status_transition(project.project_status, update.status)
+
+        # Financial Closure Guards
+        if update.status == ProjectStatus.CLOSED:
+            # 1. Check for unposted or review required transactions allocated to this project
+            unposted_stmt = (
+                select(Transaction.transaction_code)
+                .join(Transaction.allocations)
+                .where(
+                    and_(
+                        Transaction.organization_id == organization_id,
+                        Transaction.allocations.any(project_id=project_id),
+                        Transaction.workflow_status.in_([
+                            WorkflowStatus.STAGED,
+                            WorkflowStatus.REVIEW_REQUIRED,
+                            WorkflowStatus.APPROVED,
+                            WorkflowStatus.CAPTURED,
+                            WorkflowStatus.EXTRACTED
+                        ])
+                    )
+                )
+            )
+            unposted_trxs = (await self.session.scalars(unposted_stmt)).all()
+            if unposted_trxs:
+                raise InvariantViolationException(
+                    f"Cannot close project {project.project_code}: Has unposted transactions awaiting processing: {unposted_trxs}."
+                )
+
+            # 2. Check for outstanding customer invoices (including unreleased/uncollected retention)
+            invoices_stmt = (
+                select(CustomerInvoice)
+                .options(selectinload(CustomerInvoice.allocations))
+                .where(
+                    and_(
+                        CustomerInvoice.organization_id == organization_id,
+                        CustomerInvoice.project_id == project_id,
+                        CustomerInvoice.status != "CANCELLED"
+                    )
+                )
+            )
+            invoices = (await self.session.scalars(invoices_stmt)).all()
+            for inv in invoices:
+                ar_out = inv.calculate_outstanding_amount()
+                ret_out = inv.calculate_retention_outstanding()
+                if ar_out > Decimal("0.00"):
+                    raise InvariantViolationException(
+                        f"Cannot close project {project.project_code}: Customer invoice {inv.invoice_code} has outstanding AR balance of Rp {ar_out}."
+                    )
+                if ret_out > Decimal("0.00"):
+                    raise InvariantViolationException(
+                        f"Cannot close project {project.project_code}: Customer invoice {inv.invoice_code} has uncollected retention balance of Rp {ret_out}."
+                    )
+
+            # 3. Check for outstanding vendor bills
+            bills_stmt = (
+                select(VendorBill)
+                .options(selectinload(VendorBill.allocations))
+                .where(
+                    and_(
+                        VendorBill.organization_id == organization_id,
+                        VendorBill.project_id == project_id,
+                        VendorBill.status != "CANCELLED"
+                    )
+                )
+            )
+            bills = (await self.session.scalars(bills_stmt)).all()
+            for bill in bills:
+                ap_out = bill.calculate_outstanding_amount()
+                if ap_out > Decimal("0.00"):
+                    raise InvariantViolationException(
+                        f"Cannot close project {project.project_code}: Vendor bill {bill.bill_code} has outstanding AP balance of Rp {ap_out}."
+                    )
 
         project.project_status = update.status
         if update.actual_end_date:

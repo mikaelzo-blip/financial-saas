@@ -112,12 +112,16 @@ class PostingRuleRegistry:
 
         elif t_type in (TransactionType.PAY_VENDOR_BILL, TransactionType.PAY_SUBCONTRACTOR):
             # Debit Accounts Payable (2101)
+            project_id = None
+            if transaction.allocations and len(transaction.allocations) > 0:
+                project_id = transaction.allocations[0].project_id
             legs.append(
                 GeneratedJournalLeg(
                     account_code="2101",
                     debit_amount=amount,
                     credit_amount=Decimal("0.00"),
                     counterparty_id=transaction.counterparty_id,
+                    project_id=project_id,
                     notes=transaction.description
                 )
             )
@@ -128,6 +132,7 @@ class PostingRuleRegistry:
                     debit_amount=Decimal("0.00"),
                     credit_amount=amount,
                     counterparty_id=transaction.counterparty_id,
+                    project_id=project_id,
                     notes=transaction.description
                 )
             )
@@ -193,17 +198,34 @@ class PostingRuleRegistry:
             )
 
         elif t_type == TransactionType.CUSTOMER_INVOICE:
-            # Debit Accounts Receivable (1201)
-            legs.append(
-                GeneratedJournalLeg(
-                    account_code="1201",
-                    debit_amount=amount,
-                    credit_amount=Decimal("0.00"),
-                    counterparty_id=transaction.counterparty_id,
-                    notes=transaction.description
+            ret_amt = getattr(transaction, "retention_amount", Decimal("0.00")) or Decimal("0.00")
+            collectible_amt = amount - ret_amt
+
+            if collectible_amt > Decimal("0.00"):
+                # Debit Accounts Receivable (1201)
+                legs.append(
+                    GeneratedJournalLeg(
+                        account_code="1201",
+                        debit_amount=collectible_amt,
+                        credit_amount=Decimal("0.00"),
+                        counterparty_id=transaction.counterparty_id,
+                        notes=transaction.description
+                    )
                 )
-            )
-            # Credit Contract Revenue (4101)
+
+            if ret_amt > Decimal("0.00"):
+                # Debit Retention Receivable (1202)
+                legs.append(
+                    GeneratedJournalLeg(
+                        account_code="1202",
+                        debit_amount=ret_amt,
+                        credit_amount=Decimal("0.00"),
+                        counterparty_id=transaction.counterparty_id,
+                        notes=f"Retensi: {transaction.description}"
+                    )
+                )
+
+            # Credit Contract Revenue (4101) - full earned revenue
             if allocations:
                 for alloc in allocations:
                     legs.append(
@@ -226,6 +248,28 @@ class PostingRuleRegistry:
                         notes=transaction.description
                     )
                 )
+
+        elif t_type == TransactionType.RETENTION_RELEASE:
+            # Debit Accounts Receivable (1201)
+            legs.append(
+                GeneratedJournalLeg(
+                    account_code="1201",
+                    debit_amount=amount,
+                    credit_amount=Decimal("0.00"),
+                    counterparty_id=transaction.counterparty_id,
+                    notes=transaction.description
+                )
+            )
+            # Credit Retention Receivable (1202)
+            legs.append(
+                GeneratedJournalLeg(
+                    account_code="1202",
+                    debit_amount=Decimal("0.00"),
+                    credit_amount=amount,
+                    counterparty_id=transaction.counterparty_id,
+                    notes=transaction.description
+                )
+            )
 
         elif t_type == TransactionType.CUSTOMER_PAYMENT:
             # Debit Cash/Bank (1101)

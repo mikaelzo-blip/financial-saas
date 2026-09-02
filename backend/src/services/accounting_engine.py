@@ -145,6 +145,8 @@ class AccountingEngine:
                 total_amount=transaction.amount,
                 transaction_id=transaction.id,
                 invoice_code=transaction.reference_no,
+                retention_rate=getattr(transaction, "retention_rate", Decimal("0.0000")) or Decimal("0.0000"),
+                retention_amount=getattr(transaction, "retention_amount", Decimal("0.00")) or Decimal("0.00"),
             )
 
         if transaction.transaction_type == TransactionType.VENDOR_BILL:

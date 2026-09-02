@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.transaction import Transaction
 from src.models.journal import JournalEntry, JournalLine
-from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation
+from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation, CustomerRetentionRelease
 from src.models.payable import VendorBill, VendorPaymentAllocation
 from src.models.enums import TransactionType, WorkflowStatus
 from src.services.accounting_engine import AccountingEngine
@@ -127,6 +127,19 @@ class ReversalService:
                 if inv not in affected_invoices:
                     affected_invoices.append(inv)
                 await self.session.delete(alloc)
+        elif original_trx.transaction_type == TransactionType.RETENTION_RELEASE:
+            # Retention release reversal: decrement released retention on invoice
+            release_record = await self.session.scalar(select(CustomerRetentionRelease).where(
+                CustomerRetentionRelease.organization_id == organization_id,
+                CustomerRetentionRelease.release_code == original_trx.reference_no,
+            ))
+            if release_record:
+                inv_to_revert = await self.session.scalar(select(CustomerInvoice).where(
+                    CustomerInvoice.id == release_record.invoice_id
+                ))
+                if inv_to_revert:
+                    inv_to_revert.retention_released_amount = max(Decimal("0.00"), inv_to_revert.retention_released_amount - release_record.release_amount)
+                await self.session.delete(release_record)
         elif original_trx.transaction_type in (TransactionType.PAY_VENDOR_BILL, TransactionType.PAY_SUBCONTRACTOR):
             # Vendor payment reversal: remove its allocations and restore vendor bill statuses
             vpa_stmt = select(VendorPaymentAllocation).options(

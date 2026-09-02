@@ -6,7 +6,7 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation
+from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation, CustomerRetentionRelease
 from src.models.transaction import Transaction
 from src.models.enums import TransactionType, WorkflowStatus
 from src.models.organization import Organization
@@ -67,7 +67,9 @@ class CustomerARService:
         explicit_due_date: Optional[date] = None,
         override_reason: Optional[str] = None,
         transaction_id: Optional[uuid.UUID] = None,
-        invoice_code: Optional[str] = None
+        invoice_code: Optional[str] = None,
+        retention_rate: Decimal = Decimal("0.0000"),
+        retention_amount: Decimal = Decimal("0.00")
     ) -> CustomerInvoice:
         if transaction_id:
             existing = await self.session.scalar(select(CustomerInvoice).where(
@@ -90,6 +92,10 @@ class CustomerARService:
             due_date=due_date,
             due_date_override_reason=reason,
             total_amount=total_amount,
+            retention_rate=retention_rate,
+            retention_amount=retention_amount,
+            retention_released_amount=Decimal("0.00"),
+            retention_paid_amount=Decimal("0.00"),
             transaction_id=transaction_id,
             status="UNPAID"
         )
@@ -178,7 +184,85 @@ class CustomerARService:
             existing_invoice_total = sum(
                 (allocation.allocated_amount for allocation in invoice.allocations), Decimal("0.00")
             )
-            invoice.status = "PAID" if invoice.total_amount - existing_invoice_total - amount == Decimal("0.00") else "PARTIALLY_PAID"
+            total_paid_after = existing_invoice_total + amount
+            collectible = invoice.calculate_collectible_amount()
+            if total_paid_after > collectible:
+                invoice.retention_paid_amount = min(invoice.retention_amount, total_paid_after - collectible)
+
+            invoice.status = "PAID" if (total_paid_after >= invoice.total_amount) else "PARTIALLY_PAID"
 
         await self.session.flush()
         return created_allocations
+
+    async def generate_retention_release_code(self, organization_id: uuid.UUID, release_date: Optional[date] = None) -> str:
+        year = (release_date or date.today()).year
+        prefix = f"REL-{year}-"
+        stmt = select(func.count()).select_from(CustomerRetentionRelease).where(
+            and_(
+                CustomerRetentionRelease.organization_id == organization_id,
+                CustomerRetentionRelease.release_code.like(f"{prefix}%")
+            )
+        )
+        count = await self.session.scalar(stmt) or 0
+        next_seq = count + 1
+        return f"{prefix}{next_seq:06d}"
+
+    async def release_customer_retention(
+        self,
+        organization_id: uuid.UUID,
+        invoice_id: uuid.UUID,
+        release_amount: Decimal,
+        release_date: date,
+        notes: Optional[str] = None
+    ) -> CustomerRetentionRelease:
+        """
+        Records release of withheld customer retention, creating a RETENTION_RELEASE transaction and posting it.
+        Dr 1201 (Piutang Usaha) / Cr 1202 (Piutang Retensi).
+        """
+        if release_amount <= Decimal("0.00"):
+            raise InvariantViolationException("Retention release amount must be greater than zero.")
+
+        invoice = await self.get_invoice(organization_id, invoice_id)
+        if invoice.status == "CANCELLED":
+            raise InvariantViolationException(f"Cannot release retention for cancelled invoice {invoice.invoice_code}.")
+
+        unreleased = invoice.retention_amount - invoice.retention_released_amount
+        if release_amount > unreleased:
+            raise InvariantViolationException(
+                f"Release amount ({release_amount}) exceeds unreleased retention balance ({unreleased}) on {invoice.invoice_code}."
+            )
+
+        release_code = await self.generate_retention_release_code(organization_id, release_date)
+        release = CustomerRetentionRelease(
+            organization_id=organization_id,
+            invoice_id=invoice_id,
+            release_code=release_code,
+            release_date=release_date,
+            release_amount=release_amount,
+            notes=notes
+        )
+        self.session.add(release)
+        invoice.retention_released_amount += release_amount
+
+        # Create and post RETENTION_RELEASE transaction
+        from src.services.transaction_service import TransactionService
+        from src.schemas.transaction import TransactionCreate
+        from src.services.accounting_engine import AccountingEngine
+
+        trx_service = TransactionService(self.session)
+        trx = await trx_service.create_transaction(
+            organization_id=organization_id,
+            data=TransactionCreate(
+                transaction_type=TransactionType.RETENTION_RELEASE,
+                transaction_date=release_date,
+                amount=release_amount,
+                counterparty_id=invoice.customer_id,
+                reference_no=release_code,
+                description=f"Pelepasan Retensi: {invoice.invoice_code} ({notes or 'Selesai Pemeliharaan / BAST Retensi'})"
+            )
+        )
+        engine = AccountingEngine(self.session)
+        await engine.post_transaction(organization_id, trx.id)
+
+        await self.session.flush()
+        return release

@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     DOCUMENT_MAX_SIZE_BYTES: int = 25 * 1024 * 1024
     DOCUMENT_CONFIDENCE_THRESHOLD: float = 0.85
     DOCUMENT_EXTRACTION_PROVIDER: str = "local"
+    DOCUMENT_EXTRACTION_API_KEY: Optional[SecretStr] = None
+    DOCUMENT_EXTRACTION_API_BASE: Optional[str] = None
+    DOCUMENT_EXTRACTION_MODEL: Optional[str] = None
+    DOCUMENT_EXTRACTION_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0, le=120.0)
+    DOCUMENT_EXTRACTION_MAX_TOKENS: int = Field(default=2000, ge=100, le=8000)
 
     # Hermes is an external operational client. Secrets are supplied only at runtime.
     HERMES_AGENT_TOKEN: Optional[str] = None

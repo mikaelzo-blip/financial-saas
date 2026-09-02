@@ -1,7 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Any, Callable, Dict, Protocol
 
 from src.core.config import settings
 from src.models.enums import DocumentType
@@ -15,6 +15,7 @@ class ExtractionResult:
     confidence: ConfidenceScores
     provider_name: str
     provider_version: str
+    raw_payload: Dict[str, Any] = field(default_factory=dict)
 
 
 class ExtractionProvider(Protocol):
@@ -42,6 +43,10 @@ def get_extraction_provider(name: str | None = None) -> ExtractionProvider:
         from src.services.documents.local_provider import LocalExtractionProvider
 
         return LocalExtractionProvider()
+    if provider_name in {"openai_vision", "gemini_vision", "cloud_vision"}:
+        from src.services.documents.cloud_vision_provider import CloudVisionExtractionProvider
+
+        return CloudVisionExtractionProvider(provider_type=provider_name)
     try:
         return _provider_factories[provider_name]()
     except KeyError as exc:

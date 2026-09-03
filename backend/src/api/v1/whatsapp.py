@@ -14,7 +14,7 @@ router = APIRouter(prefix="/integrations/whatsapp", tags=["WhatsApp"])
 
 @router.get("/webhook", response_class=PlainTextResponse)
 async def handshake(request: Request):
-    token = settings.WHATSAPP_VERIFY_TOKEN
+    token = settings.WHATSAPP_VERIFY_TOKEN or settings.META_VERIFY_TOKEN
     if not valid_handshake(request.query_params.get("hub.mode", ""), request.query_params.get("hub.verify_token", ""), token.get_secret_value() if token else None):
         raise HTTPException(403, "Invalid webhook verification")
     return request.query_params.get("hub.challenge", "")
@@ -27,7 +27,7 @@ async def webhook(request: Request):
         body.extend(chunk)
         if len(body) > 1024 * 1024:
             raise HTTPException(413, "Webhook payload too large")
-    secret = settings.WHATSAPP_WEBHOOK_APP_SECRET
+    secret = settings.WHATSAPP_WEBHOOK_APP_SECRET or settings.META_APP_SECRET
     if not valid_signature(bytes(body), request.headers.get("X-Hub-Signature-256"), secret.get_secret_value() if secret else None):
         raise HTTPException(401, "Invalid webhook signature")
     service = getattr(request.app.state, "whatsapp_service", None)

@@ -485,7 +485,8 @@ async def test_uat16_replay_deduplication_and_zero_duplicate_journals(
 
 def test_uat16_pc_offline_model_and_production_edge_architecture():
     """Verify offline model documentation and edge gateway requirement specifications."""
-    guide_path = "docs/meta-whatsapp-sandbox-pilot-guide.md"
+    from pathlib import Path
+    guide_path = Path(__file__).resolve().parents[3] / "docs" / "meta-whatsapp-sandbox-pilot-guide.md"
     with open(guide_path, "r", encoding="utf-8") as f:
         content = f.read()
 

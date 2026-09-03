@@ -10,7 +10,7 @@ from .provider import MediaReference, ProviderError, WhatsAppProvider
 
 
 class MetaCloudWhatsAppProvider(WhatsAppProvider):
-    def __init__(self, token: SecretStr, phone_number_id: str, version: str = "v20.0", *, transport=None):
+    def __init__(self, token: SecretStr, phone_number_id: str, version: str = "v26.0", *, transport=None):
         if not token.get_secret_value() or not phone_number_id.isdigit() or not re.fullmatch(r"v[0-9]+\.0", version):
             raise ValueError("Meta provider prerequisites are missing or invalid")
         self._token, self._phone, self._version = token, phone_number_id, version

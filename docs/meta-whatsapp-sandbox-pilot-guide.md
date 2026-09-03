@@ -25,7 +25,7 @@ All secrets must be placed exclusively in `backend/.env` (which is git-ignored) 
 | `META_ACCESS_TOKEN` / `WHATSAPP_API_TOKEN` | Required for `meta` | User/System User token with `whatsapp_business_messaging` & `whatsapp_business_management` permissions. |
 | `META_PHONE_NUMBER_ID` / `WHATSAPP_PHONE_NUMBER_ID` | Required for `meta` | Numeric Phone Number ID for the test number from WhatsApp > API Setup. |
 | `META_WABA_ID` / `WHATSAPP_WABA_ID` | Optional / Tracked | WhatsApp Business Account ID. |
-| `META_GRAPH_API_VERSION` / `WHATSAPP_GRAPH_VERSION` | Default: `v20.0` | Meta Graph API Version (e.g. `v20.0`). |
+| `META_GRAPH_API_VERSION` / `WHATSAPP_GRAPH_VERSION` | Default: `v26.0` | Meta Graph API Version (e.g. `v26.0`). |
 | `WHATSAPP_ADAPTER_TOKEN` | Required | Internal gateway token for adapter routing. |
 | `WHATSAPP_TENANT_TOKENS` | Required | JSON mapping of `{ "<organization_id>": "<tenant_machine_token>" }`. |
 

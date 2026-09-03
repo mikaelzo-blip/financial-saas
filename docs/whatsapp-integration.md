@@ -21,7 +21,7 @@ The default `WHATSAPP_PROVIDER=mock` makes no Meta calls. Without explicitly con
 | `WHATSAPP_ORG_MESSAGES_PER_MINUTE` | Organization limit, default 200; sender limit is always 20/minute |
 | `WHATSAPP_API_TOKEN` | Future Meta bearer credential, redacted in settings representations |
 | `WHATSAPP_PHONE_NUMBER_ID` | Future Meta sending number identifier |
-| `WHATSAPP_GRAPH_VERSION` | Configurable Graph API version; approved planning baseline is `v20.0` |
+| `WHATSAPP_GRAPH_VERSION` | Configurable Graph API version; approved baseline is `v26.0` |
 
 Tenant credentials extend Hermes machine authentication without changing existing `HERMES_AGENT_TOKEN` / `HERMES_ORGANIZATION_ID` behavior. The external adapter credential cannot upload a document. Each tenant token maps server-side to exactly one organization; `X-Organization-ID` never selects its tenant. Duplicate token assignments fail closed. Supply secrets through encrypted deployment secret storage, not checked-in files; `SecretStr` redacts representations but is not itself encryption at rest.
 

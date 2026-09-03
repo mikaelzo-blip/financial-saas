@@ -16,7 +16,7 @@ WhatsApp business messaging requires interacting with an external provider (Meta
 ### Decision
 Implement a decoupled `WhatsAppProvider` abstract base class with two concrete implementations:
 1. `MockWhatsAppProvider`: In-memory simulator for unit tests, integration tests, and local developer workflows. Stores outbound messages in an in-memory queue, supports simulated incoming webhooks, and returns mock media buffers.
-2. `MetaCloudWhatsAppProvider`: Production-grade client using Meta Cloud API v20.0+ for sending text, interactive buttons, and fetching media URLs with `Bearer` access tokens.
+2. `MetaCloudWhatsAppProvider`: Production-grade client using Meta Cloud API v26.0+ for sending text, interactive buttons, and fetching media URLs with `Bearer` access tokens.
 
 ### Rationale
 - Allows 100% test coverage without external API access or paid developer accounts.
@@ -85,7 +85,7 @@ WhatsApp is an external public network where phone numbers are the only persiste
 WhatsApp images and PDFs are not embedded directly in the webhook payload; Meta sends a `media_id`. The application must fetch the temporary media download URL, download binary data, and forward it to Feature 005 without writing insecure files to public storage or exhausting memory.
 
 ### Decision
-1. **Authenticated Media URL Retrieval**: Request `GET https://graph.facebook.com/v20.0/{media_id}` with `Bearer WHATSAPP_API_TOKEN` to retrieve the temporary download URL and MIME type.
+1. **Authenticated Media URL Retrieval**: Request `GET https://graph.facebook.com/v26.0/{media_id}` with `Bearer WHATSAPP_API_TOKEN` to retrieve the temporary download URL and MIME type.
 2. **Memory-Safe Streaming**: Stream the binary content directly using `httpx.AsyncClient` with a strict byte limit ($25 \text{ MB}$).
 3. **MIME Validation**: Verify MIME against allowed whitelist (`image/jpeg`, `image/png`, `image/webp`, `application/pdf`). Reject executables or unexpected file formats.
 4. **Zero Local Persistence**: Forward bytes directly as an `io.BytesIO` / multipart upload to `/api/v1/hermes/documents/upload`, letting Feature 005 manage the immutable tenant storage.

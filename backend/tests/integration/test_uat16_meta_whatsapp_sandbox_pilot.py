@@ -194,7 +194,7 @@ async def test_uat16_real_meta_cloud_api_adapter_media_intake_and_review_hardsto
     async def mock_meta_graph_handler(request: httpx.Request):
         url_str = str(request.url)
         # Graph API media metadata query
-        if f"/v20.0/{media_id}" in url_str:
+        if f"/v26.0/{media_id}" in url_str:
             assert request.headers.get("Authorization") == f"Bearer {api_token}"
             return httpx.Response(
                 200,
@@ -216,7 +216,7 @@ async def test_uat16_real_meta_cloud_api_adapter_media_intake_and_review_hardsto
                 headers={"Content-Type": "image/jpeg"},
             )
         # Outbound receipt message
-        if f"/v20.0/{phone_id}/messages" in url_str:
+        if f"/v26.0/{phone_id}/messages" in url_str:
             return httpx.Response(
                 200,
                 json={"messaging_product": "whatsapp", "contacts": [{"input": "6281234567890", "wa_id": "6281234567890"}], "messages": [{"id": f"wamid.outbound.{uuid.uuid4().hex}"}]},
@@ -247,7 +247,7 @@ async def test_uat16_real_meta_cloud_api_adapter_media_intake_and_review_hardsto
     # Initialize Meta provider with MockTransport
     mock_transport = httpx.MockTransport(mock_meta_graph_handler)
     meta_provider = MetaCloudWhatsAppProvider(
-        SecretStr(api_token), phone_id, version="v20.0", transport=mock_transport
+        SecretStr(api_token), phone_id, version="v26.0", transport=mock_transport
     )
 
     saas_transport = HttpxHermesTransport("https://saas.test", transport=httpx.ASGITransport(app=app))
@@ -380,7 +380,7 @@ async def test_uat16_replay_deduplication_and_zero_duplicate_journals(
 
     async def mock_meta_graph_handler(request: httpx.Request):
         url_str = str(request.url)
-        if f"/v20.0/{media_id}" in url_str:
+        if f"/v26.0/{media_id}" in url_str:
             return httpx.Response(
                 200,
                 json={
@@ -393,7 +393,7 @@ async def test_uat16_replay_deduplication_and_zero_duplicate_journals(
             )
         if "lookaside.fbsbx.com" in url_str:
             return httpx.Response(200, content=fake_pdf, headers={"Content-Type": "application/pdf"})
-        if f"/v20.0/{phone_id}/messages" in url_str:
+        if f"/v26.0/{phone_id}/messages" in url_str:
             return httpx.Response(200, json={"messages": [{"id": f"wamid.outbound.{uuid.uuid4().hex}"}]})
         return httpx.Response(404)
 
@@ -419,7 +419,7 @@ async def test_uat16_replay_deduplication_and_zero_duplicate_journals(
     app.dependency_overrides[get_db] = scoped_db
 
     mock_transport = httpx.MockTransport(mock_meta_graph_handler)
-    meta_provider = MetaCloudWhatsAppProvider(SecretStr(api_token), phone_id, version="v20.0", transport=mock_transport)
+    meta_provider = MetaCloudWhatsAppProvider(SecretStr(api_token), phone_id, version="v26.0", transport=mock_transport)
 
     saas_transport = HttpxHermesTransport("https://saas.test", transport=httpx.ASGITransport(app=app))
     gateway = HermesApiClient(saas_transport, lambda: "adapter-secret-token", "https://saas.test")

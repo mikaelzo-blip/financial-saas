@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     WHATSAPP_API_TOKEN: Optional[SecretStr] = None
     WHATSAPP_PHONE_NUMBER_ID: Optional[str] = None
     WHATSAPP_WABA_ID: Optional[str] = None
-    WHATSAPP_GRAPH_VERSION: str = "v20.0"
+    WHATSAPP_GRAPH_VERSION: str = "v26.0"
     WHATSAPP_SAAS_URL: str = "https://localhost"
     WHATSAPP_ADAPTER_TOKEN: Optional[SecretStr] = None
     WHATSAPP_TENANT_TOKENS: dict[str, SecretStr] = Field(default_factory=dict)

@@ -16,7 +16,7 @@ def configured_service():
     elif settings.WHATSAPP_PROVIDER == "meta":
         api_token = settings.WHATSAPP_API_TOKEN or settings.META_ACCESS_TOKEN
         phone_id = settings.WHATSAPP_PHONE_NUMBER_ID or settings.META_PHONE_NUMBER_ID
-        graph_version = settings.WHATSAPP_GRAPH_VERSION or settings.META_GRAPH_API_VERSION or "v20.0"
+        graph_version = settings.WHATSAPP_GRAPH_VERSION or settings.META_GRAPH_API_VERSION or "v26.0"
         if not api_token or not phone_id:
             raise ValueError("Meta provider credentials are not configured")
         provider = MetaCloudWhatsAppProvider(api_token, phone_id, graph_version)

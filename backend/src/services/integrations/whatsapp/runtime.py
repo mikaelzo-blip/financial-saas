@@ -14,9 +14,12 @@ def configured_service():
     if settings.WHATSAPP_PROVIDER == "mock":
         provider = MockWhatsAppProvider()
     elif settings.WHATSAPP_PROVIDER == "meta":
-        if not settings.WHATSAPP_API_TOKEN or not settings.WHATSAPP_PHONE_NUMBER_ID:
+        api_token = settings.WHATSAPP_API_TOKEN or settings.META_ACCESS_TOKEN
+        phone_id = settings.WHATSAPP_PHONE_NUMBER_ID or settings.META_PHONE_NUMBER_ID
+        graph_version = settings.WHATSAPP_GRAPH_VERSION or settings.META_GRAPH_API_VERSION or "v20.0"
+        if not api_token or not phone_id:
             raise ValueError("Meta provider credentials are not configured")
-        provider = MetaCloudWhatsAppProvider(settings.WHATSAPP_API_TOKEN, settings.WHATSAPP_PHONE_NUMBER_ID, settings.WHATSAPP_GRAPH_VERSION)
+        provider = MetaCloudWhatsAppProvider(api_token, phone_id, graph_version)
     else:
         raise ValueError("Unsupported WhatsApp provider")
     transport = HttpxHermesTransport(settings.WHATSAPP_SAAS_URL)

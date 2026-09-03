@@ -44,11 +44,20 @@ class Settings(BaseSettings):
     WHATSAPP_WEBHOOK_APP_SECRET: Optional[SecretStr] = None
     WHATSAPP_API_TOKEN: Optional[SecretStr] = None
     WHATSAPP_PHONE_NUMBER_ID: Optional[str] = None
+    WHATSAPP_WABA_ID: Optional[str] = None
     WHATSAPP_GRAPH_VERSION: str = "v20.0"
     WHATSAPP_SAAS_URL: str = "https://localhost"
     WHATSAPP_ADAPTER_TOKEN: Optional[SecretStr] = None
     WHATSAPP_TENANT_TOKENS: dict[str, SecretStr] = Field(default_factory=dict)
     WHATSAPP_ORG_MESSAGES_PER_MINUTE: int = Field(default=200, ge=20)
+
+    # Aliases for Meta Cloud API integration concepts
+    META_APP_SECRET: Optional[SecretStr] = None
+    META_VERIFY_TOKEN: Optional[SecretStr] = None
+    META_ACCESS_TOKEN: Optional[SecretStr] = None
+    META_PHONE_NUMBER_ID: Optional[str] = None
+    META_WABA_ID: Optional[str] = None
+    META_GRAPH_API_VERSION: Optional[str] = None
 
     # Feature 008: no external egress is enabled by configuration.
     AI_INSIGHT_PROVIDER: str = "mock"

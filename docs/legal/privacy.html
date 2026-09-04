@@ -58,8 +58,8 @@
       font-size: 0.95rem;
     }
     h2 {
-      font-size: 1.4rem;
-      margin-top: 2.5rem;
+      font-size: 1.35rem;
+      margin-top: 2.25rem;
       margin-bottom: 0.75rem;
       color: #ffffff;
       border-bottom: 1px solid var(--border);
@@ -110,140 +110,84 @@
     <header>
       <a href="index.html" class="nav-back">&larr; Back to Legal Portal</a>
       <h1>Privacy Policy</h1>
-      <div class="metadata">Application: Keuangan-CBL / Financial SaaS (Pilot Release) | Operator: Muhammad Fikri</div>
+      <div class="metadata">Application: Keuangan-CBL / Financial SaaS | Operator: Muhammad Fikri</div>
       <div class="last-updated">Last updated: September 2026</div>
     </header>
 
     <main>
       <section>
-        <h2>1. Overview and Scope</h2>
+        <h2>1. Who Operates This Application</h2>
         <p>
-          This Privacy Policy explains how Muhammad Fikri ("operator", "we", "us", or "our"), as the individual operator responsible for the Keuangan-CBL / Financial SaaS pilot platform, handles information collected through the application, web user interfaces, and connected messaging intake channels, including Meta WhatsApp integrations.
-        </p>
-        <p>
-          The platform provides financial workflow support and document intake for participating pilot organizations. This policy covers data collected and processed through our web portal and supported messaging channels.
+          This application (Keuangan-CBL / Financial SaaS) is operated by Muhammad Fikri. It is currently used primarily as an internal financial workflow tool during its pilot stage.
         </p>
       </section>
 
       <section>
         <h2>2. Information We Process</h2>
         <p>
-          We process only information required to provide document intake, financial candidate staging, and accounting workflows:
+          We only process information needed to handle document intake and internal financial records:
         </p>
         <ul>
-          <li>
-            <strong>User and Account Information:</strong> Name, professional email address, credentials/authentication tokens, organizational role, and tenant organization association.
-          </li>
-          <li>
-            <strong>WhatsApp Sender Details &amp; Transport Metadata:</strong> Sender phone number, WhatsApp message identifiers, message direction, delivery status, and timestamps.
-          </li>
-          <li>
-            <strong>WhatsApp Messages:</strong> Text messages, photo captions, and clarification responses sent to connected intake channels.
-          </li>
-          <li>
-            <strong>Uploaded Images and PDF Documents:</strong> Image files (such as JPEG, PNG, WEBP, HEIC) and PDF files submitted via web upload or WhatsApp intake (including receipts, vendor invoices, customer billing documents, payment slips, and project documentation).
-          </li>
-          <li>
-            <strong>Extracted Document Data:</strong> Extracted document fields, such as billing parties, dates, line items, monetary amounts, reference numbers, and project codes.
-          </li>
-          <li>
-            <strong>Financial Transaction Candidates:</strong> Structured transaction proposals derived from document extraction and awaiting human review.
-          </li>
-          <li>
-            <strong>Audit Records:</strong> Records capturing user/actor actions, entity identifiers, timestamps, and state changes to ensure operational traceability.
-          </li>
+          <li><strong>WhatsApp phone numbers and messages:</strong> Sender phone numbers, text messages, captions, and message timestamps sent to connected intake channels.</li>
+          <li><strong>Uploaded images and PDFs:</strong> Document files submitted through web upload or WhatsApp (such as receipts, vendor bills, customer invoices, payment proofs, and project documents).</li>
+          <li><strong>Invoice, receipt, payment, and project document information:</strong> Vendor and customer names, dates, line items, monetary amounts, reference numbers, and project codes.</li>
+          <li><strong>OCR and AI extracted information:</strong> Text and data fields suggested by automated extraction tools from uploaded documents.</li>
         </ul>
       </section>
 
       <section>
-        <h2>3. Purposes of Processing</h2>
-        <p>Information is processed for the following operational purposes:</p>
-        <ol>
-          <li><strong>Document Intake &amp; Ingestion:</strong> Ingesting operational documents submitted by authorized personnel via web upload or messaging integrations.</li>
-          <li><strong>Document Data Extraction:</strong> Analyzing uploaded images and PDFs via OCR and automated extraction to identify relevant transaction fields.</li>
-          <li><strong>Transaction Candidate Preparation:</strong> Generating draft financial proposals based on extracted document information.</li>
-          <li><strong>Human Verification via Review Queue:</strong> Staging proposed candidates for verification, correction, or rejection by authorized organization operators.</li>
-          <li><strong>Accounting Execution:</strong> Processing approved candidates through the core accounting engine into double-entry accounting records.</li>
-          <li><strong>Audit Logging &amp; Operational Integrity:</strong> Maintaining traceability of document submissions, reviews, approvals, and transaction history.</li>
-        </ol>
+        <h2>3. Why This Information Is Processed</h2>
+        <p>
+          We process this information to:
+        </p>
+        <ul>
+          <li>Receive operational documents from authorized users via web or WhatsApp.</li>
+          <li>Extract readable text and numbers from images and PDFs.</li>
+          <li>Prepare draft financial transaction proposals for review.</li>
+          <li>Record verified entries into company accounting records after human approval.</li>
+        </ul>
       </section>
 
       <section>
-        <h2>4. Document Processing, AI/OCR Extraction, and the Review Queue</h2>
-        <p>
-          The platform uses optical character recognition (OCR) and automated extraction technology (which may include local heuristics or external vision/AI providers) to parse information from uploaded images and PDF files.
-        </p>
-
+        <h2>4. Human Review Queue Requirement</h2>
         <div class="callout">
           <p>
-            <strong>Core Processing Principle:</strong> Automated OCR and AI extraction outputs are solely draft proposals. Inbound WhatsApp messages and raw document uploads <strong>do not directly create accounting journals</strong> or modify general ledger balances.
+            WhatsApp messages and uploaded documents do not automatically create accounting journals. OCR/AI results are proposals that require human review and approval.
           </p>
         </div>
-
         <p>
-          All parsed documents and proposed transactions must pass through a <strong>Review Queue</strong>. An authorized human reviewer within the organization must verify the document contents, validate or adjust the candidate information, and explicitly approve the transaction before any financial records or journals are created. Inbound transfer proofs or receipts alone do not automatically constitute financial expenses.
+          Every parsed document and extracted proposal goes into a Review Queue. An authorized team member must verify the details, correct any mistakes, and approve the entry before it affects financial records. Transfer proofs and receipts never turn into expenses automatically.
         </p>
       </section>
 
       <section>
-        <h2>5. Third-Party Services and Data Sharing</h2>
+        <h2>5. Basic Security and Access Controls</h2>
         <p>
-          We do not sell personal or financial data. Information is shared only with third-party service providers as needed to operate the system:
+          We protect data using practical administrative and technical controls:
         </p>
         <ul>
-          <li>
-            <strong>Meta Cloud API (WhatsApp):</strong> For messaging channel intake, message routing and media downloads occur via Meta Platforms infrastructure pursuant to Meta platform terms.
-          </li>
-          <li>
-            <strong>Document Extraction / Vision Services:</strong> Where configured, document images or PDF pages may be transmitted to external document extraction or vision processing services to extract textual and financial information.
-          </li>
-          <li>
-            <strong>Hosting and Infrastructure:</strong> Application servers, databases, and file storage environments used to host platform services.
-          </li>
+          <li><strong>Access control:</strong> Only authorized users can sign in to view or approve records.</li>
+          <li><strong>Organization isolation:</strong> Data is kept separated by company/organization.</li>
+          <li><strong>Webhook verification:</strong> Inbound WhatsApp messages are verified using secret signatures.</li>
+          <li><strong>Audit logs:</strong> We keep records of approvals, edits, and financial actions to maintain clear operational history.</li>
         </ul>
       </section>
 
       <section>
-        <h2>6. Security Controls</h2>
-        <p>We implement operational and technical security measures appropriate for the service, including:</p>
-        <ul>
-          <li><strong>Access Control:</strong> Role-based access controls and authenticated user session validation.</li>
-          <li><strong>Tenant Isolation:</strong> Logical isolation of data between distinct tenant organizations.</li>
-          <li><strong>Integrity Checks:</strong> Cryptographic file hashing to detect duplicate uploads and verify file consistency.</li>
-          <li><strong>Webhook Authentication:</strong> Inbound webhook signature verification and transport handshake controls.</li>
-          <li><strong>Audit Logging:</strong> Audit records of critical user actions, corrections, and approvals.</li>
-        </ul>
-      </section>
-
-      <section>
-        <h2>7. Data Retention</h2>
+        <h2>6. How to Request Correction or Deletion</h2>
         <p>
-          Data is retained as necessary to support platform operations during the pilot program and fulfill tenant requirements. Records may be retained longer where necessary to satisfy legal, accounting, tax, fraud-prevention, audit, or record-keeping obligations. Temporary processing states, transient sessions, or unposted documents may be removed according to operational cleanup procedures or upon validated administrative request.
-        </p>
-      </section>
-
-      <section>
-        <h2>8. User Rights and Deletion Requests</h2>
-        <p>
-          Users may request access to, correction of, or deletion of their personal information and registered messaging channels. Deletion requests will be reviewed and processed within a reasonable period, subject to applicable legal, accounting, tax, fraud-prevention, audit, and record-retention obligations. Where appropriate, access to certain historical records may be restricted rather than records being immediately or completely removed.
+          You can request correction or deletion of your personal details, registered phone number, or unprocessed documents at any time.
         </p>
         <p>
-          For detailed instructions on submitting a request, please visit our <a href="deletion.html" style="color: var(--accent);">User Data Deletion Instructions</a> page.
+          Please see our simple 3-step guide on the <a href="deletion.html" style="color: var(--accent);">Data Deletion Instructions</a> page or contact:
         </p>
 
         <div class="contact-box">
-          <strong>Privacy Inquiries &amp; Requests:</strong><br>
-          Platform Operator: Muhammad Fikri<br>
+          <strong>Contact Operator:</strong><br>
+          Muhammad Fikri<br>
           Application: Keuangan-CBL / Financial SaaS<br>
           Email: <a href="mailto:mikaelzo1998@gmail.com" style="color: var(--accent);">mikaelzo1998@gmail.com</a>
         </div>
-      </section>
-
-      <section>
-        <h2>9. Policy Updates</h2>
-        <p>
-          We may update this Privacy Policy from time to time. Updated versions will be posted on this page with an updated "Last updated" date.
-        </p>
       </section>
     </main>
 

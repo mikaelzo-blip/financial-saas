@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terms of Service - Keuangan-CBL / Financial SaaS</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --border: #334155;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.65;
+      background-color: var(--bg);
+      color: var(--text-main);
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem 5rem 1.5rem;
+    }
+    header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.5rem;
+      margin-bottom: 2.5rem;
+    }
+    .nav-back {
+      display: inline-block;
+      margin-bottom: 1rem;
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+    .nav-back:hover {
+      text-decoration: underline;
+    }
+    h1 {
+      font-size: 2.25rem;
+      margin-bottom: 0.5rem;
+      color: #ffffff;
+      line-height: 1.2;
+    }
+    .metadata {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+    .last-updated {
+      margin-top: 0.4rem;
+      color: var(--accent);
+      font-weight: 500;
+      font-size: 0.95rem;
+    }
+    h2 {
+      font-size: 1.4rem;
+      margin-top: 2.5rem;
+      margin-bottom: 0.75rem;
+      color: #ffffff;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.5rem;
+    }
+    p, li {
+      color: #e2e8f0;
+      font-size: 1rem;
+    }
+    ul, ol {
+      padding-left: 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+    li {
+      margin-bottom: 0.4rem;
+    }
+    strong {
+      color: #ffffff;
+    }
+    .contact-box {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin-top: 2rem;
+    }
+    footer {
+      margin-top: 4rem;
+      border-top: 1px solid var(--border);
+      padding-top: 1.5rem;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <a href="index.html" class="nav-back">&larr; Back to Legal Portal</a>
+      <h1>Terms of Service</h1>
+      <div class="metadata">Application: Keuangan-CBL / Financial SaaS (Pilot Release) | Operator: Muhammad Fikri</div>
+      <div class="last-updated">Last updated: September 2026</div>
+    </header>
+
+    <main>
+      <section>
+        <h2>1. Acceptance of Terms</h2>
+        <p>
+          By accessing or using the Keuangan-CBL / Financial SaaS application, web interfaces, or connected messaging channels (such as WhatsApp intake features), you agree to be bound by these Terms of Service ("Terms") provided by the platform operator, Muhammad Fikri. If you do not agree to these Terms, do not access or use the application.
+        </p>
+      </section>
+
+      <section>
+        <h2>2. Scope of Service and Pilot Nature</h2>
+        <p>
+          Keuangan-CBL (Financial SaaS) provides financial tracking, document intake, and accounting workflow support.
+        </p>
+        <p>
+          This version of the platform is made available as a <strong>Pilot Release</strong>. The software and its integrations are subject to ongoing improvements, testing, and operational configuration changes. Automated OCR extractions and messaging integrations are provided to evaluate and support contractor accounting workflows.
+        </p>
+      </section>
+
+      <section>
+        <h2>3. Authorized Access and Tenant Scoping</h2>
+        <ul>
+          <li><strong>Authorized Users:</strong> Access is limited to authorized organizational users. Users must maintain the confidentiality of their credentials and tokens.</li>
+          <li><strong>Tenant Isolation:</strong> Users must operate strictly within their assigned organization and must not attempt to access data belonging to other organizations.</li>
+          <li><strong>Messaging Channel Access:</strong> Only telephone numbers configured and registered by an organization administrator may interact with the application via WhatsApp channels. Unregistered senders are rejected.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>4. Acceptable Use and Submission Rules</h2>
+        <p>You agree to use the service only for lawful business operations. You agree NOT to:</p>
+        <ul>
+          <li>Submit malicious payloads, files, or instructions intended to compromise or alter system behavior.</li>
+          <li>Submit fraudulent, forged, or unlawful financial documents.</li>
+          <li>Transmit sensitive personal data unrelated to legitimate billing, project receipts, or financial records.</li>
+          <li>Attempt to circumvent tenant isolation, access controls, webhook signatures, or usage limits.</li>
+          <li>Rely on automated extraction without human verification of financial data.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>5. Document Intelligence and Financial Responsibility</h2>
+        <ul>
+          <li><strong>Proposals Only:</strong> Extracted data and transaction candidates produced by OCR or AI systems are draft proposals that require human validation in the Review Queue.</li>
+          <li><strong>Reviewer Verification:</strong> Authorized organization personnel are responsible for checking extracted amounts, dates, counterparties, and project codes before approving entries.</li>
+          <li><strong>No Certified Advisory:</strong> The application does not provide certified accounting, tax, or legal advice. Participating organizations are solely responsible for their financial records, filings, and regulatory compliance.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>6. Third-Party Integrations</h2>
+        <p>
+          The service connects to third-party services such as Meta WhatsApp Cloud API and external extraction providers. Functionality of messaging and OCR features depends on the availability and terms of these third parties. Uninterrupted access cannot be guaranteed.
+        </p>
+      </section>
+
+      <section>
+        <h2>7. Disclaimer of Warranties and Limitation of Liability</h2>
+        <p>
+          The service is provided on an "AS IS" and "AS AVAILABLE" basis without warranties of any kind, whether express or implied.
+        </p>
+        <p>
+          To the maximum extent permitted by applicable law, Muhammad Fikri as operator shall not be liable for any indirect, incidental, special, consequential, or exemplary damages, or loss of profits, data, or business opportunities arising from use of the platform.
+        </p>
+      </section>
+
+      <section>
+        <h2>8. Inquiries and Contact</h2>
+        <p>
+          For questions regarding these Terms, please contact:
+        </p>
+        <div class="contact-box">
+          <strong>Terms and Operations Contact:</strong><br>
+          Platform Operator: Muhammad Fikri<br>
+          Application: Keuangan-CBL / Financial SaaS<br>
+          Email: <a href="mailto:mikaelzo1998@gmail.com" style="color: var(--accent);">mikaelzo1998@gmail.com</a>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      &copy; 2026 Muhammad Fikri. All rights reserved.
+    </footer>
+  </div>
+</body>
+</html>

@@ -88,10 +88,21 @@ class BaileysBridgeWhatsAppProvider(WhatsAppProvider):
             if not msg_id or not sender_id:
                 continue
 
-            phone = sender_id.split("@")[0].split(":")[0]
-            if not phone.isdigit():
+            phone_candidate = item.get("senderPhone")
+            if not phone_candidate:
+                # If senderId is a standard phone JID, use its user part.
+                # If senderId is a LID (@lid) and no resolved senderPhone is provided,
+                # do NOT use raw LID digits as a phone number.
+                if not sender_id.endswith("@lid"):
+                    raw_user = sender_id.split("@")[0].split(":")[0]
+                    if raw_user.isdigit():
+                        phone_candidate = raw_user
+
+            if not phone_candidate or not str(phone_candidate).replace("+", "").isdigit():
                 continue
-            sender_phone = f"+{phone}"
+
+            clean_digits = str(phone_candidate).lstrip("+")
+            sender_phone = f"+{clean_digits}"
 
             ts_raw = item.get("timestamp")
             if ts_raw:

@@ -9,10 +9,11 @@ from src.services.integrations.whatsapp.security import valid_handshake, valid_s
 from src.services.hermes.retry import HermesApiError
 from src.services.integrations.whatsapp.provider import ProviderError
 
-router = APIRouter(prefix="/integrations/whatsapp", tags=["WhatsApp"])
+router = APIRouter(tags=["WhatsApp"])
 
 
-@router.get("/webhook", response_class=PlainTextResponse)
+@router.get("/integrations/whatsapp/webhook", response_class=PlainTextResponse)
+@router.get("/whatsapp/webhook", response_class=PlainTextResponse)
 async def handshake(request: Request):
     token = settings.WHATSAPP_VERIFY_TOKEN or settings.META_VERIFY_TOKEN
     if not valid_handshake(request.query_params.get("hub.mode", ""), request.query_params.get("hub.verify_token", ""), token.get_secret_value() if token else None):
@@ -20,7 +21,8 @@ async def handshake(request: Request):
     return request.query_params.get("hub.challenge", "")
 
 
-@router.post("/webhook")
+@router.post("/integrations/whatsapp/webhook")
+@router.post("/whatsapp/webhook")
 async def webhook(request: Request):
     body = bytearray()
     async for chunk in request.stream():

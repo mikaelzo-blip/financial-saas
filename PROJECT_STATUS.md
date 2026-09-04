@@ -2,22 +2,18 @@
 
 - **Current origin/main baseline**: `63d9eaddcd5edc4e95021ac80f150f14adfb3915`
 - **Completed features**: 001 Contractor Finance System; 002 Core Financial Domain; 003 Core Operational UI; 004 Financial Reporting; 005 Document Intelligence; 006 Hermes Automation; 007 WhatsApp Integration; 008 AI Management Insights; 009 Production Readiness Foundation; 010 Dependency Security Gates; UAT Findings #1-#3; UAT #4 Customer Invoice; UAT #5 Customer Payment & AR Allocation; UAT #5.1 Active Tenant Identity; UAT #6 Vendor Bill & Accounts Payable; UAT #7 Vendor Payment & Cash Disbursement Safety; UAT #8 Reversal Flow; UAT #9 Financial Reporting; UAT #10 Project Completion & Retention Release; UAT #11 Document Ingestion & Storage Reliability; UAT #12 WhatsApp Media Transport & Review Queue Intake; UAT #13 Real Document Extraction & Candidate Review Flow; UAT #14 End-to-End Operational Workflows & Edge-Case Stress Testing; UAT #15 WhatsApp Sandbox Integration & Production Deployment Dry Run; UAT #16 Real Meta WhatsApp Cloud API Sandbox Pilot (Live Handshake & Routing Verified).
-- **Current feature**: UAT #17 — Real WhatsApp Media Intake (PAUSED)
-- **Current branch**: `hermes/uat-17-real-whatsapp-media`
-- **Execution state**: PAUSED (Meta/Facebook account access temporarily unavailable pending appeal review; not a test or architecture failure). Local environment preserved cleanly with `WHATSAPP_PROVIDER=mock`, Meta credential fields unset, sender mapping preserved, and zero database mutations.
-- **Latest verified checkpoint**: UAT #16 completed and merged via PR #40. Real Meta WhatsApp Cloud API sandbox adapter connected and verified via live Meta webhook handshake; GET `hub.challenge` verification and POST `X-Hub-Signature-256` HMAC validation fail-closed; public ingress tunnel via Cloudflare forwarding to `/api/v1/integrations/whatsapp/webhook` verified live with Meta Developers Dashboard; messages field v26.0 subscribed; synthetic Meta dashboard test payload verified safe and fail-closed; zero direct journal creation or transaction mutation from transport ingestion; Review Queue hard-stop preserved.
+- **Current feature**: UAT #17 — Real WhatsApp Media Intake (Active: Hermes Baileys WhatsApp Bridge)
+- **Current branch**: `hermes/uat-17-baileys-whatsapp-bridge`
+- **Execution state**: ACTIVE. Meta UAT #17 attempt is superseded/paused because Meta administrator account access is permanently disabled; the Meta Cloud API implementation and UAT #16 work are preserved as an inactive/future transport option (not failed). Active transport for UAT #17 is the Hermes native WhatsApp bridge using Baileys. Local environment and PostgreSQL UAT data preserved with zero mutations.
+- **Latest verified checkpoint**: Baileys transport provider (`BaileysBridgeWhatsAppProvider`), long-poller worker (`BaileysBridgePoller`), and integration test suite (`test_uat17_baileys_whatsapp_bridge.py`) implemented and passing (3/3 passed). Total backend test suite passing (137 unit + 44 integration tests).
 - **UAT data**: Organization `PT Kontraktor Utama Indonesia` (`9670673b-c0fd-4ebe-87e4-a646358084ea`), Project `PRJ-2026-001`, registered sender Muhammad Fikri, journals, transactions, and balances preserved intact.
-- **Tests**: 305 backend tests passed (including unit and integration suites for WhatsApp media transport and Meta sandbox pilot); frontend tests passed; zero regressions.
+- **Tests**: 137 unit tests passing, 44 integration tests passing (including UAT #12, UAT #15, UAT #16, and UAT #17); zero regressions.
 - **Accounting integrity**: Total Debit == Total Credit; Assets = Liabilities + Equity; zero orphan AR/AP/retention; zero direct journals from transport ingestion; human review hard-stop preserved.
 - **Real Provider Status**:
-  - Meta Cloud API Sandbox Adapter: **READY**
-  - Meta Developer App / Test Number Ingress Setup: **VERIFIED LIVE** (Cloudflare Tunnel handshake accepted; messages field subscribed; test webhook acknowledged)
-  - Live External Meta Webhook Traffic: **VERIFIED HANDSHAKE & TEST PAYLOAD** (Live GET challenge verified; POST HMAC fail-closed verified)
-  - Production WhatsApp Number: **NOT ACTIVATED** (Development sandbox only)
-- **Outstanding blockers**: Meta administrator account temporarily unavailable pending Facebook appeal review. Live ingestion paused until access is restored.
-- **Resume requirements upon account recovery**:
-  1. Meta Phone Number ID (numeric ID from Meta App Dashboard; not the E.164 phone number).
-  2. Meta Access Token (System User token or temporary User token).
-  3. Meta App Secret (App settings -> Basic).
-  4. Meta Verify Token (must match configured webhook subscription).
-- **Next Step**: Once Meta administrator account access is restored, run `python backend/scripts/configure_meta_local.py` to populate local `backend/.env`, start backend and Cloudflare tunnel, verify callback URL, and execute live media ingestion test into Review Queue.
+  - Meta Cloud API Sandbox Adapter: **PRESERVED AS INACTIVE/FUTURE TRANSPORT**
+  - Hermes Baileys WhatsApp Web Bridge: **ACTIVE TRANSPORT FOR UAT #17**
+  - Receiver / Bot Number: `+6285184549522` (Keuangan-CBL)
+  - Allowed Sender Number: `+6285712342760` (Muhammad Fikri)
+  - Pair Mode: Bot Mode (`WHATSAPP_MODE=bot`, `WHATSAPP_ALLOWED_USERS=+6285712342760`)
+- **Outstanding blockers**: None. Implementation and automated verification complete. Ready for Phase 7 (QR pairing).
+- **Next Step**: Launch Hermes Baileys bridge in bot mode with session directory and QR pairing display, user scans QR via WhatsApp Linked Devices on +6285184549522.

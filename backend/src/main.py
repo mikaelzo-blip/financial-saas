@@ -16,15 +16,19 @@ from src.core.middleware import ProductionHTTPMiddleware
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle events."""
-    from src.services.integrations.whatsapp.runtime import notification_loop
+    from src.services.integrations.whatsapp.runtime import notification_loop, baileys_poller_loop
 
     worker = asyncio.create_task(notification_loop(app))
+    baileys_worker = asyncio.create_task(baileys_poller_loop(app))
     try:
         yield
     finally:
         worker.cancel()
+        baileys_worker.cancel()
         with suppress(asyncio.CancelledError):
             await worker
+        with suppress(asyncio.CancelledError):
+            await baileys_worker
 
 
 def create_application() -> FastAPI:

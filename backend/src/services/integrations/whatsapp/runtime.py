@@ -28,13 +28,13 @@ def configured_service():
         provider = BaileysBridgeWhatsAppProvider(bridge_url=settings.WHATSAPP_BAILEYS_BRIDGE_URL)
     else:
         raise ValueError("Unsupported WhatsApp provider")
-    transport = HttpxHermesTransport(settings.WHATSAPP_SAAS_URL)
-    gateway = HermesApiClient(transport, lambda: settings.WHATSAPP_ADAPTER_TOKEN.get_secret_value(), settings.WHATSAPP_SAAS_URL)
+    transport = HttpxHermesTransport(settings.WHATSAPP_SAAS_URL, environment=settings.ENVIRONMENT)
+    gateway = HermesApiClient(transport, lambda: settings.WHATSAPP_ADAPTER_TOKEN.get_secret_value(), settings.WHATSAPP_SAAS_URL, environment=settings.ENVIRONMENT)
     def tenant_client(org):
         token = settings.WHATSAPP_TENANT_TOKENS.get(org)
         if not token:
             raise ValueError("Sender tenant has no machine credential")
-        return HermesApiClient(transport, token.get_secret_value, settings.WHATSAPP_SAAS_URL)
+        return HermesApiClient(transport, token.get_secret_value, settings.WHATSAPP_SAAS_URL, environment=settings.ENVIRONMENT)
     return WhatsAppWebhookService(provider, gateway, tenant_client, list(settings.WHATSAPP_TENANT_TOKENS), settings.WHATSAPP_ORG_MESSAGES_PER_MINUTE)
 
 

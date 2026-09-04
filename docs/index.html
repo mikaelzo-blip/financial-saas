@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Keuangan-CBL / Financial SaaS - Public Documentation</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --border: #334155;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      background-color: var(--bg);
+      color: var(--text-main);
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 3rem 1.5rem;
+    }
+    header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 2rem;
+      margin-bottom: 2rem;
+    }
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+      color: #ffffff;
+    }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+    }
+    .operator-info {
+      margin-top: 0.5rem;
+      font-size: 0.95rem;
+      color: var(--text-muted);
+    }
+    .last-updated {
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+      color: var(--accent);
+    }
+    .cards {
+      display: grid;
+      grid-gap: 1.5rem;
+      margin-top: 2rem;
+    }
+    .card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.5rem;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color 0.2s;
+    }
+    .card:hover {
+      border-color: var(--accent);
+    }
+    .card h2 {
+      margin-top: 0;
+      color: var(--accent);
+      font-size: 1.3rem;
+    }
+    .card p {
+      margin-bottom: 0;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+    .portal-link {
+      display: inline-block;
+      margin-top: 2rem;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 1rem;
+    }
+    .portal-link:hover {
+      text-decoration: underline;
+    }
+    footer {
+      margin-top: 4rem;
+      border-top: 1px solid var(--border);
+      padding-top: 1.5rem;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Keuangan-CBL / Financial SaaS</h1>
+      <div class="subtitle">Public Documentation &amp; Policy Portal (Pilot Release)</div>
+      <div class="operator-info">Platform &amp; Pilot Operator: Muhammad Fikri</div>
+      <div class="last-updated">Last updated: September 2026</div>
+    </header>
+
+    <main>
+      <p>
+        Welcome to the public documentation portal for Keuangan-CBL (Financial SaaS). This site hosts the official public legal and compliance policies for the pilot platform, including its messaging intake integrations.
+      </p>
+
+      <div class="cards">
+        <a class="card" href="legal/privacy.html">
+          <h2>Privacy Policy &rarr;</h2>
+          <p>Disclosures regarding data processing, messaging intake, multimodal OCR/AI extraction proposals, human Review Queue requirements, and accounting boundaries.</p>
+        </a>
+
+        <a class="card" href="legal/terms.html">
+          <h2>Terms of Service &rarr;</h2>
+          <p>Rules, acceptable use, pilot scope, user responsibilities, and service disclaimers governing the application.</p>
+        </a>
+
+        <a class="card" href="legal/deletion.html">
+          <h2>User Data Deletion Instructions &rarr;</h2>
+          <p>Standard instructions for requesting the removal or deactivation of accounts, messaging mappings, and intake records.</p>
+        </a>
+
+        <a class="card" href="legal/index.html">
+          <h2>Legal Documentation Portal &rarr;</h2>
+          <p>Browse the dedicated legal and compliance documentation index.</p>
+        </a>
+      </div>
+
+      <div>
+        <a class="portal-link" href="legal/index.html">&rarr; View all legal &amp; compliance documents in the Legal Portal</a>
+      </div>
+    </main>
+
+    <footer>
+      &copy; 2026 Muhammad Fikri. All rights reserved.
+    </footer>
+  </div>
+</body>
+</html>

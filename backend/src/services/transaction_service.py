@@ -212,7 +212,48 @@ class TransactionService:
                 if not payment_account:
                     raise EntityNotFoundException("Active Payment Account", data.payment_account_id)
 
+        # Validate general counterparty scoping if specified
+        if data.counterparty_id:
+            cp = await self.session.scalar(select(Counterparty).where(
+                Counterparty.id == data.counterparty_id,
+                Counterparty.organization_id == organization_id,
+            ))
+            if not cp:
+                raise EntityNotFoundException("Counterparty", data.counterparty_id)
+
+        # Validate general payment account scoping if specified
+        if data.payment_account_id:
+            pa = await self.session.scalar(select(PaymentAccount).where(
+                PaymentAccount.id == data.payment_account_id,
+                PaymentAccount.organization_id == organization_id,
+                PaymentAccount.is_active == True,
+            ))
+            if not pa:
+                raise EntityNotFoundException("Active Payment Account", data.payment_account_id)
+
+        # Validate general project scoping in allocations
+        for alloc in resolved_allocations:
+            if alloc.project_id:
+                proj = await self.session.scalar(select(Project).where(
+                    Project.id == alloc.project_id,
+                    Project.organization_id == organization_id,
+                ))
+                if not proj:
+                    raise EntityNotFoundException("Project", alloc.project_id)
+
+        # Validate document scoping if document_ids provided
+        if data.document_ids:
+            from src.models.document import Document
+            for doc_id in data.document_ids:
+                doc = await self.session.scalar(select(Document).where(
+                    Document.id == doc_id,
+                    Document.organization_id == organization_id,
+                ))
+                if not doc:
+                    raise EntityNotFoundException("Document", doc_id)
+
         # Invoice numbers are tenant-unique regardless of date or amount.
+
         duplicate_candidate = None
         if data.transaction_type == TransactionType.CUSTOMER_INVOICE and data.reference_no:
             duplicate_candidate = await self.session.scalar(select(Transaction).where(

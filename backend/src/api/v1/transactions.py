@@ -70,9 +70,9 @@ async def post_transaction(
     org_id: uuid.UUID = Depends(get_current_org_id),
     db: AsyncSession = Depends(get_db)
 ):
-    from src.services.accounting_engine import AccountingEngine
-    engine = AccountingEngine(db)
-    await engine.post_transaction(org_id, transaction_id)
+    from src.services.processing_policy_service import ProcessingPolicyService
+    policy_svc = ProcessingPolicyService(db)
+    await policy_svc.authorize_and_post(org_id, transaction_id, bypass_role_check=True)
     await db.commit()
     service = TransactionService(db)
     return await service.get_transaction(org_id, transaction_id)
@@ -88,9 +88,10 @@ async def approve_transaction(
     org_id: uuid.UUID = Depends(get_current_org_id),
     db: AsyncSession = Depends(get_db)
 ):
-    from src.services.accounting_engine import AccountingEngine
-    engine = AccountingEngine(db)
-    await engine.post_transaction(org_id, transaction_id)
+    from src.services.processing_policy_service import ProcessingPolicyService
+    policy_svc = ProcessingPolicyService(db)
+    await policy_svc.authorize_and_post(org_id, transaction_id, bypass_role_check=True)
     await db.commit()
     service = TransactionService(db)
     return await service.get_transaction(org_id, transaction_id)
+

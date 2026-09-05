@@ -14,49 +14,56 @@ STANDARD_COA_DEFINITIONS: List[Dict[str, Any]] = [
         "account_name": "Kas dan Bank",
         "account_type": AccountType.ASSET,
         "normal_balance": NormalBalance.DEBIT,
-        "report_group": "Kas & Setara Kas"
+        "report_group": "Kas & Setara Kas",
+        "report_section": "CURRENT_ASSET"
     },
     {
         "account_code": "1201",
         "account_name": "Piutang Usaha",
         "account_type": AccountType.ASSET,
         "normal_balance": NormalBalance.DEBIT,
-        "report_group": "Piutang Usaha"
+        "report_group": "Piutang Usaha",
+        "report_section": "CURRENT_ASSET"
     },
     {
         "account_code": "1202",
         "account_name": "Piutang Retensi",
         "account_type": AccountType.ASSET,
         "normal_balance": NormalBalance.DEBIT,
-        "report_group": "Piutang Retensi"
+        "report_group": "Piutang Retensi",
+        "report_section": "CURRENT_ASSET"
     },
     {
         "account_code": "1301",
         "account_name": "Uang Muka Biaya & Vendor",
         "account_type": AccountType.ASSET,
         "normal_balance": NormalBalance.DEBIT,
-        "report_group": "Uang Muka"
+        "report_group": "Uang Muka",
+        "report_section": "CURRENT_ASSET"
     },
     {
         "account_code": "1401",
         "account_name": "Persediaan Material & Perlengkapan Proyek",
         "account_type": AccountType.ASSET,
         "normal_balance": NormalBalance.DEBIT,
-        "report_group": "Persediaan"
+        "report_group": "Persediaan",
+        "report_section": "CURRENT_ASSET"
     },
     {
         "account_code": "1501",
         "account_name": "Aset Tetap Operasional",
         "account_type": AccountType.ASSET,
         "normal_balance": NormalBalance.DEBIT,
-        "report_group": "Aset Tetap"
+        "report_group": "Aset Tetap",
+        "report_section": "FIXED_ASSET"
     },
     {
         "account_code": "1502",
         "account_name": "Akumulasi Penyusutan Aset Tetap",
         "account_type": AccountType.ASSET,
         "normal_balance": NormalBalance.CREDIT,
-        "report_group": "Aset Tetap"
+        "report_group": "Aset Tetap",
+        "report_section": "FIXED_ASSET"
     },
 
     # 2xxx Liabilities
@@ -65,35 +72,40 @@ STANDARD_COA_DEFINITIONS: List[Dict[str, Any]] = [
         "account_name": "Utang Usaha",
         "account_type": AccountType.LIABILITY,
         "normal_balance": NormalBalance.CREDIT,
-        "report_group": "Utang Usaha"
+        "report_group": "Utang Usaha",
+        "report_section": "CURRENT_LIABILITY"
     },
     {
         "account_code": "2201",
         "account_name": "Uang Muka Customer",
         "account_type": AccountType.LIABILITY,
         "normal_balance": NormalBalance.CREDIT,
-        "report_group": "Uang Muka Customer"
+        "report_group": "Uang Muka Customer",
+        "report_section": "CURRENT_LIABILITY"
     },
     {
         "account_code": "2301",
         "account_name": "Utang Pajak",
         "account_type": AccountType.LIABILITY,
         "normal_balance": NormalBalance.CREDIT,
-        "report_group": "Utang Pajak"
+        "report_group": "Utang Pajak",
+        "report_section": "CURRENT_LIABILITY"
     },
     {
         "account_code": "2401",
         "account_name": "Utang Biaya / Akrual",
         "account_type": AccountType.LIABILITY,
         "normal_balance": NormalBalance.CREDIT,
-        "report_group": "Utang Akrual"
+        "report_group": "Utang Akrual",
+        "report_section": "CURRENT_LIABILITY"
     },
     {
         "account_code": "2501",
         "account_name": "Utang Lainnya / Pinjaman",
         "account_type": AccountType.LIABILITY,
         "normal_balance": NormalBalance.CREDIT,
-        "report_group": "Utang Lainnya"
+        "report_group": "Utang Jangka Panjang",
+        "report_section": "LONG_TERM_LIABILITY"
     },
 
     # 3xxx Equity
@@ -102,21 +114,24 @@ STANDARD_COA_DEFINITIONS: List[Dict[str, Any]] = [
         "account_name": "Modal Disetor",
         "account_type": AccountType.EQUITY,
         "normal_balance": NormalBalance.CREDIT,
-        "report_group": "Modal"
+        "report_group": "Modal",
+        "report_section": "EQUITY"
     },
     {
         "account_code": "3201",
         "account_name": "Saldo Laba Ditahan",
         "account_type": AccountType.EQUITY,
         "normal_balance": NormalBalance.CREDIT,
-        "report_group": "Laba Ditahan"
+        "report_group": "Laba Ditahan",
+        "report_section": "EQUITY"
     },
     {
         "account_code": "3301",
         "account_name": "Prive / Penarikan Pemilik",
         "account_type": AccountType.EQUITY,
         "normal_balance": NormalBalance.DEBIT,
-        "report_group": "Prive"
+        "report_group": "Prive",
+        "report_section": "EQUITY"
     },
 
     # 4xxx Revenue
@@ -125,14 +140,16 @@ STANDARD_COA_DEFINITIONS: List[Dict[str, Any]] = [
         "account_name": "Pendapatan Proyek dan Jasa",
         "account_type": AccountType.REVENUE,
         "normal_balance": NormalBalance.CREDIT,
-        "report_group": "Pendapatan Proyek"
+        "report_group": "Pendapatan Proyek",
+        "report_section": "OPERATING_REVENUE"
     },
     {
         "account_code": "4201",
         "account_name": "Pendapatan Lain-lain",
         "account_type": AccountType.REVENUE,
         "normal_balance": NormalBalance.CREDIT,
-        "report_group": "Pendapatan Lain-lain"
+        "report_group": "Pendapatan Lain-lain",
+        "report_section": "OTHER_INCOME"
     },
 
     # 5xxx Project Cost (COGS)
@@ -141,7 +158,8 @@ STANDARD_COA_DEFINITIONS: List[Dict[str, Any]] = [
         "account_name": "Harga Pokok Proyek",
         "account_type": AccountType.EXPENSE,
         "normal_balance": NormalBalance.DEBIT,
-        "report_group": "Harga Pokok Proyek"
+        "report_group": "Harga Pokok Proyek",
+        "report_section": "COGS"
     },
 
     # 6xxx Operational Expenses
@@ -150,63 +168,72 @@ STANDARD_COA_DEFINITIONS: List[Dict[str, Any]] = [
         "account_name": "Beban Gaji dan Upah Kantor",
         "account_type": AccountType.EXPENSE,
         "normal_balance": NormalBalance.DEBIT,
-        "report_group": "Beban Operasional"
+        "report_group": "Beban Operasional",
+        "report_section": "OPERATING_EXPENSE"
     },
     {
         "account_code": "6102",
         "account_name": "Beban Fee, Komisi, dan Jasa Non-Proyek",
         "account_type": AccountType.EXPENSE,
         "normal_balance": NormalBalance.DEBIT,
-        "report_group": "Beban Operasional"
+        "report_group": "Beban Operasional",
+        "report_section": "OPERATING_EXPENSE"
     },
     {
         "account_code": "6103",
         "account_name": "Beban Operasional Kantor dan Administrasi",
         "account_type": AccountType.EXPENSE,
         "normal_balance": NormalBalance.DEBIT,
-        "report_group": "Beban Operasional"
+        "report_group": "Beban Operasional",
+        "report_section": "OPERATING_EXPENSE"
     },
     {
         "account_code": "6104",
         "account_name": "Beban Transport dan Perjalanan Dinas Non-Proyek",
         "account_type": AccountType.EXPENSE,
         "normal_balance": NormalBalance.DEBIT,
-        "report_group": "Beban Operasional"
+        "report_group": "Beban Operasional",
+        "report_section": "OPERATING_EXPENSE"
     },
     {
         "account_code": "6105",
         "account_name": "Beban Legal, Perizinan, dan Sertifikasi Perusahaan",
         "account_type": AccountType.EXPENSE,
         "normal_balance": NormalBalance.DEBIT,
-        "report_group": "Beban Operasional"
+        "report_group": "Beban Operasional",
+        "report_section": "OPERATING_EXPENSE"
     },
     {
         "account_code": "6106",
         "account_name": "Beban Pajak dan Konsultan Profesional",
         "account_type": AccountType.EXPENSE,
         "normal_balance": NormalBalance.DEBIT,
-        "report_group": "Beban Operasional"
+        "report_group": "Beban Operasional",
+        "report_section": "OPERATING_EXPENSE"
     },
     {
         "account_code": "6107",
         "account_name": "Beban Administrasi Bank",
         "account_type": AccountType.EXPENSE,
         "normal_balance": NormalBalance.DEBIT,
-        "report_group": "Beban Operasional"
+        "report_group": "Beban Operasional",
+        "report_section": "OPERATING_EXPENSE"
     },
     {
         "account_code": "6108",
         "account_name": "Beban Penyusutan Aset Tetap",
         "account_type": AccountType.EXPENSE,
         "normal_balance": NormalBalance.DEBIT,
-        "report_group": "Beban Operasional"
+        "report_group": "Beban Operasional",
+        "report_section": "OPERATING_EXPENSE"
     },
     {
         "account_code": "6199",
         "account_name": "Beban Operasional Lainnya",
         "account_type": AccountType.EXPENSE,
         "normal_balance": NormalBalance.DEBIT,
-        "report_group": "Beban Operasional"
+        "report_group": "Beban Operasional",
+        "report_section": "OPERATING_EXPENSE"
     },
 
     # 7xxx Non-Operational Expense
@@ -215,7 +242,8 @@ STANDARD_COA_DEFINITIONS: List[Dict[str, Any]] = [
         "account_name": "Beban Non-Operasional / Luar Usaha",
         "account_type": AccountType.EXPENSE,
         "normal_balance": NormalBalance.DEBIT,
-        "report_group": "Beban Luar Usaha"
+        "report_group": "Beban Luar Usaha",
+        "report_section": "OTHER_EXPENSE"
     },
 
     # 8xxx Tax Expense
@@ -224,9 +252,11 @@ STANDARD_COA_DEFINITIONS: List[Dict[str, Any]] = [
         "account_name": "Beban Pajak Penghasilan",
         "account_type": AccountType.EXPENSE,
         "normal_balance": NormalBalance.DEBIT,
-        "report_group": "Pajak Penghasilan"
+        "report_group": "Pajak Penghasilan",
+        "report_section": "INCOME_TAX"
     },
 ]
+
 
 # Standard Operational Payment Accounts mapped to 1101 Kas dan Bank
 STANDARD_PAYMENT_ACCOUNTS: List[Dict[str, Any]] = [
@@ -268,8 +298,10 @@ async def seed_standard_coa(
             account_type=defn["account_type"],
             normal_balance=defn["normal_balance"],
             report_group=defn["report_group"],
+            report_section=defn.get("report_section"),
             is_active=True
         )
+
         session.add(account)
         created_count += 1
 

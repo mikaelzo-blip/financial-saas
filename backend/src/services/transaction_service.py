@@ -252,7 +252,17 @@ class TransactionService:
                 if not doc:
                     raise EntityNotFoundException("Document", doc_id)
 
+        # Validate destination payment account if specified
+        if data.destination_payment_account_id:
+            pa_dest = await self.session.scalar(select(PaymentAccount).where(
+                PaymentAccount.id == data.destination_payment_account_id,
+                PaymentAccount.organization_id == organization_id,
+            ))
+            if not pa_dest:
+                raise EntityNotFoundException("Destination PaymentAccount", data.destination_payment_account_id)
+
         # Invoice numbers are tenant-unique regardless of date or amount.
+
 
         duplicate_candidate = None
         if data.transaction_type == TransactionType.CUSTOMER_INVOICE and data.reference_no:
@@ -308,8 +318,10 @@ class TransactionService:
             workflow_status=initial_status,
             counterparty_id=data.counterparty_id,
             payment_account_id=data.payment_account_id,
+            destination_payment_account_id=data.destination_payment_account_id,
             reference_no=data.reference_no,
             description=data.description,
+
             source_channel=data.source_channel,
             created_by=created_by,
             retention_rate=computed_retention_rate,

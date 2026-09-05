@@ -209,3 +209,22 @@ class CandidateStatus(str, Enum):
     READY_FOR_APPROVAL = "READY_FOR_APPROVAL"
     CONVERTED = "CONVERTED"
     REJECTED = "REJECTED"
+
+
+class MovementDirection(str, Enum):
+    IN = "IN"
+    OUT = "OUT"
+
+
+class MovementSourceType(str, Enum):
+    TRANSFER_PROOF = "TRANSFER_PROOF"
+    BANK_STATEMENT = "BANK_STATEMENT"
+    MANUAL = "MANUAL"
+
+
+class SettlementType(str, Enum):
+    INVOICE_PAYMENT = "INVOICE_PAYMENT"
+    PROJECT_ALLOCATION = "PROJECT_ALLOCATION"
+    INTERBANK_TRANSFER = "INTERBANK_TRANSFER"
+    DIRECT_EXPENSE = "DIRECT_EXPENSE"
+

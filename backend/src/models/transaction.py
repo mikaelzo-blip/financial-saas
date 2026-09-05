@@ -93,7 +93,13 @@ class Transaction(Base, TimestampMixin):
         nullable=True,
         index=True
     )
+    destination_payment_account_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("payment_accounts.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True
+    )
     reference_no: Mapped[Optional[str]] = mapped_column(
+
         String(100),
         nullable=True
     )
@@ -140,8 +146,10 @@ class Transaction(Base, TimestampMixin):
     # Relationships
     organization: Mapped["Organization"] = relationship("Organization")
     counterparty: Mapped[Optional["Counterparty"]] = relationship("Counterparty")
-    payment_account: Mapped[Optional["PaymentAccount"]] = relationship("PaymentAccount")
+    payment_account: Mapped[Optional["PaymentAccount"]] = relationship("PaymentAccount", foreign_keys=[payment_account_id])
+    destination_payment_account: Mapped[Optional["PaymentAccount"]] = relationship("PaymentAccount", foreign_keys=[destination_payment_account_id])
     allocations: Mapped[List["TransactionAllocation"]] = relationship(
+
         "TransactionAllocation",
         back_populates="transaction",
         cascade="all, delete-orphan"

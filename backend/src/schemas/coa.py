@@ -1,7 +1,9 @@
 import uuid
+from decimal import Decimal
 from typing import Optional, List
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
+
 
 from src.models.enums import AccountType, NormalBalance, CostCategory, ExpenseCategory
 
@@ -52,16 +54,18 @@ class PaymentAccountResponse(BaseModel):
     id: uuid.UUID
     organization_id: uuid.UUID
     coa_account_id: uuid.UUID
-    coa_account_code: str
-    coa_account_name: str
-    account_type: AccountType
+    coa_account_code: Optional[str] = None
+    coa_account_name: Optional[str] = None
+    account_type: Optional[AccountType] = None
     name: str
     bank_name: Optional[str] = None
     account_number: Optional[str] = None
     is_active: bool
     created_at: datetime
+    balance: Optional[Decimal] = None
 
     model_config = ConfigDict(from_attributes=True)
+
 
 
 class CategoryMetadataResponse(BaseModel):

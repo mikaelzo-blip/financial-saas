@@ -167,7 +167,13 @@ class JournalLine(Base):
         ForeignKey("counterparties.id", ondelete="RESTRICT"),
         nullable=True
     )
+    payment_account_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("payment_accounts.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True
+    )
     cost_category: Mapped[Optional[CostCategory]] = mapped_column(
+
         SAEnum(CostCategory, name="cost_category"),
         nullable=True
     )

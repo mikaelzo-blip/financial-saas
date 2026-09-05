@@ -55,11 +55,15 @@ async def create_coa(
 )
 async def list_payment_accounts(
     active_only: bool = Query(True),
+    with_balance: bool = Query(False),
     org_id: uuid.UUID = Depends(get_current_org_id),
     db: AsyncSession = Depends(get_db)
 ):
     service = PaymentAccountService(db)
+    if with_balance:
+        return await service.list_payment_accounts_with_balances(org_id)
     return await service.list_payment_accounts(org_id, active_only=active_only)
+
 
 
 @router.post(

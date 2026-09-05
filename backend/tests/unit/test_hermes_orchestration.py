@@ -60,6 +60,7 @@ def test_hermes_orchestration_package_has_no_database_or_accounting_dependencies
 def test_hermes_client_rejects_non_https_api_urls():
     transport = RetryingTransport([])
     with pytest.raises(ValueError, match="HTTPS"):
-        HermesApiClient(transport, lambda: "runtime-only-token", "http://localhost")
+        HermesApiClient(transport, lambda: "runtime-only-token", "http://localhost", environment="production")
     with pytest.raises(ValueError, match="HTTPS"):
-        HttpxHermesTransport("http://localhost")
+        HttpxHermesTransport("http://localhost", environment="production")
+

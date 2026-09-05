@@ -1,4 +1,6 @@
 """Replaceable authenticated HTTPS SaaS client used by Hermes orchestration."""
+import ipaddress
+import os
 from typing import Callable, Protocol
 from urllib.parse import urlparse
 
@@ -6,6 +8,40 @@ import httpx
 
 from src.schemas.hermes import HermesDocumentOutcome, HermesSubmissionRequest
 from src.services.hermes.retry import retry_submission, HermesApiError
+
+
+def is_loopback_host(hostname: str | None) -> bool:
+    if not hostname:
+        return False
+    host = hostname.strip("[]").lower()
+    if host == "localhost":
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+        return ip.is_loopback
+    except ValueError:
+        return False
+
+
+def validate_saas_url(url: str, *, environment: str | None = None) -> str:
+    parsed = urlparse(url)
+    scheme = (parsed.scheme or "").lower()
+    hostname = parsed.hostname
+    env = (environment if environment is not None else os.getenv("ENVIRONMENT", "development")).lower()
+
+    if scheme == "https":
+        if not hostname:
+            raise ValueError("Hermes SaaS API base URL must include a valid host")
+        return url
+
+    if scheme == "http":
+        if env in {"development", "test"}:
+            if is_loopback_host(hostname):
+                return url
+            raise ValueError("In development/test, plain HTTP is only allowed for loopback hosts (localhost, 127.0.0.1, ::1)")
+        raise ValueError(f"Hermes SaaS API base URL must use HTTPS in {env}")
+
+    raise ValueError("Hermes SaaS API base URL must use HTTPS (or loopback HTTP in development)")
 
 
 class HermesTransport(Protocol):
@@ -20,10 +56,9 @@ class HermesTransport(Protocol):
 class HttpxHermesTransport:
     """Default network adapter; it makes no database, storage, or ledger calls."""
 
-    def __init__(self, api_base_url: str, *, timeout_seconds: float = 20.0, transport=None):
-        if urlparse(api_base_url).scheme != "https":
-            raise ValueError("Hermes SaaS API base URL must use HTTPS")
-        self._api_base_url = api_base_url.rstrip("/")
+    def __init__(self, api_base_url: str, *, timeout_seconds: float = 20.0, transport=None, environment: str | None = None):
+        validated_url = validate_saas_url(api_base_url, environment=environment)
+        self._api_base_url = validated_url.rstrip("/")
         self._timeout_seconds = timeout_seconds
         self._transport = transport
 
@@ -68,9 +103,8 @@ class HttpxHermesTransport:
 class HermesApiClient:
     """API-only client; it intentionally has no ORM, storage, or posting methods."""
 
-    def __init__(self, transport: HermesTransport, token_supplier: Callable[[], str], api_base_url: str):
-        if urlparse(api_base_url).scheme != "https":
-            raise ValueError("Hermes SaaS API base URL must use HTTPS")
+    def __init__(self, transport: HermesTransport, token_supplier: Callable[[], str], api_base_url: str, *, environment: str | None = None):
+        validate_saas_url(api_base_url, environment=environment)
         self._transport = transport
         self._token_supplier = token_supplier
 

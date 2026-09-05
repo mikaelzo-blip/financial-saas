@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     WHATSAPP_TENANT_TOKENS: dict[str, SecretStr] = Field(default_factory=dict)
     WHATSAPP_ORG_MESSAGES_PER_MINUTE: int = Field(default=200, ge=20)
 
+    # Hermes Baileys WhatsApp Bridge
+    WHATSAPP_BAILEYS_BRIDGE_URL: str = "http://127.0.0.1:3000"
+
     # Aliases for Meta Cloud API integration concepts
     META_APP_SECRET: Optional[SecretStr] = None
     META_VERIFY_TOKEN: Optional[SecretStr] = None

@@ -5,7 +5,11 @@ from src.core.config import settings
 from src.services.hermes.client import HermesApiClient, HttpxHermesTransport
 from .mock_provider import MockWhatsAppProvider
 from .meta_provider import MetaCloudWhatsAppProvider
+from .baileys_provider import BaileysBridgeWhatsAppProvider
 from .webhook_service import WhatsAppWebhookService
+
+
+from src.services.integrations.whatsapp.baileys_poller import BaileysBridgePoller
 
 
 def configured_service():
@@ -20,16 +24,37 @@ def configured_service():
         if not api_token or not phone_id:
             raise ValueError("Meta provider credentials are not configured")
         provider = MetaCloudWhatsAppProvider(api_token, phone_id, graph_version)
+    elif settings.WHATSAPP_PROVIDER == "baileys":
+        provider = BaileysBridgeWhatsAppProvider(bridge_url=settings.WHATSAPP_BAILEYS_BRIDGE_URL)
     else:
         raise ValueError("Unsupported WhatsApp provider")
-    transport = HttpxHermesTransport(settings.WHATSAPP_SAAS_URL)
-    gateway = HermesApiClient(transport, lambda: settings.WHATSAPP_ADAPTER_TOKEN.get_secret_value(), settings.WHATSAPP_SAAS_URL)
+    transport = HttpxHermesTransport(settings.WHATSAPP_SAAS_URL, environment=settings.ENVIRONMENT)
+    gateway = HermesApiClient(transport, lambda: settings.WHATSAPP_ADAPTER_TOKEN.get_secret_value(), settings.WHATSAPP_SAAS_URL, environment=settings.ENVIRONMENT)
     def tenant_client(org):
         token = settings.WHATSAPP_TENANT_TOKENS.get(org)
         if not token:
             raise ValueError("Sender tenant has no machine credential")
-        return HermesApiClient(transport, token.get_secret_value, settings.WHATSAPP_SAAS_URL)
+        return HermesApiClient(transport, token.get_secret_value, settings.WHATSAPP_SAAS_URL, environment=settings.ENVIRONMENT)
     return WhatsAppWebhookService(provider, gateway, tenant_client, list(settings.WHATSAPP_TENANT_TOKENS), settings.WHATSAPP_ORG_MESSAGES_PER_MINUTE)
+
+
+async def baileys_poller_loop(app):
+    """Poll Baileys bridge for inbound messages when WHATSAPP_PROVIDER is baileys."""
+    poller = None
+    while True:
+        if settings.WHATSAPP_PROVIDER == "baileys":
+            service = getattr(app.state, "whatsapp_service", None)
+            if service is None:
+                service = configured_service()
+                if service:
+                    app.state.whatsapp_service = service
+            if service and poller is None:
+                poller = BaileysBridgePoller(service, bridge_url=settings.WHATSAPP_BAILEYS_BRIDGE_URL)
+                poller.start()
+        elif poller is not None:
+            await poller.stop()
+            poller = None
+        await asyncio.sleep(5)
 
 
 async def notification_loop(app):

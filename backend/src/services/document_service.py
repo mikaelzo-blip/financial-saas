@@ -54,14 +54,19 @@ class DocumentService:
         year = date.today().year
         prefix = f"DOC-{year}-"
 
-        stmt = select(func.count()).select_from(Document).where(
+        stmt = select(Document.document_code).where(
             and_(
                 Document.organization_id == organization_id,
                 Document.document_code.like(f"{prefix}%")
             )
         )
-        count = await self.session.scalar(stmt) or 0
-        next_seq = count + 1
+        codes = (await self.session.execute(stmt)).scalars().all()
+        max_seq = 0
+        for code in codes:
+            suffix = code[len(prefix):]
+            if suffix.isdigit():
+                max_seq = max(max_seq, int(suffix))
+        next_seq = max_seq + 1
         return f"{prefix}{next_seq:06d}"
 
     async def get_document_by_hash(

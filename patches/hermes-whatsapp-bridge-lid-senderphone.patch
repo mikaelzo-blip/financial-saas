@@ -1,0 +1,183 @@
+diff --git a/scripts/whatsapp-bridge/bridge.js b/scripts/whatsapp-bridge/bridge.js
+index 234cbef279..1b33ea965a 100644
+--- a/scripts/whatsapp-bridge/bridge.js
++++ b/scripts/whatsapp-bridge/bridge.js
+@@ -249,22 +249,46 @@ function getContextInfo(messageContent) {
+ 
+ mkdirSync(SESSION_DIR, { recursive: true });
+ 
+-// Build LID → phone reverse map from session files (lid-mapping-{phone}.json)
++// Build LID → phone reverse map from session files (lid-mapping-{phone}.json and lid-mapping-{lid}_reverse.json)
+ function buildLidMap() {
+   const map = {};
+   try {
+     for (const f of readdirSync(SESSION_DIR)) {
+-      const m = f.match(/^lid-mapping-(\d+)\.json$/);
+-      if (!m) continue;
+-      const phone = m[1];
+-      const lid = JSON.parse(readFileSync(path.join(SESSION_DIR, f), 'utf8'));
+-      if (lid) map[String(lid)] = phone;
++      const mPhone = f.match(/^lid-mapping-(\d+)\.json$/);
++      if (mPhone) {
++        const phone = mPhone[1];
++        const lid = JSON.parse(readFileSync(path.join(SESSION_DIR, f), 'utf8'));
++        if (lid) map[String(lid)] = phone;
++        continue;
++      }
++      const mReverse = f.match(/^lid-mapping-(\d+)_reverse\.json$/);
++      if (mReverse) {
++        const lid = mReverse[1];
++        const phone = JSON.parse(readFileSync(path.join(SESSION_DIR, f), 'utf8'));
++        if (phone) map[String(lid)] = String(phone);
++      }
+     }
+   } catch {}
+   return map;
+ }
+ let lidToPhone = buildLidMap();
+ 
++function resolveSenderPhone(senderId, senderNumber) {
++  if (senderId.endsWith('@s.whatsapp.net')) {
++    const raw = senderNumber.replace(/^\+/, '');
++    return /^\d+$/.test(raw) ? raw : undefined;
++  }
++  if (senderId.endsWith('@lid')) {
++    const mapped = lidToPhone[senderNumber];
++    if (mapped) {
++      const raw = String(mapped).replace(/^\+/, '');
++      return /^\d+$/.test(raw) ? raw : undefined;
++    }
++    return undefined;
++  }
++  return undefined;
++}
++
+ const logger = pino({ level: 'warn' });
+ 
+ // Message queue for polling
+@@ -345,10 +369,13 @@ function enqueuePollUpdateEvent({ key, update, selectedOptions, aggregation }) {
+   const dedupeId = `poll:${pollId}:${senderId}:${selectedOptions.join('|')}`;
+   if (recentlyProcessedPollUpdates.has(dedupeId)) return;
+   recentlyProcessedPollUpdates.remember(dedupeId);
++  const senderNumber = senderId.replace(/@.*/, '');
++  const senderPhone = resolveSenderPhone(senderId, senderNumber);
+   const event = {
+     messageId: `${pollId || 'poll'}:update:${Date.now()}`,
+     chatId,
+     senderId,
++    senderPhone,
+     senderName: senderId.replace(/@.*/, ''),
+     chatName: chatId.replace(/@.*/, ''),
+     isGroup: chatId.endsWith('@g.us'),
+@@ -546,6 +573,7 @@ async function startSocket() {
+       const senderId = msg.key.participant || chatId;
+       const isGroup = chatId.endsWith('@g.us');
+       const senderNumber = senderId.replace(/@.*/, '');
++      const senderPhone = resolveSenderPhone(senderId, senderNumber);
+       emitDebugEvent({
+         stage: 'upsert',
+         type,
+@@ -724,6 +752,7 @@ async function startSocket() {
+         chatId,
+         senderId,
+         senderNumber,
++        senderPhone,
+         botIds,
+         isGroup,
+         downloadMedia: async (mediaMsg) => downloadMediaMessage(mediaMsg, 'buffer', {}, { logger, reuploadRequest: sock.updateMediaMessage }),
+@@ -733,6 +762,9 @@ async function startSocket() {
+           audio: AUDIO_CACHE_DIR,
+         },
+       });
++      if (senderPhone) {
++        event.senderPhone = senderPhone;
++      }
+       event.fromOwner = fromOwner;
+ 
+       // Ignore Hermes' own reply messages in self-chat mode to avoid loops.
+diff --git a/scripts/whatsapp-bridge/bridge.native.test.mjs b/scripts/whatsapp-bridge/bridge.native.test.mjs
+index b4e123a265..0c7616b625 100644
+--- a/scripts/whatsapp-bridge/bridge.native.test.mjs
++++ b/scripts/whatsapp-bridge/bridge.native.test.mjs
+@@ -411,4 +411,61 @@ import {
+   console.log('  ✓ captioned failed download keeps caption and appends note');
+ }
+ 
++{
++  const msg = {
++    key: { id: 'm-lid', remoteJid: '241798068883662@lid', participant: '241798068883662@lid' },
++    message: { conversation: 'hello' },
++    messageTimestamp: 123,
++  };
++  const event = await extractBridgeEvent({
++    msg,
++    chatId: '241798068883662@lid',
++    senderId: '241798068883662@lid',
++    senderNumber: '241798068883662',
++    senderPhone: '6285712342760',
++    botIds: [],
++    isGroup: false,
++  });
++  assert.equal(event.senderPhone, '6285712342760');
++  console.log('  ✓ known LID populates senderPhone');
++}
++
++{
++  const msg = {
++    key: { id: 'm-phone', remoteJid: '6285712342760@s.whatsapp.net', participant: '6285712342760@s.whatsapp.net' },
++    message: { conversation: 'normal phone' },
++    messageTimestamp: 123,
++  };
++  const event = await extractBridgeEvent({
++    msg,
++    chatId: '6285712342760@s.whatsapp.net',
++    senderId: '6285712342760@s.whatsapp.net',
++    senderNumber: '6285712342760',
++    senderPhone: '6285712342760',
++    botIds: [],
++    isGroup: false,
++  });
++  assert.equal(event.senderPhone, '6285712342760');
++  console.log('  ✓ normal phone JID populates senderPhone');
++}
++
++{
++  const msg = {
++    key: { id: 'm-unresolved', remoteJid: '999999999999999@lid', participant: '999999999999999@lid' },
++    message: { conversation: 'unknown lid' },
++    messageTimestamp: 123,
++  };
++  const event = await extractBridgeEvent({
++    msg,
++    chatId: '999999999999999@lid',
++    senderId: '999999999999999@lid',
++    senderNumber: '999999999999999',
++    senderPhone: undefined,
++    botIds: [],
++    isGroup: false,
++  });
++  assert.equal(event.senderPhone, undefined);
++  console.log('  ✓ unresolvable LID leaves senderPhone undefined');
++}
++
+ console.log('\n✅ All WhatsApp native bridge helper tests passed.');
+diff --git a/scripts/whatsapp-bridge/bridge_helpers.js b/scripts/whatsapp-bridge/bridge_helpers.js
+index 398521feee..eef5d63e7c 100644
+--- a/scripts/whatsapp-bridge/bridge_helpers.js
++++ b/scripts/whatsapp-bridge/bridge_helpers.js
+@@ -301,6 +301,7 @@ export async function extractBridgeEvent({
+   chatId,
+   senderId,
+   senderNumber,
++  senderPhone,
+   botIds = [],
+   isGroup = false,
+   downloadMedia,
+@@ -465,6 +466,7 @@ export async function extractBridgeEvent({
+     messageId: msg.key.id,
+     chatId,
+     senderId,
++    ...(senderPhone ? { senderPhone } : {}),
+     senderName: msg.pushName || senderNumber,
+     chatName: isGroup ? (chatId.split('@')[0]) : (msg.pushName || senderNumber),
+     isGroup,

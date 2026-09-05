@@ -57,6 +57,23 @@ def test_parse_known_lid_with_resolved_phone():
     assert events[0].sender_phone == "+6285712342760"
 
 
+def test_queue_and_messages_endpoint_format_preserves_sender_phone():
+    provider = BaileysBridgeWhatsAppProvider()
+    queue_event = {
+        "messageId": "msg_queue_001",
+        "chatId": "241798068883662@lid",
+        "senderId": "241798068883662@lid",
+        "senderPhone": "6285712342760",
+        "timestamp": 1725494400,
+        "body": "Queue event with senderPhone",
+        "hasMedia": False,
+    }
+    messages_payload = {"messages": [queue_event]}
+    events = provider.parse(messages_payload)
+    assert len(events) == 1
+    assert events[0].sender_phone == "+6285712342760"
+
+
 # 3. unknown/unresolved LID -> rejected (no senderPhone emitted or unresolved)
 def test_parse_unknown_unresolved_lid_rejected():
     provider = BaileysBridgeWhatsAppProvider()

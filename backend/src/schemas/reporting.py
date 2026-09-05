@@ -308,6 +308,11 @@ class DashboardSummaryResponse(BaseModel):
     organization_name: str
     as_of_date: date
     cash_and_bank_balance: Decimal
+    cash_in_period: Decimal = Decimal("0.00")
+    cash_out_period: Decimal = Decimal("0.00")
+    net_cash_flow: Decimal = Decimal("0.00")
+    unallocated_cash: Decimal = Decimal("0.00")
+    project_spending: Decimal = Decimal("0.00")
     accounts_receivable_outstanding: Decimal
     accounts_payable_outstanding: Decimal
     revenue_ytd: Decimal
@@ -317,5 +322,6 @@ class DashboardSummaryResponse(BaseModel):
     active_projects_count: int
     review_queue_pending_count: int
     integrity_status: str  # "VALID" | "INTEGRITY_ERROR"
+
 
 

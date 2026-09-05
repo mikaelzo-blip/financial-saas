@@ -1,7 +1,7 @@
 # Implementation Progress — PRD v2.0 Remediation
 
 ## Current Phase
-P5 — Project Cost & Owner Dashboard
+P6 — Accounting Period, Opening Balance & Fixed Assets
 
 ## Completed
 - [x] **P0 — Accounting & Data Integrity First**
@@ -33,12 +33,17 @@ P5 — Project Cost & Owner Dashboard
   - [x] P4.2 MatchEvidence generation across Document, OCR Quality, Counterparty, and Project checks
   - [x] P4.3 Strict ProcessingPolicyDecision states: AUTO_SAFE, REVIEW_REQUIRED, BLOCKED, FAILED
   - [x] P4.4 Safety gate: eliminated confidence > 95% auto-approval bypass; unknown entities route to REVIEW_REQUIRED
+- [x] **P5 — Project Cost & Owner Dashboard**
+  - [x] P5.1 Dashboard API (cash in/out period, net cash flow, unallocated cash, project spending, exceptions)
+  - [x] P5.2 Project Detail API (project cash, project accrual, cost categories, vendor spend, documents, unallocated items)
+  - [x] P5.3 Deprioritize Budget vs Actual in favor of real cash & project spending visibility
 
 ## In Progress
-- [ ] P5 — Project Cost & Owner Dashboard
-  - [ ] P5.1 Dashboard API (cash in/out period, net cash flow, unallocated cash, project spending, exceptions)
-  - [ ] P5.2 Project Detail API (project cash, project accrual, cost categories, unallocated items)
-  - [ ] P5.3 Deprioritize Budget vs Actual in favor of real cash & project spending visibility
+- [ ] P6 — Accounting Period, Opening Balance & Fixed Assets
+  - [ ] P6.1 AccountingPeriod model & migration (OPEN, SOFT_CLOSED, CLOSED)
+  - [ ] P6.2 Block posting to closed period via AccountingEngine / ProcessingPolicy
+  - [ ] P6.3 Opening Balance migration/import workflow for consultant starting balances
+  - [ ] P6.4 FixedAsset Register (Asset + depreciation models & schedules)
 
 ## Pending
 - [ ] P6 — Accounting Period, Opening Balance & Fixed Assets

@@ -53,7 +53,7 @@ class ProjectCostService:
                 and_(
                     JournalEntry.organization_id == organization_id,
                     JournalLine.project_id == project_id,
-                    ChartOfAccount.account_code == "5101"
+                    ChartOfAccount.account_code.like("5101%")
                 )
             )
             .group_by(JournalLine.cost_category)
@@ -122,7 +122,7 @@ class ProjectCostService:
                 and_(
                     JournalEntry.organization_id == organization_id,
                     JournalLine.project_id == project_id,
-                    ChartOfAccount.account_code == "4101"
+                    ChartOfAccount.account_code.like("4101%")
                 )
             )
         )
@@ -165,6 +165,7 @@ class ProjectCostService:
             raise EntityNotFoundException("Project", project_id)
 
         profitability = await self.get_project_profitability(organization_id, project_id)
+        cost_data = await self.get_project_cost_breakdown(organization_id, project_id)
 
         # Invoicing & Collection metrics
         inv_stmt = (
@@ -198,6 +199,78 @@ class ProjectCostService:
         total_cash_received = (await self.session.scalar(rec_stmt)) or Decimal("0.00")
         outstanding_ar = total_invoiced - total_cash_received
 
+        # Cash Spent directly on cash/bank accounts for this project
+        cash_spent_stmt = (
+            select(
+                func.coalesce(func.sum(JournalLine.credit_amount), Decimal("0.00"))
+            )
+            .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
+            .join(ChartOfAccount, JournalLine.account_id == ChartOfAccount.id)
+            .where(
+                and_(
+                    JournalEntry.organization_id == organization_id,
+                    JournalLine.project_id == project_id,
+                    ChartOfAccount.account_code.like("1101%")
+                )
+            )
+        )
+        cash_spent = (await self.session.scalar(cash_spent_stmt)) or Decimal("0.00")
+
+        # Vendor Spending breakdown
+        vendor_spend_stmt = (
+            select(
+                JournalLine.counterparty_id,
+                func.coalesce(func.sum(JournalLine.debit_amount - JournalLine.credit_amount), Decimal("0.00")).label("spend")
+            )
+            .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
+            .join(ChartOfAccount, JournalLine.account_id == ChartOfAccount.id)
+            .where(
+                and_(
+                    JournalEntry.organization_id == organization_id,
+                    JournalLine.project_id == project_id,
+                    ChartOfAccount.account_code.like("5101%"),
+                    JournalLine.counterparty_id.isnot(None)
+                )
+            )
+            .group_by(JournalLine.counterparty_id)
+        )
+        vendor_rows = (await self.session.execute(vendor_spend_stmt)).all()
+        vendor_spend = []
+        for c_id, spend in vendor_rows:
+            from src.models.counterparty import Counterparty
+            c_name = await self.session.scalar(select(Counterparty.name).where(Counterparty.id == c_id))
+            vendor_spend.append({
+                "counterparty_id": str(c_id),
+                "counterparty_name": c_name or "Unknown",
+                "total_spend": spend
+            })
+
+        # Documents attached to this project
+        from src.models.document import Document, ProjectDocumentLink
+        doc_stmt = (
+            select(Document.id, Document.document_type, Document.document_code, Document.file_name, Document.created_at)
+            .join(ProjectDocumentLink, Document.id == ProjectDocumentLink.document_id)
+            .where(
+                and_(
+                    Document.organization_id == organization_id,
+                    ProjectDocumentLink.project_id == project_id
+                )
+            )
+            .order_by(Document.created_at.desc())
+        )
+        docs = (await self.session.execute(doc_stmt)).all()
+        doc_list = [{
+            "id": str(d.id),
+            "document_type": d.document_type.value if hasattr(d.document_type, "value") else str(d.document_type),
+            "document_code": d.document_code,
+            "file_name": d.file_name,
+            "created_at": d.created_at.isoformat() if d.created_at else None
+        } for d in docs]
+
+        # Unallocated items for this project
+        from src.models.money_movement import SettlementAllocation
+        unalloc_items = []
+
         return {
             "project_id": str(project.id),
             "project_code": project.project_code,
@@ -217,6 +290,12 @@ class ProjectCostService:
                 "total_invoiced": total_invoiced,
                 "total_cash_received": total_cash_received,
                 "outstanding_receivable": outstanding_ar,
+                "cash_spent": cash_spent,
+                "net_cash_flow": total_cash_received - cash_spent,
                 "project_cash_surplus": total_cash_received - profitability["actual_project_cost"]
-            }
+            },
+            "cost_categories": cost_data["category_breakdown"],
+            "vendor_spend": vendor_spend,
+            "documents": doc_list,
+            "unallocated_items": unalloc_items
         }

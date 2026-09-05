@@ -1,7 +1,7 @@
 # Implementation Progress — PRD v2.0 Remediation
 
 ## Current Phase
-P7 — Reliability & Operations
+All Phases P0–P7 Complete
 
 ## Completed
 - [x] **P0 — Accounting & Data Integrity First**
@@ -42,18 +42,22 @@ P7 — Reliability & Operations
   - [x] P6.2 Block posting to closed period via ProcessingPolicyService
   - [x] P6.3 Opening Balance migration/import workflow (OpeningBalanceService) for consultant starting balances
   - [x] P6.4 FixedAsset Register model & migration 019
+- [x] **P7 — Reliability & Operations**
+  - [x] P7.1 Background Job Queue in PostgreSQL (BackgroundJob model, migration 020, JobQueueService)
+  - [x] P7.2 Sequence safety for document code generation (DocumentService)
+  - [x] P7.3 Health & readiness endpoints (/health, /ready) and operational test suite
 
 ## In Progress
-- [ ] P7 — Reliability & Operations
-  - [ ] P7.1 Background Job Queue in PostgreSQL (background_jobs table)
-  - [ ] P7.2 Sequence safety for document code generation
-  - [ ] P7.3 Health endpoint & operational verification
+- [ ] None (All remediation phases P0-P7 implemented and verified)
 
 ## Verification
-- Backend tests: PASS (162 unit + 151 integration passing)
-- PostgreSQL migration: PASS (019_p6_periods_and_assets head applied on PostgreSQL)
+- Backend unit tests: PASS (165 passed in 13.67s)
+- Backend integration tests: PASS (151 passed in 25.63s)
+- Total backend test suite: 316 passed, 0 failed
+- PostgreSQL migration: PASS (all migrations through 020_p7_background_jobs applied on PostgreSQL)
 - Frontend typecheck: PASS
 - Frontend build: PASS
+- Frontend tests: PASS (48 passed)
 
 ## Decisions Made
 - Multi-evidence scoring strictly gates candidate promotion: high confidence without counterparty or project match is blocked from auto-posting.

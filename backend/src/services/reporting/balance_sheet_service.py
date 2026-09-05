@@ -21,6 +21,8 @@ def classify_asset_report_group(account_code: str, report_group: str | None) -> 
         return "CURRENT_ASSETS"
     if report_group in {"FIXED_ASSETS", "Aset Tetap"}:
         return "FIXED_ASSETS"
+    if report_group in {"CURRENT_ASSETS", "Aset Lancar", "Kas & Bank"}:
+        return "CURRENT_ASSETS"
     return "FIXED_ASSETS" if account_code.startswith("15") else "CURRENT_ASSETS"
 
 

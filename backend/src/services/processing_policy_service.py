@@ -100,6 +100,29 @@ class ProcessingPolicyService:
                 details={"transaction_id": str(transaction_id), "unresolved_flags": flags_str}
             )
 
+        # 1b. Accounting Period Status Guard (P6.2)
+        from src.models.accounting_period import AccountingPeriod
+        from src.models.enums import AccountingPeriodStatus
+        period_stmt = select(AccountingPeriod).where(
+            and_(
+                AccountingPeriod.organization_id == organization_id,
+                AccountingPeriod.start_date <= trx.transaction_date,
+                AccountingPeriod.end_date >= trx.transaction_date,
+                AccountingPeriod.status == AccountingPeriodStatus.CLOSED
+            )
+        )
+        closed_period = await self.session.scalar(period_stmt)
+        if closed_period:
+            raise InvariantViolationException(
+                f"Cannot post transaction {trx.transaction_code}. Accounting period '{closed_period.period_name}' is CLOSED.",
+                details={
+                    "transaction_id": str(transaction_id),
+                    "transaction_date": str(trx.transaction_date),
+                    "period_name": closed_period.period_name,
+                    "period_status": closed_period.status.value
+                }
+            )
+
         # 2. Sensitive Type Role Guard
         if not bypass_role_check and trx.transaction_type in self.SENSITIVE_TYPES:
             if actor_role is not None and actor_role not in (UserRole.ADMIN, UserRole.MANAGER):

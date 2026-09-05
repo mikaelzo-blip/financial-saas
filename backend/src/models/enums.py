@@ -237,6 +237,23 @@ class ReconciliationStatus(str, Enum):
     REVIEW_REQUIRED = "REVIEW_REQUIRED"
 
 
+class AccountingPeriodStatus(str, Enum):
+    OPEN = "OPEN"
+    SOFT_CLOSED = "SOFT_CLOSED"
+    CLOSED = "CLOSED"
+
+
+class DepreciationMethod(str, Enum):
+    STRAIGHT_LINE = "STRAIGHT_LINE"
+    DOUBLE_DECLINING = "DOUBLE_DECLINING"
+
+
+class AssetStatus(str, Enum):
+    ACTIVE = "ACTIVE"
+    DISPOSED = "DISPOSED"
+    WRITTEN_OFF = "WRITTEN_OFF"
+
+
 class StatementImportStatus(str, Enum):
     PENDING = "PENDING"
     COMPLETED = "COMPLETED"

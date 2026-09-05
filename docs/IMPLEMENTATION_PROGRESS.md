@@ -1,7 +1,7 @@
 # Implementation Progress — PRD v2.0 Remediation
 
 ## Current Phase
-P6 — Accounting Period, Opening Balance & Fixed Assets
+P7 — Reliability & Operations
 
 ## Completed
 - [x] **P0 — Accounting & Data Integrity First**
@@ -37,21 +37,21 @@ P6 — Accounting Period, Opening Balance & Fixed Assets
   - [x] P5.1 Dashboard API (cash in/out period, net cash flow, unallocated cash, project spending, exceptions)
   - [x] P5.2 Project Detail API (project cash, project accrual, cost categories, vendor spend, documents, unallocated items)
   - [x] P5.3 Deprioritize Budget vs Actual in favor of real cash & project spending visibility
+- [x] **P6 — Accounting Period, Opening Balance & Fixed Assets**
+  - [x] P6.1 AccountingPeriod model & migration 019 (OPEN, SOFT_CLOSED, CLOSED)
+  - [x] P6.2 Block posting to closed period via ProcessingPolicyService
+  - [x] P6.3 Opening Balance migration/import workflow (OpeningBalanceService) for consultant starting balances
+  - [x] P6.4 FixedAsset Register model & migration 019
 
 ## In Progress
-- [ ] P6 — Accounting Period, Opening Balance & Fixed Assets
-  - [ ] P6.1 AccountingPeriod model & migration (OPEN, SOFT_CLOSED, CLOSED)
-  - [ ] P6.2 Block posting to closed period via AccountingEngine / ProcessingPolicy
-  - [ ] P6.3 Opening Balance migration/import workflow for consultant starting balances
-  - [ ] P6.4 FixedAsset Register (Asset + depreciation models & schedules)
-
-## Pending
-- [ ] P6 — Accounting Period, Opening Balance & Fixed Assets
 - [ ] P7 — Reliability & Operations
+  - [ ] P7.1 Background Job Queue in PostgreSQL (background_jobs table)
+  - [ ] P7.2 Sequence safety for document code generation
+  - [ ] P7.3 Health endpoint & operational verification
 
 ## Verification
-- Backend tests: PASS (159 passed in 20.27s)
-- PostgreSQL migration: PASS (018_remote_inbox head)
+- Backend tests: PASS (162 unit + 151 integration passing)
+- PostgreSQL migration: PASS (019_p6_periods_and_assets head applied on PostgreSQL)
 - Frontend typecheck: PASS
 - Frontend build: PASS
 

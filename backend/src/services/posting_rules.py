@@ -348,6 +348,38 @@ class PostingRuleRegistry:
                 )
             )
 
+        elif t_type == TransactionType.JOURNAL_ADJUSTMENT:
+            # Multi-leg journal adjustment or opening balance from allocations
+            if not allocations:
+                raise InvariantViolationException("JOURNAL_ADJUSTMENT requires explicit allocations.")
+            for alloc in allocations:
+                # Format: "DR:1101" or "CR:2101" or "1101" (defaults to DR)
+                notes_val = (alloc.notes or "").strip()
+                if notes_val.startswith("CR:"):
+                    code = notes_val[3:].strip()
+                    legs.append(
+                        GeneratedJournalLeg(
+                            account_code=code,
+                            debit_amount=Decimal("0.00"),
+                            credit_amount=alloc.amount,
+                            project_id=alloc.project_id,
+                            cost_category=alloc.cost_category,
+                            expense_category=alloc.expense_category
+                        )
+                    )
+                else:
+                    code = notes_val[3:].strip() if notes_val.startswith("DR:") else notes_val
+                    legs.append(
+                        GeneratedJournalLeg(
+                            account_code=code,
+                            debit_amount=alloc.amount,
+                            credit_amount=Decimal("0.00"),
+                            project_id=alloc.project_id,
+                            cost_category=alloc.cost_category,
+                            expense_category=alloc.expense_category
+                        )
+                    )
+
         elif t_type == TransactionType.OWNER_CONTRIBUTION:
             # Debit Cash/Bank (1101)
             legs.append(

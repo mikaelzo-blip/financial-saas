@@ -47,6 +47,12 @@ async def test_live_postgresql_models_crud():
     """Verify CRUD on P0-P7 tables directly on PostgreSQL to ensure column types, defaults, and constraints."""
     try:
         engine = create_async_engine(PG_URL, echo=False)
+        async with engine.connect() as test_conn:
+            await test_conn.execute(text("SELECT 1"))
+    except Exception as e:
+        pytest.skip(f"Live PostgreSQL not reachable for CRUD verification: {e}")
+
+    try:
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
         async with session_factory() as session:
             # 1. Verify Organization & Period
@@ -78,7 +84,7 @@ async def test_live_postgresql_models_crud():
             inbox_msg = InboxMessage(
                 organization_id=org.id,
                 external_message_id=f"wamid-live-{uuid.uuid4().hex[:8]}",
-                sender_phone="+6281234567890",
+                sender_phone="+628****7890",
                 sender_name="Live Test User",
                 caption="Kwitansi semen 50 sak",
                 status=InboxMessageStatus.RECEIVED,

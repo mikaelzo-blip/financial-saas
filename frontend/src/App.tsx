@@ -34,6 +34,8 @@ import { APAgingPage } from './pages/reports/APAgingPage';
 import { ProjectProfitabilityPage } from './pages/reports/ProjectProfitabilityPage';
 import { ProjectCashPositionPage } from './pages/reports/ProjectCashPositionPage';
 import { BudgetVsActualPage } from './pages/reports/BudgetVsActualPage';
+import { WhatsAppInboxPage } from './pages/inbox/WhatsAppInboxPage';
+import { BankReconciliationPage } from './pages/reconciliation/BankReconciliationPage';
 
 export const App: React.FC = () => {
   return (
@@ -54,6 +56,9 @@ export const App: React.FC = () => {
               >
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="dashboard" element={<DashboardPage />} />
+                <Route path="whatsapp-inbox" element={<WhatsAppInboxPage />} />
+                <Route path="inbox" element={<Navigate to="/whatsapp-inbox" replace />} />
+                <Route path="bank-reconciliation" element={<BankReconciliationPage />} />
                 
                 {/* Projects */}
                 <Route path="projects" element={<ProjectListPage />} />

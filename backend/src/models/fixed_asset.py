@@ -69,7 +69,7 @@ class FixedAsset(Base):
         nullable=False
     )
     depreciation_method: Mapped[DepreciationMethod] = mapped_column(
-        SAEnum(DepreciationMethod, name="depreciation_method", create_type=False),
+        SAEnum(DepreciationMethod, native_enum=False, length=50),
         nullable=False,
         default=DepreciationMethod.STRAIGHT_LINE
     )
@@ -79,7 +79,7 @@ class FixedAsset(Base):
         default=Decimal("0.00")
     )
     status: Mapped[AssetStatus] = mapped_column(
-        SAEnum(AssetStatus, name="asset_status", create_type=False),
+        SAEnum(AssetStatus, native_enum=False, length=50),
         nullable=False,
         default=AssetStatus.ACTIVE
     )

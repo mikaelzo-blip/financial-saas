@@ -43,6 +43,67 @@ class DashboardService:
         )
         cash_balance = Decimal(str((await session.execute(cash_stmt)).scalar() or "0.00"))
 
+        # 1b. Cash In, Cash Out, and Net Cash Flow (MTD / Current Month)
+        start_of_month = date(as_of.year, as_of.month, 1)
+        cash_flow_stmt = select(
+            func.coalesce(func.sum(JournalLine.debit_amount), Decimal("0.00")),
+            func.coalesce(func.sum(JournalLine.credit_amount), Decimal("0.00"))
+        ).join(
+            JournalEntry, JournalLine.journal_entry_id == JournalEntry.id
+        ).join(
+            ChartOfAccount, JournalLine.account_id == ChartOfAccount.id
+        ).where(
+            and_(
+                JournalEntry.organization_id == organization_id,
+                JournalEntry.posting_date >= start_of_month,
+                JournalEntry.posting_date <= as_of,
+                ChartOfAccount.account_code.like("1101%")
+            )
+        )
+        dr_cash, cr_cash = (await session.execute(cash_flow_stmt)).one()
+        cash_in_period = Decimal(str(dr_cash))
+        cash_out_period = Decimal(str(cr_cash))
+        net_cash_flow = cash_in_period - cash_out_period
+
+        # 1c. Project Spending (MTD)
+        proj_spend_stmt = select(
+            func.coalesce(func.sum(JournalLine.debit_amount), Decimal("0.00"))
+        ).join(
+            JournalEntry, JournalLine.journal_entry_id == JournalEntry.id
+        ).join(
+            ChartOfAccount, JournalLine.account_id == ChartOfAccount.id
+        ).where(
+            and_(
+                JournalEntry.organization_id == organization_id,
+                JournalEntry.posting_date >= start_of_month,
+                JournalEntry.posting_date <= as_of,
+                JournalLine.project_id.isnot(None),
+                ChartOfAccount.account_type == AccountType.EXPENSE
+            )
+        )
+        project_spending = Decimal(str((await session.execute(proj_spend_stmt)).scalar() or "0.00"))
+
+        # 1d. Unallocated Cash
+        from src.models.money_movement import MoneyMovement, Settlement
+        unalloc_stmt = select(
+            func.coalesce(func.sum(MoneyMovement.amount), Decimal("0.00"))
+        ).where(
+            and_(
+                MoneyMovement.organization_id == organization_id,
+                MoneyMovement.movement_date <= as_of
+            )
+        )
+        total_movements = Decimal(str((await session.execute(unalloc_stmt)).scalar() or "0.00"))
+
+        settled_stmt = select(
+            func.coalesce(func.sum(Settlement.amount), Decimal("0.00"))
+        ).where(
+            Settlement.organization_id == organization_id
+        )
+        total_settled = Decimal(str((await session.execute(settled_stmt)).scalar() or "0.00"))
+        unallocated_cash = max(Decimal("0.00"), total_movements - total_settled)
+
+
         # 2. AR Outstanding
         ar_invoices_stmt = select(CustomerInvoice).where(
             and_(
@@ -164,6 +225,11 @@ class DashboardService:
             organization_name=org_name,
             as_of_date=as_of,
             cash_and_bank_balance=cash_balance,
+            cash_in_period=cash_in_period,
+            cash_out_period=cash_out_period,
+            net_cash_flow=net_cash_flow,
+            unallocated_cash=unallocated_cash,
+            project_spending=project_spending,
             accounts_receivable_outstanding=ar_outstanding,
             accounts_payable_outstanding=ap_outstanding,
             revenue_ytd=tot_rev_ytd,
@@ -174,3 +240,4 @@ class DashboardService:
             review_queue_pending_count=pending_reviews,
             integrity_status="VALID" if is_balanced else "INTEGRITY_ERROR"
         )
+

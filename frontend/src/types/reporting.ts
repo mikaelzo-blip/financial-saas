@@ -265,6 +265,11 @@ export interface DashboardSummaryResponse {
   organization_name: string;
   as_of_date: string;
   cash_and_bank_balance: number | string;
+  cash_in_period: number | string;
+  cash_out_period: number | string;
+  net_cash_flow: number | string;
+  unallocated_cash: number | string;
+  project_spending: number | string;
   accounts_receivable_outstanding: number | string;
   accounts_payable_outstanding: number | string;
   revenue_ytd: number | string;

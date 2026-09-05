@@ -1,6 +1,9 @@
 import uuid
-from typing import List, Optional
-from sqlalchemy import select, and_
+from decimal import Decimal
+from datetime import date
+from typing import List, Optional, Dict, Any
+from sqlalchemy import select, and_, exists
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -173,3 +176,62 @@ class PaymentAccountService:
         self.session.add(account)
         await self.session.flush()
         return account
+
+    async def get_payment_account_balance(
+        self,
+        organization_id: uuid.UUID,
+        payment_account_id: uuid.UUID,
+        as_of_date: Optional[date] = None
+    ) -> Decimal:
+        """
+        Calculates the authoritative ledger balance for a specific payment account
+        from journal lines joined with journal entries.
+        Dr increases asset/cash, Cr decreases asset/cash.
+        """
+        from src.models.journal import JournalEntry, JournalLine
+        from sqlalchemy import func
+
+        # First verify payment account exists
+        account = await self.get_payment_account(organization_id, payment_account_id)
+
+        # Base query on JournalLine
+        stmt = (
+            select(
+                func.coalesce(func.sum(JournalLine.debit_amount), Decimal("0.00")),
+                func.coalesce(func.sum(JournalLine.credit_amount), Decimal("0.00"))
+            )
+            .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
+            .where(
+                and_(
+                    JournalEntry.organization_id == organization_id,
+                    JournalLine.payment_account_id == payment_account_id
+                )
+            )
+        )
+        if as_of_date:
+            stmt = stmt.where(JournalEntry.posting_date <= as_of_date)
+
+        result = await self.session.execute(stmt)
+        total_dr, total_cr = result.one()
+        return Decimal(str(total_dr)) - Decimal(str(total_cr))
+
+    async def list_payment_accounts_with_balances(
+        self,
+        organization_id: uuid.UUID,
+        as_of_date: Optional[date] = None
+    ) -> List[Dict[str, Any]]:
+        accounts = await self.list_payment_accounts(organization_id, active_only=False)
+        res = []
+        for acc in accounts:
+            bal = await self.get_payment_account_balance(organization_id, acc.id, as_of_date)
+            res.append({
+                "id": acc.id,
+                "name": acc.name,
+                "bank_name": acc.bank_name,
+                "account_number": acc.account_number,
+                "is_active": acc.is_active,
+                "coa_account_id": acc.coa_account_id,
+                "balance": bal
+            })
+        return res
+

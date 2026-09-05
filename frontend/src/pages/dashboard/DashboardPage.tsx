@@ -144,6 +144,65 @@ export const DashboardPage: React.FC = () => {
             </Card>
           </div>
 
+          {/* Row 1b: Owner Cash Flow & Project Spending Visibility */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Arus Kas Masuk (MTD) */}
+            <Card className="p-4 bg-emerald-50/40 border-emerald-100">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase text-slate-500">Kas Masuk Bulan Ini</span>
+                <span className="text-xs font-bold text-emerald-600">IN</span>
+              </div>
+              <p className="text-lg font-bold font-mono tabular-nums mt-2 text-emerald-700">
+                {formatIDR(metrics.cash_in_period)}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-1">Penerimaan kas riil</p>
+            </Card>
+
+            {/* Arus Kas Keluar (MTD) */}
+            <Card className="p-4 bg-rose-50/40 border-rose-100">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase text-slate-500">Kas Keluar Bulan Ini</span>
+                <span className="text-xs font-bold text-rose-600">OUT</span>
+              </div>
+              <p className="text-lg font-bold font-mono tabular-nums mt-2 text-rose-700">
+                {formatIDR(metrics.cash_out_period)}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-1">Pengeluaran kas riil</p>
+            </Card>
+
+            {/* Net Cash Flow */}
+            <Card className="p-4 bg-slate-50 border-slate-200">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase text-slate-500">Net Cash Flow (MTD)</span>
+                <span className="text-xs font-mono font-bold text-slate-600">NET</span>
+              </div>
+              <p className={`text-lg font-bold font-mono tabular-nums mt-2 ${
+                Number(metrics.net_cash_flow) >= 0 ? 'text-emerald-700' : 'text-rose-700'
+              }`}>
+                {formatIDR(metrics.net_cash_flow)}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-1">Surplus / defisit kas berjalan</p>
+            </Card>
+
+            {/* Belanja Proyek (MTD) */}
+            <Card
+              className="p-4 bg-blue-50/40 border-blue-100 cursor-pointer hover:border-blue-400 transition-colors"
+              onClick={() => navigate('/projects')}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase text-slate-500">Belanja Proyek Bulan Ini</span>
+                <span className="text-xs font-bold text-blue-600">PROYEK</span>
+              </div>
+              <p className="text-lg font-bold font-mono tabular-nums mt-2 text-blue-800">
+                {formatIDR(metrics.project_spending)}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+                <span>Biaya langsung proyek</span>
+                <span className="text-blue-600 underline">Lihat Proyek &rarr;</span>
+              </p>
+            </Card>
+          </div>
+
           {/* Row 2: Sub-ledgers AR, AP, Review Queue */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* Piutang Usaha (AR) */}

@@ -140,12 +140,14 @@ class TransactionDocumentLink(Base):
     __tablename__ = "transaction_document_links"
 
     transaction_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("transactions.id", ondelete="CASCADE"),
         primary_key=True
     )
     document_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("documents.id", ondelete="RESTRICT"),
         primary_key=True
     )
+
     created_at: Mapped[datetime] = mapped_column(
         server_default=func.now(),
         nullable=False

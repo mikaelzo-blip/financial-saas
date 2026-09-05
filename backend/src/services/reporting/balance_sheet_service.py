@@ -21,6 +21,8 @@ def classify_asset_report_group(account_code: str, report_group: str | None) -> 
         return "CURRENT_ASSETS"
     if report_group in {"FIXED_ASSETS", "Aset Tetap"}:
         return "FIXED_ASSETS"
+    if report_group in {"CURRENT_ASSETS", "Aset Lancar", "Kas & Bank"}:
+        return "CURRENT_ASSETS"
     return "FIXED_ASSETS" if account_code.startswith("15") else "CURRENT_ASSETS"
 
 
@@ -64,11 +66,13 @@ class BalanceSheetService:
         current_assets_lines: List[ReportLineItem] = []
         fixed_assets_lines: List[ReportLineItem] = []
         current_liab_lines: List[ReportLineItem] = []
+        long_term_liab_lines: List[ReportLineItem] = []
         equity_lines: List[ReportLineItem] = []
 
         tot_ca = Decimal("0.00")
         tot_fa = Decimal("0.00")
         tot_cl = Decimal("0.00")
+        tot_ll = Decimal("0.00")
         tot_eq = Decimal("0.00")
 
         # Running tally for current year/period earnings (Revenue - Expenses)
@@ -83,7 +87,7 @@ class BalanceSheetService:
                 # Normal balance DEBIT
                 net = dr - cr
                 if net != Decimal("0.00") or code in ["1101", "1102"]:
-                    if classify_asset_report_group(code, acc.report_group) == "FIXED_ASSETS":
+                    if acc.report_section == "FIXED_ASSET" or classify_asset_report_group(code, acc.report_group) == "FIXED_ASSETS":
                         tot_fa += net
                         fixed_assets_lines.append(ReportLineItem(account_code=code, line_name=acc.account_name, amount=net))
                     else:
@@ -94,10 +98,15 @@ class BalanceSheetService:
                 # Normal balance CREDIT
                 net = cr - dr
                 if net != Decimal("0.00") or code in ["2101"]:
-                    tot_cl += net
-                    current_liab_lines.append(ReportLineItem(account_code=code, line_name=acc.account_name, amount=net))
+                    if acc.report_section == "LONG_TERM_LIABILITY" or code.startswith("25"):
+                        tot_ll += net
+                        long_term_liab_lines.append(ReportLineItem(account_code=code, line_name=acc.account_name, amount=net))
+                    else:
+                        tot_cl += net
+                        current_liab_lines.append(ReportLineItem(account_code=code, line_name=acc.account_name, amount=net))
 
             elif acc.account_type == AccountType.EQUITY:
+
                 # Normal balance CREDIT
                 net = cr - dr
                 if net != Decimal("0.00") or code in ["3101"]:
@@ -153,10 +162,10 @@ class BalanceSheetService:
             long_term_liabilities=ReportSection(
                 section_code="LL",
                 section_name="Kewajiban Jangka Panjang",
-                lines=[],
-                subtotal=Decimal("0.00")
+                lines=long_term_liab_lines,
+                subtotal=tot_ll
             ),
-            total_liabilities=tot_cl,
+            total_liabilities=tot_cl + tot_ll,
             equity=ReportSection(
                 section_code="EQ",
                 section_name="Ekuitas",
@@ -164,8 +173,9 @@ class BalanceSheetService:
                 subtotal=tot_eq
             ),
             total_equity=tot_eq,
-            total_liabilities_and_equity=total_liab_and_eq,
-            is_balanced=is_bal,
-            balancing_difference=diff,
-            integrity_status="VALID" if is_bal else "INTEGRITY_ERROR"
+            total_liabilities_and_equity=tot_cl + tot_ll + tot_eq,
+            is_balanced=abs(total_assets - (tot_cl + tot_ll + tot_eq)) == Decimal("0.00"),
+            balancing_difference=abs(total_assets - (tot_cl + tot_ll + tot_eq)),
+            integrity_status="VALID" if abs(total_assets - (tot_cl + tot_ll + tot_eq)) == Decimal("0.00") else "INTEGRITY_ERROR"
         )
+

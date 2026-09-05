@@ -28,14 +28,39 @@ export type TransactionType =
   | 'PAY_VENDOR_BILL'
   | 'VENDOR_ADVANCE'
   | 'SETTLE_VENDOR_ADVANCE'
+  | 'SUBCONTRACTOR_BILL'
+  | 'PAY_SUBCONTRACTOR'
+  | 'EMPLOYEE_ADVANCE'
+  | 'EMPLOYEE_SETTLEMENT'
+  | 'CUSTOMER_ADVANCE'
+  | 'REIMBURSEMENT'
+  | 'PAY_REIMBURSEMENT'
+  | 'PETTY_CASH_EXPENSE'
+  | 'TOPUP_PETTY_CASH'
+  | 'RETURN_PETTY_CASH'
+  | 'BANK_TO_CASH'
+  | 'CASH_TO_BANK'
+  | 'INTERBANK_TRANSFER'
+  | 'TRANSFER_INTERBANK'
+  | 'ASSET_PURCHASE'
+  | 'INVENTORY_PURCHASE'
+  | 'INVENTORY_USAGE'
   | 'CUSTOMER_INVOICE'
   | 'CUSTOMER_PAYMENT'
-  | 'CUSTOMER_ADVANCE'
-  | 'TRANSFER_INTERBANK'
+  | 'RETENTION_RELEASE'
+  | 'REVENUE_RECOGNITION'
+  | 'CUSTOMER_REFUND'
+  | 'VENDOR_REFUND'
   | 'OWNER_CONTRIBUTION'
   | 'OWNER_WITHDRAWAL'
-  | 'REVERSAL'
-  | 'JOURNAL_ADJUSTMENT';
+  | 'LOAN_RECEIVED'
+  | 'LOAN_PAYMENT'
+  | 'BANK_CHARGE'
+  | 'OTHER_INCOME'
+  | 'OTHER_EXPENSE'
+  | 'JOURNAL_ADJUSTMENT'
+  | 'REVERSAL';
+
 
 export type WorkflowStatus =
   | 'STAGED'
@@ -48,22 +73,93 @@ export type CostCategory =
   | 'MAT'
   | 'SUB'
   | 'LAB'
-  | 'EQP'
   | 'TRN'
-  | 'UTL'
-  | 'PRM'
-  | 'OHD'
+  | 'TRV'
+  | 'LOG'
+  | 'EQP'
+  | 'SIT'
   | 'OTH';
 
+
 export type ReviewFlag =
-  | 'AMOUNT_MISMATCH'
+  | 'OCR_LOW_CONFIDENCE'
+  | 'MISSING_DOCUMENT'
   | 'DUPLICATE_SUSPECTED'
   | 'PROJECT_UNKNOWN'
   | 'VENDOR_UNKNOWN'
   | 'CUSTOMER_UNKNOWN'
-  | 'ACCOUNT_REVIEW'
+  | 'AMOUNT_MISMATCH'
+  | 'DATE_MISMATCH'
   | 'TAX_REVIEW'
-  | 'MISSING_DOCUMENT';
+  | 'ACCOUNT_REVIEW'
+  | 'RELATED_PARTY_REVIEW';
+
+export type ReconciliationStatus =
+  | 'MATCHED'
+  | 'PARTIAL_MATCH'
+  | 'UNMATCHED_BANK'
+  | 'UNMATCHED_BOOK'
+  | 'REVIEW_REQUIRED';
+
+export type InboxMessageStatus =
+  | 'RECEIVED'
+  | 'SYNCED'
+  | 'PROCESSED'
+  | 'FAILED';
+
+export interface InboxAttachment {
+  id: string;
+  inbox_message_id: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  file_hash_sha256: string;
+  document_id?: string;
+  created_at: string;
+}
+
+export interface InboxMessage {
+  id: string;
+  organization_id: string;
+  external_message_id: string;
+  sender_phone: string;
+  sender_name?: string;
+  caption?: string;
+  status: InboxMessageStatus;
+  received_at: string;
+  synced_at?: string;
+  error_message?: string;
+  attachments: InboxAttachment[];
+}
+
+export interface BankStatementLine {
+
+  id: string;
+  import_id: string;
+  organization_id: string;
+  line_number: number;
+  transaction_date: string;
+  description: string;
+  debit: number;
+  credit: number;
+  balance?: number;
+  reference?: string;
+  counterparty_name?: string;
+  reconciliation_status: ReconciliationStatus;
+}
+
+export interface CashCompletenessDashboard {
+  payment_account_id?: string;
+  total_bank_inflow: number;
+  total_bank_outflow: number;
+  matched_amount: number;
+  unmatched_bank_amount: number;
+  unmatched_book_amount: number;
+  unallocated_cash_total: number;
+  completeness_percentage: number;
+}
+
+
 
 export interface ProjectResponse {
   id: string;

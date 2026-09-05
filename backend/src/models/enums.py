@@ -209,3 +209,77 @@ class CandidateStatus(str, Enum):
     READY_FOR_APPROVAL = "READY_FOR_APPROVAL"
     CONVERTED = "CONVERTED"
     REJECTED = "REJECTED"
+
+
+class MovementDirection(str, Enum):
+    IN = "IN"
+    OUT = "OUT"
+
+
+class MovementSourceType(str, Enum):
+    TRANSFER_PROOF = "TRANSFER_PROOF"
+    BANK_STATEMENT = "BANK_STATEMENT"
+    MANUAL = "MANUAL"
+
+
+class SettlementType(str, Enum):
+    INVOICE_PAYMENT = "INVOICE_PAYMENT"
+    PROJECT_ALLOCATION = "PROJECT_ALLOCATION"
+    INTERBANK_TRANSFER = "INTERBANK_TRANSFER"
+    DIRECT_EXPENSE = "DIRECT_EXPENSE"
+
+
+class ReconciliationStatus(str, Enum):
+    MATCHED = "MATCHED"
+    PARTIAL_MATCH = "PARTIAL_MATCH"
+    UNMATCHED_BANK = "UNMATCHED_BANK"
+    UNMATCHED_BOOK = "UNMATCHED_BOOK"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+
+
+class AccountingPeriodStatus(str, Enum):
+    OPEN = "OPEN"
+    SOFT_CLOSED = "SOFT_CLOSED"
+    CLOSED = "CLOSED"
+
+
+class DepreciationMethod(str, Enum):
+    STRAIGHT_LINE = "STRAIGHT_LINE"
+    DOUBLE_DECLINING = "DOUBLE_DECLINING"
+
+
+class AssetStatus(str, Enum):
+    ACTIVE = "ACTIVE"
+    DISPOSED = "DISPOSED"
+    WRITTEN_OFF = "WRITTEN_OFF"
+
+
+class StatementImportStatus(str, Enum):
+    PENDING = "PENDING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
+class InboxMessageStatus(str, Enum):
+    RECEIVED = "RECEIVED"
+    SYNCED = "SYNCED"
+    PROCESSED = "PROCESSED"
+    FAILED = "FAILED"
+
+
+class SessionMatchStatus(str, Enum):
+    PENDING = "PENDING"
+    MATCHED = "MATCHED"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+    REJECTED = "REJECTED"
+
+
+class ProcessingPolicyDecision(str, Enum):
+    AUTO_SAFE = "AUTO_SAFE"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+    BLOCKED = "BLOCKED"
+    FAILED = "FAILED"
+
+
+
+

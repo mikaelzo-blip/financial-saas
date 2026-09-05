@@ -80,7 +80,7 @@ class ProfitLossService:
             code = acc.account_code
 
             if acc.account_type == AccountType.REVENUE:
-                if code.startswith("71"):
+                if acc.report_section == "OTHER_INCOME" or code.startswith("42") or code.startswith("71"):
                     # Other Income
                     net = cr - dr
                     tot_other_net += net
@@ -91,25 +91,26 @@ class ProfitLossService:
                     tot_rev += net
                     rev_lines.append(ReportLineItem(account_code=code, line_name=acc.account_name, amount=net))
             elif acc.account_type == AccountType.EXPENSE:
-                if code.startswith("51"):
+                if acc.report_section == "COGS" or code.startswith("51"):
                     # COGS
                     net = dr - cr
                     tot_cogs += net
                     cogs_lines.append(ReportLineItem(account_code=code, line_name=acc.account_name, amount=net))
-                elif code.startswith("61"):
-                    # OPEX
-                    net = dr - cr
-                    tot_opex += net
-                    opex_lines.append(ReportLineItem(account_code=code, line_name=acc.account_name, amount=net))
-                elif code.startswith("72"):
+                elif acc.report_section == "OTHER_EXPENSE" or code.startswith("71") or code.startswith("72"):
                     # Other Expense
                     net = dr - cr
                     tot_other_net -= net
                     other_lines.append(ReportLineItem(account_code=code, line_name=acc.account_name, amount=-net))
-                elif code.startswith("81") or "pajak" in acc.account_name.lower():
+                elif acc.report_section == "INCOME_TAX" or code.startswith("81") or "pajak" in acc.account_name.lower():
                     # Income Tax Expense
                     net = dr - cr
                     tax_expense += net
+                else:
+                    # OPEX
+                    net = dr - cr
+                    tot_opex += net
+                    opex_lines.append(ReportLineItem(account_code=code, line_name=acc.account_name, amount=net))
+
 
         gross_profit = tot_rev - tot_cogs
         gross_margin = (gross_profit / tot_rev * 100) if tot_rev > 0 else Decimal("0.00")

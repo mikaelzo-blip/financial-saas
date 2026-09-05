@@ -169,58 +169,14 @@ class ReviewQueueService:
     ):
         """
         Approves and posts transaction to double-entry journal with role-based checks.
-        Sensitive transaction types require MANAGER or ADMIN role.
+        Delegates to ProcessingPolicyService as the authoritative posting path.
         """
-        stmt = (
-            select(Transaction)
-            .options(selectinload(Transaction.review_flags))
-            .where(
-                and_(
-                    Transaction.organization_id == organization_id,
-                    Transaction.id == transaction_id
-                )
-            )
-        )
-        trx = await self.session.scalar(stmt)
-        if not trx:
-            raise EntityNotFoundException("Transaction", transaction_id)
-
-        # 1. Check for unresolved review flags
-        unresolved_flags = [f for f in trx.review_flags if f.resolved_at is None]
-        if unresolved_flags:
-            flags_str = ", ".join(f.flag.value for f in unresolved_flags)
-            raise InvariantViolationException(
-                f"Cannot approve transaction {trx.transaction_code}. Unresolved review flags exist: {flags_str}.",
-                details={"transaction_id": str(transaction_id), "unresolved_flags": flags_str}
-            )
-
-        # 2. Check role authorization for sensitive transactions
-        if trx.transaction_type in self.SENSITIVE_TYPES:
-            if approver_role not in (UserRole.ADMIN, UserRole.MANAGER):
-                raise AuthorizationException(
-                    f"Transaction type '{trx.transaction_type.value}' requires Manager approval.",
-                    details={"transaction_type": trx.transaction_type.value, "role": approver_role.value}
-                )
-
-        # 3. Mark approved
-        trx.approved_by = approver_id
-        trx.approved_at = datetime.now()
-        trx.workflow_status = WorkflowStatus.APPROVED
-
-        # 4. Post via Accounting Engine
-        je = await self.accounting_engine.post_transaction(
+        from src.services.processing_policy_service import ProcessingPolicyService
+        policy_svc = ProcessingPolicyService(self.session)
+        return await policy_svc.authorize_and_post(
             organization_id=organization_id,
             transaction_id=transaction_id,
-            actor_id=approver_id
-        )
-
-        await self.audit_service.log_event(
-            organization_id=organization_id,
-            entity_name="transactions",
-            entity_id=trx.id,
-            action="APPROVE_AND_POST",
             actor_id=approver_id,
-            new_values={"entry_number": je.entry_number, "total_debit": str(je.total_debit)}
+            actor_role=approver_role,
         )
 
-        return trx, je

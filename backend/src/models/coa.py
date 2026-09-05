@@ -52,7 +52,12 @@ class ChartOfAccount(Base):
         String(100),
         nullable=False
     )
+    report_section: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True
+    )
     is_active: Mapped[bool] = mapped_column(
+
         Boolean,
         nullable=False,
         default=True

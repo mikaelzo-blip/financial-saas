@@ -127,8 +127,10 @@ class AccountingEngine:
                 counterparty_id=leg.counterparty_id,
                 cost_category=leg.cost_category,
                 expense_category=leg.expense_category,
+                payment_account_id=leg.payment_account_id,
                 notes=leg.notes
             )
+
             self.session.add(line)
 
         if transaction.transaction_type == TransactionType.CUSTOMER_INVOICE:

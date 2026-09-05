@@ -13,11 +13,13 @@ class GeneratedJournalLeg:
     account_code: str
     debit_amount: Decimal
     credit_amount: Decimal
+    payment_account_id: Optional[uuid.UUID] = None
     project_id: Optional[uuid.UUID] = None
     counterparty_id: Optional[uuid.UUID] = None
     cost_category: Optional[CostCategory] = None
     expense_category: Optional[ExpenseCategory] = None
     notes: Optional[str] = None
+
 
 
 class PostingRuleRegistry:
@@ -67,11 +69,13 @@ class PostingRuleRegistry:
                     account_code="1101",
                     debit_amount=Decimal("0.00"),
                     credit_amount=amount,
+                    payment_account_id=transaction.payment_account_id,
                     project_id=allocations[0].project_id if allocations and len(allocations) == 1 else None,
                     counterparty_id=transaction.counterparty_id,
                     notes=transaction.description
                 )
             )
+
 
         elif t_type in (TransactionType.VENDOR_BILL, TransactionType.SUBCONTRACTOR_BILL):
             # Debit Project Cost (5101)
@@ -132,6 +136,7 @@ class PostingRuleRegistry:
                     account_code="1101",
                     debit_amount=Decimal("0.00"),
                     credit_amount=amount,
+                    payment_account_id=transaction.payment_account_id,
                     counterparty_id=transaction.counterparty_id,
                     project_id=project_id,
                     notes=transaction.description
@@ -155,10 +160,12 @@ class PostingRuleRegistry:
                     account_code="1101",
                     debit_amount=Decimal("0.00"),
                     credit_amount=amount,
+                    payment_account_id=transaction.payment_account_id,
                     counterparty_id=transaction.counterparty_id,
                     notes=transaction.description
                 )
             )
+
 
         elif t_type == TransactionType.SETTLE_VENDOR_ADVANCE:
             # Debit Project Cost (5101)
@@ -279,6 +286,7 @@ class PostingRuleRegistry:
                     account_code="1101",
                     debit_amount=amount,
                     credit_amount=Decimal("0.00"),
+                    payment_account_id=transaction.payment_account_id,
                     counterparty_id=transaction.counterparty_id,
                     notes=transaction.description
                 )
@@ -301,6 +309,7 @@ class PostingRuleRegistry:
                     account_code="1101",
                     debit_amount=amount,
                     credit_amount=Decimal("0.00"),
+                    payment_account_id=transaction.payment_account_id,
                     counterparty_id=transaction.counterparty_id,
                     notes=transaction.description
                 )
@@ -318,22 +327,58 @@ class PostingRuleRegistry:
 
         elif t_type in (TransactionType.BANK_TO_CASH, TransactionType.CASH_TO_BANK, TransactionType.INTERBANK_TRANSFER):
             # Cash/Bank -> Cash/Bank (1101 -> 1101)
+            # Debit destination payment account (or generic 1101)
             legs.append(
                 GeneratedJournalLeg(
                     account_code="1101",
                     debit_amount=amount,
                     credit_amount=Decimal("0.00"),
-                    notes=transaction.description
+                    payment_account_id=getattr(transaction, "destination_payment_account_id", None),
+                    notes=f"Transfer Masuk: {transaction.description}"
                 )
             )
+            # Credit source payment account
             legs.append(
                 GeneratedJournalLeg(
                     account_code="1101",
                     debit_amount=Decimal("0.00"),
                     credit_amount=amount,
-                    notes=transaction.description
+                    payment_account_id=transaction.payment_account_id,
+                    notes=f"Transfer Keluar: {transaction.description}"
                 )
             )
+
+        elif t_type == TransactionType.JOURNAL_ADJUSTMENT:
+            # Multi-leg journal adjustment or opening balance from allocations
+            if not allocations:
+                raise InvariantViolationException("JOURNAL_ADJUSTMENT requires explicit allocations.")
+            for alloc in allocations:
+                # Format: "DR:1101" or "CR:2101" or "1101" (defaults to DR)
+                notes_val = (alloc.notes or "").strip()
+                if notes_val.startswith("CR:"):
+                    code = notes_val[3:].strip()
+                    legs.append(
+                        GeneratedJournalLeg(
+                            account_code=code,
+                            debit_amount=Decimal("0.00"),
+                            credit_amount=alloc.amount,
+                            project_id=alloc.project_id,
+                            cost_category=alloc.cost_category,
+                            expense_category=alloc.expense_category
+                        )
+                    )
+                else:
+                    code = notes_val[3:].strip() if notes_val.startswith("DR:") else notes_val
+                    legs.append(
+                        GeneratedJournalLeg(
+                            account_code=code,
+                            debit_amount=alloc.amount,
+                            credit_amount=Decimal("0.00"),
+                            project_id=alloc.project_id,
+                            cost_category=alloc.cost_category,
+                            expense_category=alloc.expense_category
+                        )
+                    )
 
         elif t_type == TransactionType.OWNER_CONTRIBUTION:
             # Debit Cash/Bank (1101)
@@ -342,6 +387,7 @@ class PostingRuleRegistry:
                     account_code="1101",
                     debit_amount=amount,
                     credit_amount=Decimal("0.00"),
+                    payment_account_id=transaction.payment_account_id,
                     notes=transaction.description
                 )
             )
@@ -371,6 +417,7 @@ class PostingRuleRegistry:
                     account_code="1101",
                     debit_amount=Decimal("0.00"),
                     credit_amount=amount,
+                    payment_account_id=transaction.payment_account_id,
                     notes=transaction.description
                 )
             )
@@ -391,11 +438,13 @@ class PostingRuleRegistry:
                     account_code="1101",
                     debit_amount=Decimal("0.00"),
                     credit_amount=amount,
+                    payment_account_id=transaction.payment_account_id,
                     notes=transaction.description
                 )
             )
 
         else:
+
             raise InvariantViolationException(
                 f"No posting rule defined for transaction type: {t_type.value}.",
                 details={"transaction_type": t_type.value}

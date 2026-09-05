@@ -57,7 +57,9 @@ class TransactionCreate(BaseModel):
     currency: str = Field(default="IDR", max_length=3)
     counterparty_id: Optional[uuid.UUID] = None
     payment_account_id: Optional[uuid.UUID] = None
+    destination_payment_account_id: Optional[uuid.UUID] = None
     reference_no: Optional[str] = None
+
     description: str = Field(min_length=1)
     source_channel: str = "WEB"
     document_ids: List[uuid.UUID] = Field(default_factory=list)
@@ -86,9 +88,11 @@ class TransactionResponse(BaseModel):
     workflow_status: WorkflowStatus
     counterparty_id: Optional[uuid.UUID] = None
     payment_account_id: Optional[uuid.UUID] = None
+    destination_payment_account_id: Optional[uuid.UUID] = None
     reference_no: Optional[str] = None
     description: str
     source_channel: str
+
     created_by: Optional[uuid.UUID] = None
     approved_by: Optional[uuid.UUID] = None
     approved_at: Optional[datetime] = None

@@ -1,51 +1,57 @@
 # Implementation Progress — PRD v2.0 Remediation
 
 ## Current Phase
-P3 — Durable Offline WhatsApp Inbox
+P4 — Hermes Deferred Analysis & Exception Review
 
 ## Completed
 - [x] **P0 — Accounting & Data Integrity First**
-  - [x] P0.1 Unified posting entry point (`ProcessingPolicyService`, single route bypass closed)
-  - [x] P0.2 Shared enums sync between frontend and backend
-  - [x] P0.3 PostgreSQL and Alembic migration integrity validated
-  - [x] P0.4 `TransactionDocumentLink` foreign key constraint to `transactions.id`
-  - [x] P0.5 Strict tenant scoping validations for counterparties, projects, payment accounts, and documents
-  - [x] P0.6 Chart of Account `report_section` column added and consultant P&L / Balance Sheet classification aligned
+  - [x] P0.1 Unified posting entry point (ProcessingPolicyService enforced across direct posting routes)
+  - [x] P0.2 Enums and contract synchronized (TransactionType, CostCategory, ReviewFlag alignment)
+  - [x] P0.3 Tenant and referential integrity (Document-Transaction CASCADE FK, multi-tenant scoping validation)
+  - [x] P0.4 Consultant P&L and Balance Sheet mapping (Other Income/Expense sections, Long-term liabilities separation)
+  - [x] P0.5 PostgreSQL / Alembic migration check (migrations 014, 015 verified on Postgres)
 - [x] **P1 — Cash & Multi-Bank Foundation**
-  - [x] P1.1 `payment_account_id` and `destination_payment_account_id` on transactions and journal lines
-  - [x] P1.2 Per-bank authoritative ledger balances derived from `journal_lines` with `payment_account_id`
-  - [x] P1.3 Dedicated `MoneyMovement`, `Settlement`, and `SettlementAllocation` models & services
-  - [x] P1.4 Interbank transfers update source and destination bank balances deterministically without duplicate cash movements
-  - [x] P1.5 Multi-project / multi-target settlement allocation support
+  - [x] P1.1 payment_account_id accounting dimension added to JournalLine and Transaction
+  - [x] P1.2 Real-time ledger balance calculation per PaymentAccount
+  - [x] P1.3 MoneyMovement, Settlement, and SettlementAllocation models & migration (016)
+  - [x] P1.4 Multi-invoice and multi-project settlement allocation logic with over-allocation prevention
+  - [x] P1.5 Interbank transfers debit/credit balance verified without duplicate cash movements
 - [x] **P2 — Bank Statement & Reconciliation**
-  - [x] P2.1 New models: `BankStatementImport`, `BankStatementLine`, `BankReconciliation`
-  - [x] P2.2 Alembic migration `017_p2_bank_reconciliation` applied to PostgreSQL
-  - [x] P2.3 CSV parsing pipeline with cryptographic file hash deduplication (exact duplicate imports rejected)
-  - [x] P2.4 Deterministic auto-match engine (exact reference, amount, bank, date) & manual match endpoint
-  - [x] P2.5 Cash Completeness Dashboard API exposing matched, unmatched bank, unmatched book, and unallocated cash totals
+  - [x] P2.1 BankStatementImport and BankStatementLine models & migration (017)
+  - [x] P2.2 SHA256 file content deduplication for statement files
+  - [x] P2.3 CSV and line item parsing with debit/credit extraction
+  - [x] P2.4 Automated reconciliation matching rules (MATCHED, PARTIAL_MATCH, UNMATCHED_BANK, UNMATCHED_BOOK, REVIEW_REQUIRED)
+  - [x] P2.5 Unallocated cash and bank summary calculations
+- [x] **P3 — Durable Offline WhatsApp Inbox**
+  - [x] P3.1 InboxMessage, InboxAttachment, DocumentSession, MatchEvidence models & migration (018)
+  - [x] P3.2 RemoteInboxService: offline capture ingestion with idempotent deduplication via external_message_id
+  - [x] P3.3 LocalSyncWorker backlog sync: turns received messages into documents and creates pending document sessions
+  - [x] P3.4 Provider-agnostic capture endpoints (/api/v1/inbox/capture, /api/v1/inbox/sync, /api/v1/inbox/messages)
+  - [x] P3.5 Preserved capture-only contract: no WhatsApp financial approvals
 
 ## In Progress
-- [ ] **P3 — Durable Offline WhatsApp Inbox**
+- [ ] P4 — Hermes Deferred Analysis & Exception Review
+  - [ ] P4.1 DocumentSession candidate analysis & evidence scoring
+  - [ ] P4.2 ProcessingPolicy classification (AUTO_SAFE, REVIEW_REQUIRED, BLOCKED, FAILED)
+  - [ ] P4.3 Auto-processing safety gates (no confidence > 95% bypass; deterministic validation rules)
 
 ## Pending
-- [ ] P4 — Hermes Deferred Analysis & Exception Review
 - [ ] P5 — Project Cost & Owner Dashboard
 - [ ] P6 — Accounting Period, Opening Balance & Fixed Assets
 - [ ] P7 — Reliability & Operations
 
 ## Verification
-- Backend tests: PASS (157 unit tests passing)
-- PostgreSQL migration: PASS (`017_p2_bank_reconciliation` at head)
+- Backend tests: PASS (158 passed in 20.54s)
+- PostgreSQL migration: PASS (018_remote_inbox head)
 - Frontend typecheck: PASS
-- Frontend build: PASS
+- Frontend build: PASS (built in 395ms)
 
 ## Decisions Made
-- Bank statement imports enforce SHA-256 unique constraints per organization.
-- Unmatched bank lines remain separate from immutable double-entry books until verified and matched.
-- Cash Completeness dashboard computes book vs bank variances dynamically using authoritative journal lines and money movements.
+- WhatsApp inbox messages decouple ingestion from local OCR/AI processing: capture relay stores raw messages/attachments; Finance PC triggers sync on startup/poll.
+- Added DocumentSession and MatchEvidence tables to record deterministic evidence grounds prior to candidate promotion.
 
 ## Remaining Risks
-- Bank statement format variations across regional banks (e.g. multi-line narrations) can be augmented with tailored parsers.
+- Offline sync worker polling needs periodic background dispatch (addressed in P7).
 
 ## Hard Blockers
 - none

@@ -101,7 +101,39 @@ export type ReconciliationStatus =
   | 'UNMATCHED_BOOK'
   | 'REVIEW_REQUIRED';
 
+export type InboxMessageStatus =
+  | 'RECEIVED'
+  | 'SYNCED'
+  | 'PROCESSED'
+  | 'FAILED';
+
+export interface InboxAttachment {
+  id: string;
+  inbox_message_id: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  file_hash_sha256: string;
+  document_id?: string;
+  created_at: string;
+}
+
+export interface InboxMessage {
+  id: string;
+  organization_id: string;
+  external_message_id: string;
+  sender_phone: string;
+  sender_name?: string;
+  caption?: string;
+  status: InboxMessageStatus;
+  received_at: string;
+  synced_at?: string;
+  error_message?: string;
+  attachments: InboxAttachment[];
+}
+
 export interface BankStatementLine {
+
   id: string;
   import_id: string;
   organization_id: string;

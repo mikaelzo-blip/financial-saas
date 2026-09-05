@@ -243,3 +243,18 @@ class StatementImportStatus(str, Enum):
     FAILED = "FAILED"
 
 
+class InboxMessageStatus(str, Enum):
+    RECEIVED = "RECEIVED"
+    SYNCED = "SYNCED"
+    PROCESSED = "PROCESSED"
+    FAILED = "FAILED"
+
+
+class SessionMatchStatus(str, Enum):
+    PENDING = "PENDING"
+    MATCHED = "MATCHED"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+    REJECTED = "REJECTED"
+
+
+

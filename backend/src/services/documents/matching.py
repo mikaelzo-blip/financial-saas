@@ -36,7 +36,8 @@ async def match_entities(session: AsyncSession, organization_id: uuid.UUID,
     elif name:
         ranked = sorted(((SequenceMatcher(None, normalize(name), normalize(p.name)).ratio(), p) for p in parties), reverse=True, key=lambda x: x[0])
         result["alternatives"] = [{"id": str(p.id), "name": p.name, "score": f"{score:.4f}"} for score, p in ranked[:3]]
-        if ranked and ranked[0][0] >= .85 and (len(ranked) == 1 or ranked[0][0] - ranked[1][0] >= .05):
+        # ponytail: 0.90 threshold prevents distinct legal entities (e.g. "PT Nusa Utama Engineering" vs "PT Nusa Engineering" at 0.87) from auto-matching. Lower only with verified alias table.
+        if ranked and ranked[0][0] >= .90 and (len(ranked) == 1 or ranked[0][0] - ranked[1][0] >= .05):
             party = ranked[0][1]
             role = ("CUSTOMER" if party.is_customer and not party.is_vendor else
                     "VENDOR" if party.is_vendor and not party.is_customer else None)

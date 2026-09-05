@@ -94,6 +94,40 @@ export type ReviewFlag =
   | 'ACCOUNT_REVIEW'
   | 'RELATED_PARTY_REVIEW';
 
+export type ReconciliationStatus =
+  | 'MATCHED'
+  | 'PARTIAL_MATCH'
+  | 'UNMATCHED_BANK'
+  | 'UNMATCHED_BOOK'
+  | 'REVIEW_REQUIRED';
+
+export interface BankStatementLine {
+  id: string;
+  import_id: string;
+  organization_id: string;
+  line_number: number;
+  transaction_date: string;
+  description: string;
+  debit: number;
+  credit: number;
+  balance?: number;
+  reference?: string;
+  counterparty_name?: string;
+  reconciliation_status: ReconciliationStatus;
+}
+
+export interface CashCompletenessDashboard {
+  payment_account_id?: string;
+  total_bank_inflow: number;
+  total_bank_outflow: number;
+  matched_amount: number;
+  unmatched_bank_amount: number;
+  unmatched_book_amount: number;
+  unallocated_cash_total: number;
+  completeness_percentage: number;
+}
+
+
 
 export interface ProjectResponse {
   id: string;

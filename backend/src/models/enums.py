@@ -228,3 +228,18 @@ class SettlementType(str, Enum):
     INTERBANK_TRANSFER = "INTERBANK_TRANSFER"
     DIRECT_EXPENSE = "DIRECT_EXPENSE"
 
+
+class ReconciliationStatus(str, Enum):
+    MATCHED = "MATCHED"
+    PARTIAL_MATCH = "PARTIAL_MATCH"
+    UNMATCHED_BANK = "UNMATCHED_BANK"
+    UNMATCHED_BOOK = "UNMATCHED_BOOK"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+
+
+class StatementImportStatus(str, Enum):
+    PENDING = "PENDING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+

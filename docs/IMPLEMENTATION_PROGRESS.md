@@ -1,7 +1,7 @@
 # Implementation Progress — PRD v2.0 Remediation
 
 ## Current Phase
-P2 — Bank Statement & Reconciliation
+P3 — Durable Offline WhatsApp Inbox
 
 ## Completed
 - [x] **P0 — Accounting & Data Integrity First**
@@ -17,29 +17,35 @@ P2 — Bank Statement & Reconciliation
   - [x] P1.3 Dedicated `MoneyMovement`, `Settlement`, and `SettlementAllocation` models & services
   - [x] P1.4 Interbank transfers update source and destination bank balances deterministically without duplicate cash movements
   - [x] P1.5 Multi-project / multi-target settlement allocation support
+- [x] **P2 — Bank Statement & Reconciliation**
+  - [x] P2.1 New models: `BankStatementImport`, `BankStatementLine`, `BankReconciliation`
+  - [x] P2.2 Alembic migration `017_p2_bank_reconciliation` applied to PostgreSQL
+  - [x] P2.3 CSV parsing pipeline with cryptographic file hash deduplication (exact duplicate imports rejected)
+  - [x] P2.4 Deterministic auto-match engine (exact reference, amount, bank, date) & manual match endpoint
+  - [x] P2.5 Cash Completeness Dashboard API exposing matched, unmatched bank, unmatched book, and unallocated cash totals
 
 ## In Progress
-- [ ] **P2 — Bank Statement & Reconciliation**
+- [ ] **P3 — Durable Offline WhatsApp Inbox**
 
 ## Pending
-- [ ] P3 — Durable Offline WhatsApp Inbox
 - [ ] P4 — Hermes Deferred Analysis & Exception Review
 - [ ] P5 — Project Cost & Owner Dashboard
 - [ ] P6 — Accounting Period, Opening Balance & Fixed Assets
 - [ ] P7 — Reliability & Operations
 
 ## Verification
-- Backend tests: PASS (155 unit tests passing)
-- PostgreSQL migration: PASS (`016_p1_settlements` at head)
+- Backend tests: PASS (157 unit tests passing)
+- PostgreSQL migration: PASS (`017_p2_bank_reconciliation` at head)
 - Frontend typecheck: PASS
 - Frontend build: PASS
 
 ## Decisions Made
-- `payment_account_id` is tracked on every `journal_lines` cash entry, allowing direct calculation of per-account bank balance without relying on mutable caches.
-- `MoneyMovement` supports 1-to-N settlements and allocations across projects while maintaining tenant boundaries.
+- Bank statement imports enforce SHA-256 unique constraints per organization.
+- Unmatched bank lines remain separate from immutable double-entry books until verified and matched.
+- Cash Completeness dashboard computes book vs bank variances dynamically using authoritative journal lines and money movements.
 
 ## Remaining Risks
-- Bank statement reconciliation parsing formats (BCA, Mandiri, BRI) require robust regex matching.
+- Bank statement format variations across regional banks (e.g. multi-line narrations) can be augmented with tailored parsers.
 
 ## Hard Blockers
 - none

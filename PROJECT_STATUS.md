@@ -5,9 +5,9 @@
 - **Current feature**: UAT #17 — Real WhatsApp Media Intake (Active: Hermes Baileys WhatsApp Bridge)
 - **Current branch**: `hermes/uat-17-baileys-whatsapp-bridge`
 - **Execution state**: ACTIVE. Meta UAT #17 attempt is superseded/paused because Meta administrator account access is permanently disabled; the Meta Cloud API implementation and UAT #16 work are preserved as an inactive/future transport option (not failed). Active transport for UAT #17 is the Hermes native WhatsApp bridge using Baileys. Local environment and PostgreSQL UAT data preserved with zero mutations.
-- **Latest verified checkpoint**: Baileys transport provider (`BaileysBridgeWhatsAppProvider`), long-poller worker (`BaileysBridgePoller`), and integration test suite (`test_uat17_baileys_whatsapp_bridge.py`) implemented and passing (3/3 passed). Total backend test suite passing (137 unit + 44 integration tests).
-- **UAT data**: Organization `PT Kontraktor Utama Indonesia` (`9670673b-c0fd-4ebe-87e4-a646358084ea`), Project `PRJ-2026-001`, registered sender Muhammad Fikri, journals, transactions, and balances preserved intact.
-- **Tests**: 137 unit tests passing, 44 integration tests passing (including UAT #12, UAT #15, UAT #16, and UAT #17); zero regressions.
+- **Latest verified checkpoint**: Baileys transport provider (`BaileysBridgeWhatsAppProvider`), long-poller worker (`BaileysBridgePoller`), strict vendor matching threshold (0.90), and integration test suite (`test_uat17_baileys_whatsapp_bridge.py`, `test_ocr_pipeline_integrity_regression.py`) implemented, verified, and committed. Total backend test suite passing (145 unit + 48 integration tests).
+- **UAT data**: Organization `PT Kontraktor Utama Indonesia` (`9670673b-c0fd-4ebe-87e4-a646358084ea`), Project `PRJ-2026-001`, registered sender Muhammad Fikri, journals (6), transactions (7), lines (12), and balances preserved intact.
+- **Tests**: 145 unit tests passing, 48 integration tests passing (including UAT #12, UAT #15, UAT #16, UAT #17, and OCR/matching regression); zero regressions.
 - **Accounting integrity**: Total Debit == Total Credit; Assets = Liabilities + Equity; zero orphan AR/AP/retention; zero direct journals from transport ingestion; human review hard-stop preserved.
 - **Real Provider Status**:
   - Meta Cloud API Sandbox Adapter: **PRESERVED AS INACTIVE/FUTURE TRANSPORT**

@@ -257,4 +257,12 @@ class SessionMatchStatus(str, Enum):
     REJECTED = "REJECTED"
 
 
+class ProcessingPolicyDecision(str, Enum):
+    AUTO_SAFE = "AUTO_SAFE"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+    BLOCKED = "BLOCKED"
+    FAILED = "FAILED"
+
+
+
 

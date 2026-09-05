@@ -1,7 +1,7 @@
 # Implementation Progress — PRD v2.0 Remediation
 
 ## Current Phase
-P4 — Hermes Deferred Analysis & Exception Review
+P5 — Project Cost & Owner Dashboard
 
 ## Completed
 - [x] **P0 — Accounting & Data Integrity First**
@@ -28,30 +28,33 @@ P4 — Hermes Deferred Analysis & Exception Review
   - [x] P3.3 LocalSyncWorker backlog sync: turns received messages into documents and creates pending document sessions
   - [x] P3.4 Provider-agnostic capture endpoints (/api/v1/inbox/capture, /api/v1/inbox/sync, /api/v1/inbox/messages)
   - [x] P3.5 Preserved capture-only contract: no WhatsApp financial approvals
+- [x] **P4 — Hermes Deferred Analysis & Exception Review**
+  - [x] P4.1 DeferredAnalysisService with DocumentSession candidate evaluation
+  - [x] P4.2 MatchEvidence generation across Document, OCR Quality, Counterparty, and Project checks
+  - [x] P4.3 Strict ProcessingPolicyDecision states: AUTO_SAFE, REVIEW_REQUIRED, BLOCKED, FAILED
+  - [x] P4.4 Safety gate: eliminated confidence > 95% auto-approval bypass; unknown entities route to REVIEW_REQUIRED
 
 ## In Progress
-- [ ] P4 — Hermes Deferred Analysis & Exception Review
-  - [ ] P4.1 DocumentSession candidate analysis & evidence scoring
-  - [ ] P4.2 ProcessingPolicy classification (AUTO_SAFE, REVIEW_REQUIRED, BLOCKED, FAILED)
-  - [ ] P4.3 Auto-processing safety gates (no confidence > 95% bypass; deterministic validation rules)
+- [ ] P5 — Project Cost & Owner Dashboard
+  - [ ] P5.1 Dashboard API (cash in/out period, net cash flow, unallocated cash, project spending, exceptions)
+  - [ ] P5.2 Project Detail API (project cash, project accrual, cost categories, unallocated items)
+  - [ ] P5.3 Deprioritize Budget vs Actual in favor of real cash & project spending visibility
 
 ## Pending
-- [ ] P5 — Project Cost & Owner Dashboard
 - [ ] P6 — Accounting Period, Opening Balance & Fixed Assets
 - [ ] P7 — Reliability & Operations
 
 ## Verification
-- Backend tests: PASS (158 passed in 20.54s)
+- Backend tests: PASS (159 passed in 20.27s)
 - PostgreSQL migration: PASS (018_remote_inbox head)
 - Frontend typecheck: PASS
-- Frontend build: PASS (built in 395ms)
+- Frontend build: PASS
 
 ## Decisions Made
-- WhatsApp inbox messages decouple ingestion from local OCR/AI processing: capture relay stores raw messages/attachments; Finance PC triggers sync on startup/poll.
-- Added DocumentSession and MatchEvidence tables to record deterministic evidence grounds prior to candidate promotion.
+- Multi-evidence scoring strictly gates candidate promotion: high confidence without counterparty or project match is blocked from auto-posting.
 
 ## Remaining Risks
-- Offline sync worker polling needs periodic background dispatch (addressed in P7).
+- Large document queue analysis should be batched via background worker (P7).
 
 ## Hard Blockers
 - none

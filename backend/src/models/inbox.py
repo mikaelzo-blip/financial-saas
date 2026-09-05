@@ -122,7 +122,11 @@ class DocumentSession(Base):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
+    inbox_message: Mapped[Optional["InboxMessage"]] = relationship("InboxMessage")
+    document: Mapped[Optional["Document"]] = relationship("Document")
+
     evidences: Mapped[List["MatchEvidence"]] = relationship(
+
         "MatchEvidence",
         back_populates="document_session",
         cascade="all, delete-orphan",

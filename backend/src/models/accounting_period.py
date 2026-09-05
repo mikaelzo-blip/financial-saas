@@ -49,7 +49,7 @@ class AccountingPeriod(Base):
         nullable=False
     )
     status: Mapped[AccountingPeriodStatus] = mapped_column(
-        SAEnum(AccountingPeriodStatus, name="accounting_period_status", create_type=False),
+        SAEnum(AccountingPeriodStatus, native_enum=False, length=50),
         nullable=False,
         default=AccountingPeriodStatus.OPEN
     )

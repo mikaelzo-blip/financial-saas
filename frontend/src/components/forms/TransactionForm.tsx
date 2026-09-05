@@ -180,7 +180,6 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           <option value="BANK_TO_CASH">Bank ke Kas</option>
           <option value="CASH_TO_BANK">Kas ke Bank</option>
           <option value="INTERBANK_TRANSFER">Transfer Antar Bank</option>
-          <option value="TRANSFER_INTERBANK">Transfer Antar Bank (Legacy)</option>
 
           <option value="OWNER_CONTRIBUTION">Setoran Modal Pemilik</option>
           <option value="OWNER_WITHDRAWAL">Penarikan Pemilik (Prive)</option>

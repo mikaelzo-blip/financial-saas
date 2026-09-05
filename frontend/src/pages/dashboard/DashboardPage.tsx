@@ -204,7 +204,24 @@ export const DashboardPage: React.FC = () => {
           </div>
 
           {/* Row 2: Sub-ledgers AR, AP, Review Queue */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            {/* WhatsApp Belum Dianalisis */}
+            <Card
+              className="p-4 cursor-pointer hover:border-emerald-400 transition-colors"
+              onClick={() => navigate('/whatsapp-inbox')}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase text-slate-500">WhatsApp Inbox</span>
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                  <Flame className="h-4 w-4" />
+                </div>
+              </div>
+              <p className="text-lg font-bold font-mono tabular-nums mt-2 text-emerald-700">
+                Inbox Aktif
+              </p>
+              <p className="text-[10px] text-slate-400 mt-1">Buka antrean capture &rarr;</p>
+            </Card>
+
             {/* Piutang Usaha (AR) */}
             <Card
               className="p-4 cursor-pointer hover:border-blue-400 transition-colors"
@@ -219,7 +236,7 @@ export const DashboardPage: React.FC = () => {
               <p className="text-lg font-bold font-mono tabular-nums mt-2 text-blue-600">
                 {formatIDR(metrics.accounts_receivable_outstanding)}
               </p>
-              <p className="text-[10px] text-slate-400 mt-1">Tagihan belum tertagih &bull; Buka Umur Piutang &rarr;</p>
+              <p className="text-[10px] text-slate-400 mt-1">Tagihan belum tertagih &bull; Umur Piutang &rarr;</p>
             </Card>
 
             {/* Utang Usaha (AP) */}
@@ -236,7 +253,7 @@ export const DashboardPage: React.FC = () => {
               <p className="text-lg font-bold font-mono tabular-nums mt-2 text-rose-600">
                 {formatIDR(metrics.accounts_payable_outstanding)}
               </p>
-              <p className="text-[10px] text-slate-400 mt-1">Kewajiban tagihan vendor &bull; Buka Umur Utang &rarr;</p>
+              <p className="text-[10px] text-slate-400 mt-1">Kewajiban tagihan vendor &bull; Umur Utang &rarr;</p>
             </Card>
 
             {/* Antrean Review */}

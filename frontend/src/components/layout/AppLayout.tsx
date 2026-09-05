@@ -19,7 +19,10 @@ import {
   ShieldCheck,
   TrendingUp,
   Landmark,
-  Scale
+  Scale,
+  MessageSquare,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../../store/AuthContext';
 import { StatusBadge } from '../ui/StatusBadge';
@@ -29,30 +32,43 @@ export const AppLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [reportsOpen, setReportsOpen] = useState(false);
+  const [masterOpen, setMasterOpen] = useState(false);
 
-  const navItems = [
-    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { label: 'Proyek', path: '/projects', icon: Building2 },
-    { label: 'Transaksi', path: '/transactions', icon: Receipt },
-    { label: 'Dokumen Bukti', path: '/documents', icon: FileText },
-    { label: 'Pelanggan (Customer)', path: '/customers', icon: Users },
-    { label: 'Vendor & Subkon', path: '/vendors', icon: Truck },
-    { label: 'Piutang Usaha (AR)', path: '/receivables', icon: ArrowDownLeft },
-    { label: 'Utang Usaha (AP)', path: '/payables', icon: ArrowUpRight },
-    { label: 'Antrean Review', path: '/review-queue', icon: AlertTriangle, badge: true },
+  // PRD §26.1 Information Architecture for Contractor Owner:
+  // 1. Dashboard, 2. WhatsApp Inbox, 3. Proyek, 4. Kas & Bank, 5. Rekonsiliasi Bank,
+  // 6. Perlu Review, 7. Transaksi, 8. Dokumen, 9. Piutang, 10. Utang,
+  // 11. Laporan (collapsible), 12. Data Master (collapsible), 13. Pengaturan
+  const primaryNavItems = [
+    { label: '1. Dashboard', path: '/dashboard', icon: LayoutDashboard },
+    { label: '2. WhatsApp Inbox', path: '/whatsapp-inbox', icon: MessageSquare },
+    { label: '3. Proyek', path: '/projects', icon: Building2 },
+    { label: '4. Kas & Bank', path: '/payment-accounts', icon: Wallet },
+    { label: '5. Rekonsiliasi Bank', path: '/bank-reconciliation', icon: Landmark },
+    { label: '6. Perlu Review', path: '/review-queue', icon: AlertTriangle, badge: true },
+    { label: '7. Transaksi', path: '/transactions', icon: Receipt },
+    { label: '8. Dokumen Bukti', path: '/documents', icon: FileText },
+    { label: '9. Piutang Usaha (AR)', path: '/receivables', icon: ArrowDownLeft },
+    { label: '10. Utang Usaha (AP)', path: '/payables', icon: ArrowUpRight },
+  ];
+
+  const reportItems = [
     { label: 'Laba Rugi (P&L)', path: '/reports/profit-loss', icon: TrendingUp },
     { label: 'Neraca (Balance Sheet)', path: '/reports/balance-sheet', icon: Landmark },
     { label: 'Arus Kas (Cash Flow)', path: '/reports/cash-flow', icon: ArrowUpRight },
+    { label: 'Profitabilitas Proyek', path: '/reports/project-profitability', icon: Building2 },
+    { label: 'Posisi Kas Proyek', path: '/reports/project-cash', icon: Wallet },
+    { label: 'Anggaran vs Realisasi', path: '/reports/budget-vs-actual', icon: FileText },
     { label: 'Neraca Saldo', path: '/reports/trial-balance', icon: Scale },
     { label: 'Buku Besar (GL)', path: '/reports/general-ledger', icon: BookOpen },
     { label: 'Umur Piutang (AR Aging)', path: '/reports/receivables', icon: ArrowDownLeft },
     { label: 'Umur Utang (AP Aging)', path: '/reports/payables', icon: ArrowUpRight },
-    { label: 'Profitabilitas Proyek', path: '/reports/project-profitability', icon: Building2 },
-    { label: 'Posisi Kas Proyek', path: '/reports/project-cash', icon: Wallet },
-    { label: 'Anggaran vs Realisasi', path: '/reports/budget-vs-actual', icon: FileText },
-    { label: 'Akun Kas & Bank', path: '/payment-accounts', icon: Wallet },
+  ];
+
+  const masterItems = [
+    { label: 'Pelanggan (Customer)', path: '/customers', icon: Users },
+    { label: 'Vendor & Subkon', path: '/vendors', icon: Truck },
     { label: 'Bagan Akun (COA)', path: '/chart-of-accounts', icon: BookOpen },
-    { label: 'Pengaturan', path: '/settings', icon: Settings },
   ];
 
   const handleLogout = () => {
@@ -60,8 +76,12 @@ export const AppLayout: React.FC = () => {
     navigate('/login');
   };
 
+  const isReportsActive = reportItems.some((item) => location.pathname.startsWith(item.path));
+  const isMasterActive = masterItems.some((item) => location.pathname.startsWith(item.path));
+
   const getPageTitle = () => {
-    const current = navItems.find((item) => location.pathname.startsWith(item.path));
+    const all = [...primaryNavItems, ...reportItems, ...masterItems, { label: 'Pengaturan & Sistem', path: '/settings' }];
+    const current = all.find((item) => location.pathname.startsWith(item.path));
     return current ? current.label : 'Sistem Keuangan Kontraktor';
   };
 
@@ -112,7 +132,8 @@ export const AppLayout: React.FC = () => {
 
         {/* Navigation Links */}
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          {navItems.map((item) => {
+          {/* Primary Operations (1-10) */}
+          {primaryNavItems.map((item) => {
             const Icon = item.icon;
             return (
               <NavLink
@@ -120,7 +141,7 @@ export const AppLayout: React.FC = () => {
                 to={item.path}
                 onClick={() => setMobileMenuOpen(false)}
                 className={({ isActive }) =>
-                  `flex items-center justify-between rounded-lg px-3 py-2.5 text-xs font-medium transition-colors ${
+                  `flex items-center justify-between rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
                     isActive
                       ? 'bg-blue-600 text-white shadow-xs font-semibold'
                       : 'text-slate-300 hover:bg-slate-800 hover:text-white'
@@ -134,6 +155,114 @@ export const AppLayout: React.FC = () => {
               </NavLink>
             );
           })}
+
+          {/* Group 11: Laporan (Collapsible) */}
+          <div className="pt-2">
+            <button
+              onClick={() => setReportsOpen(!reportsOpen)}
+              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs font-semibold transition-colors cursor-pointer ${
+                isReportsActive ? 'text-white' : 'text-slate-400 hover:bg-slate-800/60 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <BookOpen className="h-4 w-4 shrink-0 text-blue-400" />
+                <span>11. Laporan Keuangan</span>
+              </div>
+              {reportsOpen || isReportsActive ? (
+                <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+              )}
+            </button>
+            {(reportsOpen || isReportsActive) && (
+              <div className="ml-4 pl-3 border-l border-slate-800 space-y-1 mt-1">
+                {reportItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={({ isActive }) =>
+                        `flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+                          isActive
+                            ? 'bg-blue-600/80 text-white font-semibold'
+                            : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+                        }`
+                      }
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span>{item.label}</span>
+                    </NavLink>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Group 12: Data Master (Collapsible) */}
+          <div className="pt-1">
+            <button
+              onClick={() => setMasterOpen(!masterOpen)}
+              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs font-semibold transition-colors cursor-pointer ${
+                isMasterActive ? 'text-white' : 'text-slate-400 hover:bg-slate-800/60 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Users className="h-4 w-4 shrink-0 text-emerald-400" />
+                <span>12. Data Master</span>
+              </div>
+              {masterOpen || isMasterActive ? (
+                <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+              )}
+            </button>
+            {(masterOpen || isMasterActive) && (
+              <div className="ml-4 pl-3 border-l border-slate-800 space-y-1 mt-1">
+                {masterItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={({ isActive }) =>
+                        `flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+                          isActive
+                            ? 'bg-blue-600/80 text-white font-semibold'
+                            : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+                        }`
+                      }
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0" />
+                      <span>{item.label}</span>
+                    </NavLink>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Group 13: Pengaturan & Sistem */}
+          <div className="pt-1">
+            <NavLink
+              to="/settings"
+              onClick={() => setMobileMenuOpen(false)}
+              className={({ isActive }) =>
+                `flex items-center justify-between rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+                  isActive
+                    ? 'bg-blue-600 text-white shadow-xs font-semibold'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`
+              }
+            >
+              <div className="flex items-center gap-3">
+                <Settings className="h-4 w-4 shrink-0" />
+                <span>13. Pengaturan & Sistem</span>
+              </div>
+            </NavLink>
+          </div>
         </nav>
 
         {/* User Footer Profile */}
@@ -190,3 +319,4 @@ export const AppLayout: React.FC = () => {
     </div>
   );
 };
+

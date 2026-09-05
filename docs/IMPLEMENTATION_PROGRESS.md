@@ -46,6 +46,14 @@ All Phases P0–P7 Complete
   - [x] P7.1 Background Job Queue in PostgreSQL (BackgroundJob model, migration 020, JobQueueService)
   - [x] P7.2 Sequence safety for document code generation (DocumentService)
   - [x] P7.3 Health & readiness endpoints (/health, /ready) and operational test suite
+- [x] **Frontend PRD Remediation (F0–F7)**
+  - [x] F0 Contract Safety: eliminated duplicate TRANSFER_INTERBANK enum drift in frontend forms and API DTOs.
+  - [x] F1 Navigation Refactor: restructured AppLayout to exact 13-item Owner IA with collapsible Laporan & Master Data.
+  - [x] F2 Cash-First Dashboard: added WhatsApp Inbox capture badge, linked cash movements, and exception indicators.
+  - [x] F3 WhatsApp Inbox Page: implemented `/whatsapp-inbox` with status tabs (Semua, Belum Sinkron, Menunggu Analisis, Selesai, Gagal) and backlog pull synchronization trigger.
+  - [x] F4 Cash & Bank Upgrade: enhanced `/payment-accounts` with live MoneyMovement audit history.
+  - [x] F5 Bank Reconciliation Page: implemented `/bank-reconciliation` with statement upload, auto-match, and cash completeness overview.
+  - [x] PostgreSQL Live Schema Test: added `test_live_postgresql_schema.py` verifying Alembic head (020), CRUD, and enum types on live PostgreSQL.
 
 ## In Progress
 - [ ] None (All remediation phases P0-P7 implemented and verified)

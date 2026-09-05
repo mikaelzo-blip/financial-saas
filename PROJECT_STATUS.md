@@ -7,7 +7,7 @@
 - **Execution state**: ACTIVE. All phases P0–P7 from `docs/PRD_Financial_SaaS_v2_Technical_Remediation_Plan.md` are fully implemented, verified, and passing.
 - **Latest verified checkpoint**: P7 Reliability & Operations implemented with PostgreSQL-backed background job queue, sequence safety, and health/readiness endpoints. PostgreSQL migrations through `020_p7_background_jobs` applied. Total backend test suite: 165 unit tests, 151 integration tests (316 total, 0 failures). Frontend build and test passing.
 - **UAT data**: Organization `PT Kontraktor Utama Indonesia` (`9670673b-c0fd-4ebe-87e4-a646358084ea`), Project `PRJ-2026-001`, registered sender Muhammad Fikri, journals, transactions, and balances preserved intact.
-- **Tests**: 165 unit tests passing, 151 integration tests passing, 48 frontend tests passing; zero regressions.
+- **Tests**: 165 unit tests passing, 153 integration tests passing (including live PostgreSQL verification), 48 frontend tests passing; zero regressions. Frontend production build passing.
 - **Accounting integrity**: Total Debit == Total Credit; Assets = Liabilities + Equity; zero orphan AR/AP/retention; zero direct journals from transport ingestion; human review hard-stop preserved; period closing guards enforced.
 - **Real Provider Status**:
   - Meta Cloud API Sandbox Adapter: **PRESERVED AS INACTIVE/FUTURE TRANSPORT**

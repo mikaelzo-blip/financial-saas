@@ -29,7 +29,10 @@ function Test-TrackedProcess([string]$Name, [string]$ExpectedCommand, [string]$E
 function Wait-Http([string]$Url, [int]$Seconds = 60) {
     $deadline = (Get-Date).AddSeconds($Seconds)
     do {
-        try { return Invoke-RestMethod -Uri $Url -TimeoutSec 3 }
+        try {
+            $resp = Invoke-RestMethod -Uri $Url -TimeoutSec 3 -ErrorAction Stop
+            return $resp
+        }
         catch { Start-Sleep -Seconds 1 }
     } while ((Get-Date) -lt $deadline)
     throw "Timed out waiting for $Url"
@@ -48,7 +51,7 @@ if ($containerRunning -ne 'true') { docker start $Container | Out-Null }
 
 $deadline = (Get-Date).AddSeconds(60)
 do {
-    docker exec $Container pg_isready -U postgres -d financial_saas *> $null
+    docker exec $Container pg_isready -U financial -d financial_saas *> $null
     if ($LASTEXITCODE -eq 0) { break }
     Start-Sleep -Seconds 1
 } while ((Get-Date) -lt $deadline)
@@ -57,6 +60,14 @@ if ($LASTEXITCODE -ne 0) { throw 'PostgreSQL did not become ready.' }
 if (-not (Test-Path (Join-Path $Backend '.env'))) {
     Copy-Item (Join-Path $Backend '.env.example') (Join-Path $Backend '.env')
     Write-Warning 'Created backend/.env from .env.example. Replace its development SECRET_KEY before shared use.'
+}
+
+# Ensure database credentials match financial-saas-postgres container if defaults present
+$envPath = Join-Path $Backend '.env'
+$envContent = Get-Content $envPath -Raw
+if ($envContent -match 'postgres:postgres@localhost:5432/financial_saas') {
+    $envContent = $envContent.Replace('postgres:postgres@localhost:5432/financial_saas', 'financial:financial_dev_2026@localhost:5432/financial_saas')
+    Set-Content $envPath $envContent
 }
 
 if (-not (Test-Path $Python)) {
@@ -92,6 +103,14 @@ if (-not (Test-TrackedProcess 'backend' 'src.main:app' $Python)) {
 $health = Wait-Http 'http://127.0.0.1:8000/health'
 $ready = Wait-Http 'http://127.0.0.1:8000/ready'
 if ($health.status -ne 'healthy' -or $ready.status -ne 'ready') { throw 'Backend health checks failed.' }
+
+# Start PostgreSQL-backed background job worker
+if (-not (Test-TrackedProcess 'worker' 'src.worker' $Python)) {
+    $process = Start-Process -FilePath $Python -ArgumentList '-m','src.worker' -WorkingDirectory $Backend -RedirectStandardOutput (Join-Path $Runtime 'worker.log') -RedirectStandardError (Join-Path $Runtime 'worker.error.log') -PassThru
+    Set-Content (Join-Path $Runtime 'worker.pid') $process.Id
+    Start-Sleep -Milliseconds 500
+    Test-TrackedProcess 'worker' 'src.worker' $Python | Out-Null
+}
 
 $viteScript = Join-Path $Frontend 'node_modules\vite\bin\vite.js'
 if (-not (Test-TrackedProcess 'frontend' 'vite.js')) {

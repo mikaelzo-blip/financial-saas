@@ -10,7 +10,8 @@
   - R2: Payment to Money Movement synchronization (`PAY_VENDOR_BILL`, `CUSTOMER_PAYMENT`, reversal decoupling, AP/AR integration).
   - R3: Interbank transfer flow completed (source/dest accounts, posting, validation, MoneyMovement synchronization, reversal line tracking, and frontend UI).
   - R5: PostgreSQL-backed Background Job runtime (`JobWorker`, lease timeout recovery, retry backoff, entrypoint `src/worker.py`).
-- **Latest verified checkpoint**: R5 tested and verified. 168 backend unit tests, 48 frontend tests passing. Zero regressions.
+  - R6: Windows one-click startup & preflight script (`scripts/windows/Start-Financial-SaaS.ps1`, `Stop-Financial-SaaS.ps1`, worker process management, DB health check, idempotency).
+- **Latest verified checkpoint**: R6 tested and verified. Docker PostgreSQL, FastAPI backend, Vite frontend, and Background Job worker lifecycle verified.
 - **UAT data**: Organization `PT Kontraktor Utama Indonesia` (`9670673b-c0fd-4ebe-87e4-a646358084ea`), Project `PRJ-2026-001`, registered sender Muhammad Fikri, journals, transactions, and balances preserved intact.
 - **Tests**: 165 unit tests passing, 48 frontend tests passing; zero regressions.
 - **Accounting integrity**: Total Debit == Total Credit; Assets = Liabilities + Equity; zero orphan AR/AP/retention; zero direct journals from transport ingestion; human review hard-stop preserved; period closing guards enforced.

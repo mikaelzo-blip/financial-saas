@@ -18,9 +18,9 @@
   - R11: Fixed assets minimum usable workflow (FixedAssetService, straight-line book depreciation, available-for-use date, capitalization threshold IDR 5M, period guards, Dr 6105 / Cr 1502 deterministic posting, and Indonesian Owner UI).
   - R12: Project reporting hardening (Management summary distinction, contract value, invoiced revenue, cash received, retention, direct project cost, gross project profit primary, net contribution secondary, cash position separate, loan principal exclusion from costs, and owner-friendly terminology).
   - R13: Integrated RC1 end-to-end business lifecycle UAT (Vendor AP/payment/MoneyMovement, Customer AR/payment/MoneyMovement, Project profitability/cash position, accounting period close and backdate guards, formal reporting tie-outs: Balance Sheet, P&L, Equity Changes, CALK, Cash Flow, Trial Balance, GL, AR/AP aging).
-- **Latest verified checkpoint**: R11 + R12 tested and verified with owner language audit complete. 183 backend unit tests, 46 integration tests, 48 frontend tests passing. Zero regressions.
+- **Latest verified checkpoint**: R13 integrated RC1 business lifecycle UAT complete. 183 backend unit tests, 156 integration tests, 48 frontend tests passing, frontend production build verified. Zero regressions.
 - **UAT data**: Organization `PT Kontraktor Utama Indonesia` (`9670673b-c0fd-4ebe-87e4-a646358084ea`), Project `PRJ-2026-001`, registered sender Muhammad Fikri, journals, transactions, and balances preserved intact.
-- **Tests**: 183 unit tests passing, 48 frontend tests passing; zero regressions.
+- **Tests**: 183 backend unit tests passing, 156 integration tests passing, 48 frontend tests passing, Vite production build passing; zero regressions.
 - **Accounting integrity**: Total Debit == Total Credit; Assets = Liabilities + Equity; zero orphan AR/AP/retention; zero direct journals from transport ingestion; human review hard-stop preserved; period closing guards enforced.
 - **Real Provider Status**:
   - Meta Cloud API Sandbox Adapter: **PRESERVED AS INACTIVE/FUTURE TRANSPORT**
@@ -28,5 +28,7 @@
   - Receiver / Bot Number: `+628****9522` (Keuangan-CBL)
   - Allowed Sender Number: `+628****2760` (Muhammad Fikri)
   - Pair Mode: Bot Mode (`WHATSAPP_MODE=bot`, `WHATSAPP_ALLOWED_USERS=+628****2760`)
-- **Outstanding blockers**: None.
-- **Next Step**: Review and submit Pull Request for `hermes/ecc-minimal-integration` into `main`.
+- **Outstanding blockers**:
+  - R1: BLOCKED_EXTERNAL (Durable PC-off capture: remote edge host and auth credentials required for Cloudflare D1/R2 relay).
+  - R14: BLOCKED_EXTERNAL (External consultant financial report reconciliation: awaiting actual external consultant statements).
+- **Next Step**: Review and submit Pull Request for `hermes/rc1-implementation` into `main`.

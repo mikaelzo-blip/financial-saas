@@ -132,7 +132,8 @@ class BalanceSheetService:
             tot_eq += current_year_earnings
 
         total_assets = tot_ca + tot_fa
-        total_liab_and_eq = tot_cl + tot_eq
+        total_liabilities = tot_cl + tot_ll
+        total_liab_and_eq = total_liabilities + tot_eq
         diff = abs(total_assets - total_liab_and_eq)
         is_bal = (diff == Decimal("0.00"))
 
@@ -165,7 +166,7 @@ class BalanceSheetService:
                 lines=long_term_liab_lines,
                 subtotal=tot_ll
             ),
-            total_liabilities=tot_cl + tot_ll,
+            total_liabilities=total_liabilities,
             equity=ReportSection(
                 section_code="EQ",
                 section_name="Ekuitas",
@@ -173,9 +174,9 @@ class BalanceSheetService:
                 subtotal=tot_eq
             ),
             total_equity=tot_eq,
-            total_liabilities_and_equity=tot_cl + tot_ll + tot_eq,
-            is_balanced=abs(total_assets - (tot_cl + tot_ll + tot_eq)) == Decimal("0.00"),
-            balancing_difference=abs(total_assets - (tot_cl + tot_ll + tot_eq)),
-            integrity_status="VALID" if abs(total_assets - (tot_cl + tot_ll + tot_eq)) == Decimal("0.00") else "INTEGRITY_ERROR"
+            total_liabilities_and_equity=total_liab_and_eq,
+            is_balanced=is_bal,
+            balancing_difference=diff,
+            integrity_status="VALID" if is_bal else "REPORT_INTEGRITY_ERROR"
         )
 

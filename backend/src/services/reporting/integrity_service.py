@@ -146,7 +146,7 @@ class IntegrityService:
             )
         )
 
-        overall = "VALID" if all(c.status == "PASS" for c in checks) else "INTEGRITY_ERROR"
+        overall = "VALID" if all(c.status == "PASS" for c in checks) else "REPORT_INTEGRITY_ERROR"
 
         return IntegrityReportResponse(
             organization_name=org_name,

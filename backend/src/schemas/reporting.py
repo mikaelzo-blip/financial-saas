@@ -253,14 +253,33 @@ class ProjectProfitabilityReportResponse(BaseModel):
     project_name: str
     client_name: Optional[str] = None
     status: str
+    contract_value: Decimal = Decimal("0.00")
     original_contract_value: Decimal
     variation_orders_value: Decimal
     revised_contract_value: Decimal
+    invoiced_amount: Decimal = Decimal("0.00")
     revenue_recognized: Decimal
+    cash_received: Decimal = Decimal("0.00")
+    receivable_outstanding: Decimal = Decimal("0.00")
+    retention_withheld: Decimal = Decimal("0.00")
     cost_breakdown: List[ProjectCostCategoryLine] = []
+    direct_project_cost: Decimal = Decimal("0.00")
     total_project_cost: Decimal
     gross_profit: Decimal
+    gross_project_profit: Decimal = Decimal("0.00")
     gross_margin_percentage: Decimal
+    gross_margin: Decimal = Decimal("0.00")
+    cash_spent: Decimal = Decimal("0.00")
+    project_cash_position: Decimal = Decimal("0.00")
+    is_cash_surplus: bool = True
+    pph_withheld: Decimal = Decimal("0.00")
+    pph_final: Decimal = Decimal("0.00")
+    project_fee: Decimal = Decimal("0.00")
+    bank_charges: Decimal = Decimal("0.00")
+    loan_principal_paid: Decimal = Decimal("0.00")
+    has_net_contribution_data: bool = False
+    project_net_contribution: Optional[Decimal] = None
+    help_texts: Dict[str, str] = Field(default_factory=dict)
 
 
 # Project Cash Position
@@ -269,13 +288,21 @@ class ProjectCashPositionReportResponse(BaseModel):
     project_id: str
     project_code: str
     project_name: str
+    contract_value: Decimal = Decimal("0.00")
     invoiced_amount: Decimal
     cash_received: Decimal
     receivable_outstanding: Decimal
+    retention_withheld: Decimal = Decimal("0.00")
+    direct_project_cost: Decimal = Decimal("0.00")
+    gross_profit: Decimal = Decimal("0.00")
+    gross_margin_percentage: Decimal = Decimal("0.00")
     cash_spent: Decimal
     net_cash_position: Decimal
     is_surplus: bool
+    pph_withheld: Decimal = Decimal("0.00")
+    loan_principal_paid: Decimal = Decimal("0.00")
     notice_message: str = "Laba Proyek (Akrual) Berbeda dengan Posisi Kas Proyek (Likuiditas)."
+    help_texts: Dict[str, str] = Field(default_factory=dict)
 
 
 # Budget vs Actual

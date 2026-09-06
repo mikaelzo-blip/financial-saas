@@ -141,3 +141,84 @@ async def test_balance_sheet_accounting_equation(db_session: AsyncSession):
     assert bs.total_liabilities == Decimal("50000000.00")
     assert bs.total_equity == Decimal("100000000.00")
     assert bs.total_liabilities_and_equity == Decimal("150000000.00")
+
+
+@pytest.mark.asyncio
+async def test_balance_sheet_integrity_error_on_mismatch_without_plug(db_session: AsyncSession):
+    """
+    Ensure that when Assets != Liabilities + Equity, the system returns
+    REPORT_INTEGRITY_ERROR and does not hide the discrepancy with synthetic balancing entries.
+    """
+    org = Organization(slug="pt-unbalanced-test", legal_name="PT Unbalanced Test")
+    db_session.add(org)
+    await db_session.flush()
+
+    acc_kas = ChartOfAccount(
+        organization_id=org.id,
+        account_code="1101.01",
+        account_name="Kas & Bank",
+        account_type=AccountType.ASSET,
+        normal_balance=NormalBalance.DEBIT,
+        report_group="CURRENT_ASSETS"
+    )
+    acc_modal = ChartOfAccount(
+        organization_id=org.id,
+        account_code="3101.01",
+        account_name="Modal Disetor",
+        account_type=AccountType.EQUITY,
+        normal_balance=NormalBalance.CREDIT,
+        report_group="EQUITY"
+    )
+    db_session.add_all([acc_kas, acc_modal])
+    await db_session.flush()
+
+    trx = Transaction(
+        organization_id=org.id,
+        transaction_code="TRX-UNBAL-01",
+        transaction_type=TransactionType.OWNER_CONTRIBUTION,
+        transaction_date=date(2026, 1, 1),
+        amount=Decimal("100000000.00"),
+        description="Modal Awal Cacat",
+        source_channel="WEB",
+        workflow_status=WorkflowStatus.POSTED
+    )
+    db_session.add(trx)
+    await db_session.flush()
+
+    # Inactivate the equity account so its balance is omitted from the balance sheet
+    # (e.g. invalid state or orphan journal line)
+    acc_modal.is_active = False
+    db_session.add(acc_modal)
+    await db_session.flush()
+
+    je = JournalEntry(
+        organization_id=org.id,
+        entry_number="JE-UNBAL-01",
+        transaction_id=trx.id,
+        posting_date=date(2026, 1, 1),
+        description="Corrupted COA State Entry",
+        total_debit=Decimal("100000000.00"),
+        total_credit=Decimal("100000000.00"),
+        is_balanced=True
+    )
+    db_session.add(je)
+    await db_session.flush()
+
+    jl1 = JournalLine(journal_entry_id=je.id, line_number=1, account_id=acc_kas.id, debit_amount=Decimal("100000000.00"), credit_amount=Decimal("0.00"))
+    jl2 = JournalLine(journal_entry_id=je.id, line_number=2, account_id=acc_modal.id, debit_amount=Decimal("0.00"), credit_amount=Decimal("100000000.00"))
+    db_session.add_all([jl1, jl2])
+    await db_session.commit()
+
+    bs = await BalanceSheetService.get_balance_sheet(
+        session=db_session,
+        organization_id=org.id,
+        as_of_date=date(2026, 1, 31)
+    )
+
+    assert bs.is_balanced is False
+    assert bs.integrity_status == "REPORT_INTEGRITY_ERROR"
+    assert bs.balancing_difference == Decimal("100000000.00")
+    # Assets = 100M, Liab + Eq = 0M, no synthetic plug line created
+    assert bs.total_assets == Decimal("100000000.00")
+    assert bs.total_liabilities_and_equity == Decimal("0.00")
+

@@ -36,7 +36,7 @@ export const ProfitLossPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Laporan Laba Rugi (Profit & Loss)</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Laporan Laba Rugi</h1>
           <p className="text-sm text-slate-500">
             Kinerja keuangan operasional dan laba bersih standar SAK Kontraktor.
           </p>

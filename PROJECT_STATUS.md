@@ -16,10 +16,11 @@
   - R9: Reporting standardization (EQ-CY synthetic profit fix, Laporan Perubahan Ekuitas, CALK framework, comparative reporting, export parity).
   - R10: Opening balance workflow (OpeningBalanceService API/UI, balanced equity offset, double-entry audit trail).
   - R11: Fixed assets minimum usable workflow (FixedAssetService, straight-line book depreciation, available-for-use date, capitalization threshold IDR 5M, period guards, Dr 6105 / Cr 1502 deterministic posting, and Indonesian Owner UI).
+  - R12: Project reporting hardening (Management summary distinction, contract value, invoiced revenue, cash received, retention, direct project cost, gross project profit primary, net contribution secondary, cash position separate, loan principal exclusion from costs, and owner-friendly terminology).
   - R13: Integrated RC1 end-to-end business lifecycle UAT (Vendor AP/payment/MoneyMovement, Customer AR/payment/MoneyMovement, Project profitability/cash position, accounting period close and backdate guards, formal reporting tie-outs: Balance Sheet, P&L, Equity Changes, CALK, Cash Flow, Trial Balance, GL, AR/AP aging).
-- **Latest verified checkpoint**: R11 tested and verified. 181 backend unit tests, 46 integration tests, 48 frontend tests passing. Zero regressions.
+- **Latest verified checkpoint**: R11 + R12 tested and verified with owner language audit complete. 183 backend unit tests, 46 integration tests, 48 frontend tests passing. Zero regressions.
 - **UAT data**: Organization `PT Kontraktor Utama Indonesia` (`9670673b-c0fd-4ebe-87e4-a646358084ea`), Project `PRJ-2026-001`, registered sender Muhammad Fikri, journals, transactions, and balances preserved intact.
-- **Tests**: 165 unit tests passing, 48 frontend tests passing; zero regressions.
+- **Tests**: 183 unit tests passing, 48 frontend tests passing; zero regressions.
 - **Accounting integrity**: Total Debit == Total Credit; Assets = Liabilities + Equity; zero orphan AR/AP/retention; zero direct journals from transport ingestion; human review hard-stop preserved; period closing guards enforced.
 - **Real Provider Status**:
   - Meta Cloud API Sandbox Adapter: **PRESERVED AS INACTIVE/FUTURE TRANSPORT**

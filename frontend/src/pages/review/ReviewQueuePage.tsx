@@ -200,11 +200,11 @@ export const ReviewQueuePage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-              Antrean Review Terpadu (Unified Review Queue)
+              Antrean Perlu Diperiksa
             </h2>
             {documentQueue.length + queueItems.length > 0 && (
               <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-full">
-                <AlertTriangle className="h-3.5 w-3.5" /> {documentQueue.length + queueItems.length} Perlu Review
+                <AlertTriangle className="h-3.5 w-3.5" /> {documentQueue.length + queueItems.length} Perlu Diperiksa
               </span>
             )}
           </div>

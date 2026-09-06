@@ -84,6 +84,7 @@ class TransactionType(str, Enum):
 
     # Assets & Inventory
     ASSET_PURCHASE = "ASSET_PURCHASE"
+    FIXED_ASSET_DEPRECIATION = "FIXED_ASSET_DEPRECIATION"
     INVENTORY_PURCHASE = "INVENTORY_PURCHASE"
     INVENTORY_USAGE = "INVENTORY_USAGE"
 
@@ -249,7 +250,9 @@ class DepreciationMethod(str, Enum):
 
 
 class AssetStatus(str, Enum):
+    DRAFT = "DRAFT"
     ACTIVE = "ACTIVE"
+    FULLY_DEPRECIATED = "FULLY_DEPRECIATED"
     DISPOSED = "DISPOSED"
     WRITTEN_OFF = "WRITTEN_OFF"
 

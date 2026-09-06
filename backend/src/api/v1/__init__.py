@@ -19,6 +19,7 @@ from src.api.v1.bank_reconciliation import router as bank_reconciliation_router
 from src.api.v1.inbox import router as inbox_router
 from src.api.v1.payables import router as payables_router, vendor_payments_router
 from src.api.v1.accounting_periods import router as accounting_periods_router
+from src.api.v1.fixed_assets import router as fixed_assets_router
 
 
 
@@ -36,6 +37,7 @@ application_router.include_router(money_movements_router, prefix="/money-movemen
 application_router.include_router(bank_reconciliation_router, prefix="/bank-reconciliation", tags=["Bank Reconciliation"])
 application_router.include_router(inbox_router, prefix="/inbox", tags=["WhatsApp Inbox"])
 application_router.include_router(accounting_periods_router)
+application_router.include_router(fixed_assets_router)
 application_router.include_router(payables_router)
 
 

@@ -68,6 +68,7 @@ export const AppLayout: React.FC = () => {
   const masterItems = [
     { label: 'Pelanggan (Customer)', path: '/customers', icon: Users },
     { label: 'Vendor & Subkon', path: '/vendors', icon: Truck },
+    { label: 'Aset Tetap', path: '/fixed-assets', icon: Landmark },
     { label: 'Bagan Akun (COA)', path: '/chart-of-accounts', icon: BookOpen },
   ];
 

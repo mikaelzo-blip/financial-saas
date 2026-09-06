@@ -36,6 +36,7 @@ import { ProjectCashPositionPage } from './pages/reports/ProjectCashPositionPage
 import { BudgetVsActualPage } from './pages/reports/BudgetVsActualPage';
 import { WhatsAppInboxPage } from './pages/inbox/WhatsAppInboxPage';
 import { BankReconciliationPage } from './pages/reconciliation/BankReconciliationPage';
+import { FixedAssetsPage } from './pages/assets/FixedAssetsPage';
 
 export const App: React.FC = () => {
   return (
@@ -66,6 +67,7 @@ export const App: React.FC = () => {
                 <Route path="projects/:id" element={<ProjectDetailPage />} />
                 
                 {/* Master Data */}
+                <Route path="fixed-assets" element={<FixedAssetsPage />} />
                 <Route path="customers" element={<CustomerListPage />} />
                 <Route path="vendors" element={<VendorListPage />} />
                 <Route path="payment-accounts" element={<PaymentAccountsPage />} />

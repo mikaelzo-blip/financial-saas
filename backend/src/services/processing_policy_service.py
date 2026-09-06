@@ -108,20 +108,32 @@ class ProcessingPolicyService:
                 AccountingPeriod.organization_id == organization_id,
                 AccountingPeriod.start_date <= trx.transaction_date,
                 AccountingPeriod.end_date >= trx.transaction_date,
-                AccountingPeriod.status == AccountingPeriodStatus.CLOSED
+                AccountingPeriod.status.in_([AccountingPeriodStatus.CLOSED, AccountingPeriodStatus.SOFT_CLOSED])
             )
         )
         closed_period = await self.session.scalar(period_stmt)
         if closed_period:
-            raise InvariantViolationException(
-                f"Cannot post transaction {trx.transaction_code}. Accounting period '{closed_period.period_name}' is CLOSED.",
-                details={
-                    "transaction_id": str(transaction_id),
-                    "transaction_date": str(trx.transaction_date),
-                    "period_name": closed_period.period_name,
-                    "period_status": closed_period.status.value
-                }
-            )
+            if closed_period.status == AccountingPeriodStatus.CLOSED:
+                raise InvariantViolationException(
+                    f"Cannot post transaction {trx.transaction_code}. Accounting period '{closed_period.period_name}' is CLOSED.",
+                    details={
+                        "transaction_id": str(transaction_id),
+                        "transaction_date": str(trx.transaction_date),
+                        "period_name": closed_period.period_name,
+                        "period_status": closed_period.status.value
+                    }
+                )
+            elif closed_period.status == AccountingPeriodStatus.SOFT_CLOSED:
+                if actor_role not in (UserRole.ADMIN, UserRole.MANAGER):
+                    raise AuthorizationException(
+                        f"Cannot post transaction {trx.transaction_code}. Accounting period '{closed_period.period_name}' is SOFT_CLOSED (requires Admin or Manager).",
+                        details={
+                            "transaction_id": str(transaction_id),
+                            "transaction_date": str(trx.transaction_date),
+                            "period_name": closed_period.period_name,
+                            "period_status": closed_period.status.value
+                        }
+                    )
 
         # 2. Sensitive Type Role Guard
         if not bypass_role_check and trx.transaction_type in self.SENSITIVE_TYPES:

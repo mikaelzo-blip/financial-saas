@@ -104,3 +104,16 @@ class TransactionResponse(BaseModel):
     review_flags: List[TransactionReviewFlagResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class OpeningBalanceEntryInput(BaseModel):
+    account_code: str = Field(min_length=3, max_length=50)
+    debit: Decimal = Field(default=Decimal("0.00"), ge=0)
+    credit: Decimal = Field(default=Decimal("0.00"), ge=0)
+
+
+class OpeningBalanceBatchRequest(BaseModel):
+    as_of_date: date
+    entries: List[OpeningBalanceEntryInput] = Field(min_length=1)
+    notes: Optional[str] = "Saldo Awal Pembukuan (Opening Balance)"
+

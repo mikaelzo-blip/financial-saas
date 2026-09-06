@@ -6,8 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.database import get_db
 from src.api.deps import get_current_org_id
 from src.models.enums import TransactionType, WorkflowStatus
-from src.schemas.transaction import TransactionCreate, TransactionResponse
+from src.schemas.transaction import (
+    TransactionCreate,
+    TransactionResponse,
+    OpeningBalanceBatchRequest
+)
 from src.services.transaction_service import TransactionService
+from src.services.opening_balance_service import OpeningBalanceService
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -94,4 +99,28 @@ async def approve_transaction(
     await db.commit()
     service = TransactionService(db)
     return await service.get_transaction(org_id, transaction_id)
+
+
+@router.post(
+    "/opening-balances",
+    response_model=TransactionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Establish Opening Balances"
+)
+async def establish_opening_balances(
+    payload: OpeningBalanceBatchRequest,
+    org_id: uuid.UUID = Depends(get_current_org_id),
+    db: AsyncSession = Depends(get_db)
+):
+    service = OpeningBalanceService(db)
+    raw_entries = [e.model_dump() for e in payload.entries]
+    posted_trx = await service.post_opening_balances(
+        organization_id=org_id,
+        as_of_date=payload.as_of_date,
+        balance_entries=raw_entries,
+        notes=payload.notes or "Saldo Awal Pembukuan"
+    )
+    await db.commit()
+    return await TransactionService(db).get_transaction(org_id, posted_trx.id)
+
 

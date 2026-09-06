@@ -299,4 +299,78 @@ export interface DashboardSummaryResponse {
   integrity_status: 'VALID' | 'INTEGRITY_ERROR';
 }
 
+export interface LineItemComparison {
+  item_key: string;
+  label_id: string;
+  label_en: string;
+  consultant_amount: number | string;
+  saas_amount: number | string;
+  variance: number | string;
+  classification: 'MATCH' | 'MAPPING_DIFFERENCE' | 'TIMING_DIFFERENCE' | 'FISCAL_DIFFERENCE' | 'MISSING_DATA' | 'SYSTEM_DEFECT' | 'CONSULTANT_REPORT_DIFFERENCE';
+  notes?: string | null;
+}
+
+export interface ConsultantIntegrityAudit {
+  is_balanced: boolean;
+  assets_liabilities_equity_discrepancy: number | string;
+  pat_vs_current_earnings_discrepancy: number | string;
+  findings: string[];
+}
+
+export interface ConsultantFinancialStatementData {
+  year: number;
+  company_name: string;
+  source_document_name?: string | null;
+  revenue: number | string;
+  cogs: number | string;
+  gross_profit: number | string;
+  operating_expenses: number | string;
+  operating_profit: number | string;
+  other_income: number | string;
+  other_expenses: number | string;
+  profit_before_tax: number | string;
+  income_tax: number | string;
+  profit_after_tax: number | string;
+  cash: number | string;
+  bank: number | string;
+  receivables: number | string;
+  other_current_assets: number | string;
+  inventory: number | string;
+  fixed_assets_cost: number | string;
+  accumulated_depreciation: number | string;
+  total_assets: number | string;
+  payables: number | string;
+  tax_liabilities: number | string;
+  long_term_liabilities: number | string;
+  total_liabilities: number | string;
+  capital: number | string;
+  retained_earnings: number | string;
+  current_year_earnings: number | string;
+  total_equity: number | string;
+  total_liabilities_equity: number | string;
+  expense_breakdown?: Record<string, number | string>;
+}
+
+export interface ConsultantReconciliationSummary {
+  total_items_compared: number;
+  match_count: number;
+  difference_count: number;
+  missing_data_count: number;
+  consultant_defect_count: number;
+  net_pl_variance: number | string;
+  net_bs_variance: number | string;
+}
+
+export interface ConsultantReconciliationReport {
+  organization_id: string;
+  year: number;
+  as_of_date: string;
+  consultant_data: ConsultantFinancialStatementData;
+  statement_integrity: ConsultantIntegrityAudit;
+  pl_comparisons: LineItemComparison[];
+  bs_comparisons: LineItemComparison[];
+  summary: ConsultantReconciliationSummary;
+}
+
+
 

@@ -1,0 +1,21 @@
+name = "financial-saas-edge-relay"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+# D1 Database binding for durable metadata
+[[d1_databases]]
+binding = "DB"
+database_name = "financial-saas-inbox"
+database_id = "placeholder-d1-id" # Updated during owner provisioning
+
+# R2 Object Storage binding for durable media files
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "financial-saas-media"
+
+[vars]
+ENVIRONMENT = "production"
+MAX_MEDIA_SIZE_BYTES = "26214400" # 25MB
+LEASE_TIMEOUT_SECONDS = "300"     # 5 minutes
+RETENTION_DAYS = "30"             # 30 days retention at edge

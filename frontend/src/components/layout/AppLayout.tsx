@@ -21,6 +21,7 @@ import {
   Landmark,
   Scale,
   MessageSquare,
+  CheckSquare,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
@@ -63,6 +64,7 @@ export const AppLayout: React.FC = () => {
     { label: 'Buku Besar', path: '/reports/general-ledger', icon: BookOpen },
     { label: 'Umur Piutang Pelanggan', path: '/reports/receivables', icon: ArrowDownLeft },
     { label: 'Umur Utang Vendor', path: '/reports/payables', icon: ArrowUpRight },
+    { label: 'Rekonsiliasi Konsultan', path: '/reports/consultant-reconciliation', icon: CheckSquare },
   ];
 
   const masterItems = [

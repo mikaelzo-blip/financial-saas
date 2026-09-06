@@ -37,6 +37,7 @@ import { BudgetVsActualPage } from './pages/reports/BudgetVsActualPage';
 import { WhatsAppInboxPage } from './pages/inbox/WhatsAppInboxPage';
 import { BankReconciliationPage } from './pages/reconciliation/BankReconciliationPage';
 import { FixedAssetsPage } from './pages/assets/FixedAssetsPage';
+import { ConsultantReconciliationPage } from './pages/reports/ConsultantReconciliationPage';
 
 export const App: React.FC = () => {
   return (
@@ -99,6 +100,7 @@ export const App: React.FC = () => {
                 <Route path="reports/project-profitability" element={<ProjectProfitabilityPage />} />
                 <Route path="reports/project-cash" element={<ProjectCashPositionPage />} />
                 <Route path="reports/budget-vs-actual" element={<BudgetVsActualPage />} />
+                <Route path="reports/consultant-reconciliation" element={<ConsultantReconciliationPage />} />
 
                 {/* Settings & Audit */}
                 <Route path="settings" element={<SettingsPage />} />

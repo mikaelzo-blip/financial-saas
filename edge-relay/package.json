@@ -1,0 +1,20 @@
+{
+  "name": "financial-saas-edge-relay",
+  "version": "1.0.0",
+  "description": "Always-on serverless edge capture relay for WhatsApp financial documents (Cloudflare Worker + D1 + R2)",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "init-db": "wrangler d1 execute financial-saas-inbox --file=./schema.sql"
+  },
+  "keywords": ["whatsapp", "edge-relay", "cloudflare-worker", "d1", "r2"],
+  "author": "Financial SaaS",
+  "license": "UNLICENSED",
+  "dependencies": {},
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241230.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^3.100.0"
+  }
+}

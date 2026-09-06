@@ -22,4 +22,21 @@ export const inboxApi = {
     const response = await apiClient.post<InboxMessage[]>('/api/v1/inbox/sync');
     return response.data;
   },
+
+  listSessions: async (statusFilter?: string, limit = 50, offset = 0): Promise<any[]> => {
+    const params = new URLSearchParams();
+    if (statusFilter) {
+      params.append('status_filter', statusFilter);
+    }
+    params.append('limit', String(limit));
+    params.append('offset', String(offset));
+
+    const response = await apiClient.get<any[]>(`/api/v1/inbox/sessions?${params.toString()}`);
+    return response.data;
+  },
+
+  analyzeSession: async (sessionId: string): Promise<any> => {
+    const response = await apiClient.post<any>(`/api/v1/inbox/sessions/${sessionId}/analyze`);
+    return response.data;
+  },
 };

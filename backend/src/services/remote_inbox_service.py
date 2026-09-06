@@ -1,6 +1,7 @@
 import uuid
 import hashlib
 import base64
+import io
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 from sqlalchemy import select, and_, desc
@@ -12,12 +13,15 @@ from src.models.document import Document
 from src.models.enums import InboxMessageStatus, SessionMatchStatus, DocumentProcessingStatus, DocumentType
 
 from src.schemas.inbox import RemoteInboxPayload
+from src.services.job_queue_service import JobQueueService
+from src.services.storage_service import StorageService
 from src.core.exceptions import DuplicateEntityException, EntityNotFoundException
 
 
 class RemoteInboxService:
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, storage_service: Optional[StorageService] = None):
         self.session = session
+        self.storage = storage_service or StorageService()
 
     async def ingest_remote_capture(
         self,
@@ -55,7 +59,11 @@ class RemoteInboxService:
         if payload.file_content_base64 and payload.file_name:
             file_bytes = base64.b64decode(payload.file_content_base64)
             computed_hash = hashlib.sha256(file_bytes).hexdigest()
-            storage_path = f"storage/inbox/{organization_id}/{msg.id}/{payload.file_name}"
+            storage_path = self.storage.save_file(
+                organization_id=organization_id,
+                file_obj=io.BytesIO(file_bytes),
+                original_filename=payload.file_name
+            )
 
             att = InboxAttachment(
                 inbox_message_id=msg.id,
@@ -79,12 +87,13 @@ class RemoteInboxService:
 
     async def sync_backlog(
         self,
-        organization_id: uuid.UUID
+        organization_id: uuid.UUID,
+        auto_enqueue: bool = True
     ) -> List[InboxMessage]:
         """
         Local Sync Worker responsibility:
         Finds all RECEIVED messages, creates tenant-isolated Documents for attachments,
-        marks message as SYNCED, and establishes a DocumentSession for deferred AI analysis.
+        marks message as SYNCED, establishes a DocumentSession, and enqueues deferred AI analysis.
         """
         messages = (await self.session.scalars(
             select(InboxMessage)
@@ -97,6 +106,7 @@ class RemoteInboxService:
         )).all()
 
         synced_list: List[InboxMessage] = []
+        queue_svc = JobQueueService(self.session) if auto_enqueue else None
 
         for msg in messages:
             for att in msg.attachments:
@@ -113,7 +123,6 @@ class RemoteInboxService:
                         document_code=f"DOC-WA-{uuid.uuid4().hex[:8].upper()}",
                         document_type=DocumentType.VENDOR_INVOICE,
                         file_name=att.file_name,
-
                         storage_path=att.storage_path,
                         file_hash=att.file_hash_sha256,
                         file_size_bytes=att.size_bytes,
@@ -122,7 +131,6 @@ class RemoteInboxService:
                         source_channel="WHATSAPP",
                         source_metadata={"caption": msg.caption, "sender_phone": msg.sender_phone}
                     )
-
                     self.session.add(doc)
                     await self.session.flush()
 
@@ -139,6 +147,18 @@ class RemoteInboxService:
                     notes=f"Synced from WhatsApp message {msg.external_message_id}"
                 )
                 self.session.add(doc_session)
+                await self.session.flush()
+
+                if queue_svc:
+                    await queue_svc.enqueue(
+                        job_type="DOCUMENT_DEFERRED_ANALYSIS",
+                        payload={
+                            "organization_id": str(organization_id),
+                            "session_id": str(doc_session.id),
+                            "document_id": str(doc.id)
+                        },
+                        organization_id=organization_id
+                    )
 
             msg.status = InboxMessageStatus.SYNCED
             msg.synced_at = datetime.now(timezone.utc)
@@ -166,3 +186,47 @@ class RemoteInboxService:
             query = query.where(InboxMessage.status == status_filter)
 
         return (await self.session.scalars(query)).all()
+
+    async def list_sessions(
+        self,
+        organization_id: uuid.UUID,
+        status_filter: Optional[SessionMatchStatus] = None,
+        limit: int = 50,
+        offset: int = 0
+    ) -> List[DocumentSession]:
+        query = (
+            select(DocumentSession)
+            .where(DocumentSession.organization_id == organization_id)
+            .options(
+                selectinload(DocumentSession.evidences),
+                selectinload(DocumentSession.document),
+                selectinload(DocumentSession.inbox_message)
+            )
+            .order_by(desc(DocumentSession.created_at))
+            .limit(limit)
+            .offset(offset)
+        )
+        if status_filter:
+            query = query.where(DocumentSession.status == status_filter)
+        return (await self.session.scalars(query)).all()
+
+    async def get_session(
+        self,
+        organization_id: uuid.UUID,
+        session_id: uuid.UUID
+    ) -> DocumentSession:
+        doc_session = await self.session.scalar(
+            select(DocumentSession)
+            .options(
+                selectinload(DocumentSession.evidences),
+                selectinload(DocumentSession.document),
+                selectinload(DocumentSession.inbox_message)
+            )
+            .where(
+                DocumentSession.organization_id == organization_id,
+                DocumentSession.id == session_id
+            )
+        )
+        if not doc_session:
+            raise EntityNotFoundException("DocumentSession", session_id)
+        return doc_session

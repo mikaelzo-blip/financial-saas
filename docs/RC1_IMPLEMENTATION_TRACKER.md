@@ -1,0 +1,19 @@
+# RC1 Implementation Tracker
+
+| ID | Priority | Description | Dependencies | Status | Branch/Commit | Tests | UAT | Blocker | Notes |
+|---|---|---|---|---|---|---|---|---|---|
+| **R0** | P0 | Source of truth and standardization documentation (Standardization guide & RC1 Tracker) | None | DONE | `hermes/rc1-implementation` | N/A (Doc) | N/A | None | Ratified SAK EP orientation, 4 reporting layers, COA invariants, tracker. |
+| **R1** | P1 | Durable PC-off capture (Remote inbox relay, durable metadata/media, sync poller) | R0 | BLOCKED_EXTERNAL | None | Unit/Mock passing | Pending external edge | Remote edge host/auth credentials required for live Cloudflare/external relay. | Backend models and sync logic exist. |
+| **R2** | P0 | Payment to Money Movement synchronization (`PAY_VENDOR_BILL`, `CUSTOMER_PAYMENT`, AP/AR, Cash/Bank) | R0 | PENDING | None | Required | Pending | None | Ensure Journal, settlement, and MoneyMovement reconcile without divergence. |
+| **R3** | P0 | Interbank transfer flow (source/dest accounts, posting, validation, MoneyMovement, UI) | R2 | PENDING | None | Required | Pending | None | Outflow/inflow without income/expense impact; Mutasi Antar Rekening. |
+| **R4** | P1 | Deferred analysis runtime (Remote/Local Inbox -> Document -> DocumentSession -> DeferredAnalysisService -> candidate) | R1 | PENDING | None | Required | Pending | None | Automatic ingestion pipeline without manual API triggering. |
+| **R5** | P1 | Background job runtime (PostgreSQL-backed worker: claim, lease, retry, restart, idempotency) | R0 | PENDING | None | Required | Pending | None | Modular monolith queue without Redis. |
+| **R6** | P2 | Windows one-click startup & preflight script (`scripts/windows/Start-Financial-SaaS.ps1`) | R5 | PENDING | None | Script verified | Pending | None | Verify/launch Docker, DB, Alembic, FastAPI, worker, Baileys bridge, frontend. |
+| **R7** | P1 | Accounting period management UI/API (List, open, soft close, close, reopen with reason, backdate block) | R0 | PENDING | None | Required | Pending | None | Domain guard exists; expose safe admin controls. |
+| **R8** | P1 | Unified Review Queue experience (Document candidate & transaction ambiguity unified review) | R4 | PENDING | None | Required | Pending | None | Single pane for preview, extracted values, mappings, approve, correct, reject. |
+| **R9** | P1 | Reporting standardization (EQ-CY synthetic profit fix, Laporan Perubahan Ekuitas, CALK framework, comparative reporting, export parity) | R0 | PENDING | None | Required | Pending | None | Separate 3301 Prive from calculated current year profit. |
+| **R10** | P2 | Opening balance workflow (OpeningBalanceService API/UI, balanced equity offset, audit trail) | R7 | PENDING | None | Required | Pending | None | Safe opening balance entry preserving double-entry ledger invariants. |
+| **R11** | P2 | Fixed assets minimum usable workflow (Asset register, acquisition, useful life, accumulated depreciation) | R0 | PENDING | None | Required | Pending | BLOCKED_POLICY | Depreciation method and useful life policy require Owner configuration. |
+| **R12** | P1 | Project reporting hardening (Separate contract value, recognized revenue, invoiced, collected, retention, cost, profit, cash) | R9 | PENDING | None | Required | Pending | BLOCKED_POLICY | Formal project revenue recognition policy selection requires Owner approval. |
+| **R13** | P0 | Integrated RC1 end-to-end business lifecycle UAT (Vendor, customer, project, period close, all reports tie out) | R2, R3, R7, R8, R9 | PENDING | None | Required | Pending | None | End-to-end audit verification across all financial domains. |
+| **R14** | P3 | External consultant financial report reconciliation | R9, R13 | PENDING | None | Report diff | Pending | BLOCKED_EXTERNAL | Awaiting actual external consultant statements. |

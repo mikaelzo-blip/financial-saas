@@ -153,6 +153,8 @@ async def record_vendor_payment(
     allocations = await ap_service.allocate_vendor_payment(
         organization_id, payment.id, [(bill.id, data.amount)]
     )
+    from src.services.money_movement_service import MoneyMovementService
+    await MoneyMovementService(db).synchronize_payment_money_movement(organization_id, payment.id)
     refreshed_bill = await ap_service.get_bill(organization_id, bill.id)
     return VendorPaymentResponse(
         payment_transaction_id=payment.id,

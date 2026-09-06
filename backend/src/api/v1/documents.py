@@ -201,6 +201,9 @@ async def approve_document_candidate(document_id: uuid.UUID, org_id: uuid.UUID =
         await VendorAPService(db).allocate_vendor_payment(
             org_id, transaction.id, [(candidate.allocation_target_id, candidate.amount)]
         )
+    if candidate.proposed_transaction_type in (TransactionType.CUSTOMER_PAYMENT, TransactionType.PAY_VENDOR_BILL):
+        from src.services.money_movement_service import MoneyMovementService
+        await MoneyMovementService(db).synchronize_payment_money_movement(org_id, transaction.id)
     candidate.status, candidate.converted_transaction_id = CandidateStatus.CONVERTED, transaction.id
     document.candidate_transaction = candidate.model_dump(mode="json")
     document.processing_status = DocumentProcessingStatus.PROCESSED

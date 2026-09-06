@@ -2,18 +2,13 @@
 
 - **Current origin/main baseline**: `d025efa` (PR #44 merged)
 - **Completed features**: 001 Contractor Finance System; 002 Core Financial Domain; 003 Core Operational UI; 004 Financial Reporting; 005 Document Intelligence; 006 Hermes Automation; 007 WhatsApp Integration; 008 AI Management Insights; 009 Production Readiness Foundation; 010 Dependency Security Gates; UAT Findings #1-#3; UAT #4 Customer Invoice; UAT #5 Customer Payment & AR Allocation; UAT #5.1 Active Tenant Identity; UAT #6 Vendor Bill & Accounts Payable; UAT #7 Vendor Payment & Cash Disbursement Safety; UAT #8 Reversal Flow; UAT #9 Financial Reporting; UAT #10 Project Completion & Retention Release; UAT #11 Document Ingestion & Storage Reliability; UAT #12 WhatsApp Media Transport & Review Queue Intake; UAT #13 Real Document Extraction & Candidate Review Flow; UAT #14 End-to-End Operational Workflows & Edge-Case Stress Testing; UAT #15 WhatsApp Sandbox Integration & Production Deployment Dry Run; UAT #16 Real Meta WhatsApp Cloud API Sandbox Pilot; UAT #17 Real WhatsApp Media Intake (Baileys Bridge); PRD v2.0 Remediation Program (Phases P0–P7); Minimal ECC Engineering Workflow Integration.
-- **Current feature**: Minimal ECC Integration (affaan-m/ECC v2.2.0)
-- **Current branch**: `hermes/ecc-minimal-integration`
-- **Execution state**: ACTIVE. ECC minimal profile integrated as supporting engineering workflow.
-- **ECC Integration Summary**:
-  - Version: `affaan-m/ECC v2.2.0` (stable release tag).
-  - Target: `hermes` (user-level `~/.hermes/`).
-  - Profile: `minimal` (modules: `rules-core`, `agents-core`, `commands-core`, `platform-configs`, `workflow-quality`).
-  - Installed surface: 485 managed files (78 skills, 23 rulesets, 102 commands).
-  - Prioritized workflow skills: `intent-driven-development`, `tdd-workflow`, `verification-loop`, `production-audit`, `git-workflow`, `error-handling`, `iterative-retrieval`, `architecture-decision-records`, `delivery-gate`, `repo-scan`.
-  - Intentionally disabled/omitted: Hook runtime, Memory Vault (`.ecc/memory`), Memory MCP (`ecc-memory-mcp`), continuous-learning runtime, external agent daemons, model routing overrides.
-  - Relationship to Spec Kit & Constitution: Spec Kit (`.specify/`) and `.specify/memory/constitution.md` remain authoritative and unchanged. `financial-saas-orchestrator` remains the governing project skill with explicit routing policy.
-- **Latest verified checkpoint**: ECC minimal installation verified with `node scripts/doctor.js --target hermes` (0 errors, 0 warnings). 165 backend unit tests passing, 48 frontend tests passing. Zero mutations to accounting models, migrations, or database.
+- **Current feature**: RC1 Implementation Backlog (R0-R14)
+- **Current branch**: `hermes/rc1-implementation`
+- **Execution state**: ACTIVE. Advancing through RC1 approved backlog one task at a time.
+- **Completed Tasks**:
+  - R0: Source of truth and standardization documentation ratified (`docs/ACCOUNTING_REPORTING_STANDARDIZATION_V1.md`, `docs/RC1_IMPLEMENTATION_TRACKER.md`).
+  - R2: Payment to Money Movement synchronization (`PAY_VENDOR_BILL`, `CUSTOMER_PAYMENT`, reversal decoupling, AP/AR integration).
+- **Latest verified checkpoint**: R2 tested and verified. 165 unit tests, 12 payment/reversal integration tests, and 48 frontend tests passing. Zero regressions.
 - **UAT data**: Organization `PT Kontraktor Utama Indonesia` (`9670673b-c0fd-4ebe-87e4-a646358084ea`), Project `PRJ-2026-001`, registered sender Muhammad Fikri, journals, transactions, and balances preserved intact.
 - **Tests**: 165 unit tests passing, 48 frontend tests passing; zero regressions.
 - **Accounting integrity**: Total Debit == Total Credit; Assets = Liabilities + Equity; zero orphan AR/AP/retention; zero direct journals from transport ingestion; human review hard-stop preserved; period closing guards enforced.

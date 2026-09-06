@@ -152,6 +152,30 @@ class ReversalService:
                     affected_bills.append(b)
                 await self.session.delete(alloc)
 
+        # Invalidate/delete linked MoneyMovement and Settlement for reversed cash payment transactions
+        if original_trx.transaction_type in (TransactionType.CUSTOMER_PAYMENT, TransactionType.PAY_VENDOR_BILL, TransactionType.PAY_SUBCONTRACTOR):
+            from src.models.money_movement import Settlement, MoneyMovement
+            linked_settlements = (await self.session.scalars(
+                select(Settlement).where(
+                    and_(
+                        Settlement.organization_id == organization_id,
+                        Settlement.transaction_id == original_trx.id,
+                    )
+                )
+            )).all()
+            for stl in linked_settlements:
+                mm_id = stl.money_movement_id
+                await self.session.delete(stl)
+                await self.session.flush()
+                # If MoneyMovement has no more settlements, remove the movement as well
+                rem_settlements = await self.session.scalar(
+                    select(func.count(Settlement.id)).where(Settlement.money_movement_id == mm_id)
+                )
+                if not rem_settlements:
+                    mm = await self.session.scalar(select(MoneyMovement).where(MoneyMovement.id == mm_id))
+                    if mm:
+                        await self.session.delete(mm)
+
         r_date = reversal_date or date.today()
         rev_trx_code = await self.generate_reversal_code(organization_id, r_date)
 

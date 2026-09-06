@@ -198,6 +198,8 @@ async def record_customer_payment(
     allocations = await ar_service.allocate_customer_payment(
         organization_id, payment.id, [(invoice.id, data.amount)]
     )
+    from src.services.money_movement_service import MoneyMovementService
+    await MoneyMovementService(db).synchronize_payment_money_movement(organization_id, payment.id)
     refreshed_invoice = await ar_service.get_invoice(organization_id, invoice.id)
     return CustomerPaymentResponse(
         payment_transaction_id=payment.id,

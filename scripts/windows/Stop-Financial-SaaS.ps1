@@ -6,25 +6,26 @@ $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $Runtime = Join-Path $Root '.runtime'
 
 foreach ($entry in @(
-    @{ Name = 'frontend'; Match = 'vite.js'; Executable = (Get-Command node -ErrorAction SilentlyContinue).Source },
-    @{ Name = 'worker'; Match = 'src.worker'; Executable = (Join-Path $Root 'backend\.venv\Scripts\python.exe') },
-    @{ Name = 'backend'; Match = 'src.main:app'; Executable = (Join-Path $Root 'backend\.venv\Scripts\python.exe') }
+    @{ Name = 'frontend'; Match = 'vite.js' },
+    @{ Name = 'worker'; Match = 'src.worker' },
+    @{ Name = 'backend'; Match = 'src.main:app' }
 )) {
     $pidFile = Join-Path $Runtime "$($entry.Name).pid"
-    if (-not (Test-Path $pidFile)) { continue }
-    $processId = (Get-Content $pidFile -Raw).Trim()
-    if ($processId -match '^\d+$') {
-        $process = Get-CimInstance Win32_Process -Filter "ProcessId = $processId" -ErrorAction SilentlyContinue
-        $targets = @($process) + @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-            $_.ParentProcessId -eq [int]$processId
-        })
-        $target = $targets | Where-Object {
-            $_ -and $_.CommandLine -like "*$($entry.Match)*" -and
-            $entry.Executable -and $_.ExecutablePath -eq $entry.Executable
-        } | Select-Object -First 1
-        if ($target) { Stop-Process -Id $target.ProcessId -Force }
+    if (Test-Path $pidFile) {
+        $processId = (Get-Content $pidFile -Raw).Trim()
+        if ($processId -match '^\d+$') {
+            Stop-Process -Id ([int]$processId) -Force -ErrorAction SilentlyContinue
+        }
+        Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
     }
-    Remove-Item $pidFile -Force
+    
+    # Clean up any lingering process matching the command line
+    $remaining = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        $_ -and $_.CommandLine -like "*$($entry.Match)*"
+    }
+    foreach ($rem in $remaining) {
+        Stop-Process -Id $rem.ProcessId -Force -ErrorAction SilentlyContinue
+    }
 }
 
 docker container inspect financial-saas-postgres *> $null

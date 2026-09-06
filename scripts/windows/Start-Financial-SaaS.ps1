@@ -15,11 +15,9 @@ function Test-TrackedProcess([string]$Name, [string]$ExpectedCommand, [string]$E
     $processId = (Get-Content $pidFile -Raw).Trim()
     if ($processId -notmatch '^\d+$') { Remove-Item $pidFile -Force; return $false }
     $process = Get-CimInstance Win32_Process -Filter "ProcessId = $processId" -ErrorAction SilentlyContinue
-    if ($process -and $process.CommandLine -like "*$ExpectedCommand*" -and
-        (-not $ExpectedExecutable -or $process.ExecutablePath -eq $ExpectedExecutable)) { return $true }
+    if ($process -and $process.CommandLine -like "*$ExpectedCommand*") { return $true }
     $child = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-        $_.ParentProcessId -eq [int]$processId -and $_.CommandLine -like "*$ExpectedCommand*" -and
-        (-not $ExpectedExecutable -or $_.ExecutablePath -eq $ExpectedExecutable)
+        $_.ParentProcessId -eq [int]$processId -and $_.CommandLine -like "*$ExpectedCommand*"
     } | Select-Object -First 1
     if ($child) { Set-Content $pidFile $child.ProcessId; return $true }
     Remove-Item $pidFile -Force
@@ -30,7 +28,7 @@ function Wait-Http([string]$Url, [int]$Seconds = 60) {
     $deadline = (Get-Date).AddSeconds($Seconds)
     do {
         try {
-            $resp = Invoke-RestMethod -Uri $Url -TimeoutSec 3 -ErrorAction Stop
+            $resp = Invoke-RestMethod -Uri $Url -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
             return $resp
         }
         catch { Start-Sleep -Seconds 1 }
@@ -70,14 +68,23 @@ if ($envContent -match 'postgres:postgres@localhost:5432/financial_saas') {
     Set-Content $envPath $envContent
 }
 
-if (-not (Test-Path $Python)) {
-    if (Get-Command uv -ErrorAction SilentlyContinue) { uv venv (Join-Path $Backend '.venv') --python 3.11 }
-    else { py -3.11 -m venv (Join-Path $Backend '.venv') }
+$pyprojectHash = (Get-FileHash (Join-Path $Backend 'pyproject.toml') -Algorithm SHA256).Hash
+$pyprojectHashFile = Join-Path $Backend '.venv\.financial-saas-pyproject.sha256'
+$installedPyprojectHash = if (Test-Path $pyprojectHashFile) { (Get-Content $pyprojectHashFile -Raw).Trim() } else { '' }
+if (-not (Test-Path $Python) -or $installedPyprojectHash -ne $pyprojectHash) {
+    if (-not (Test-Path $Python)) {
+        if (Get-Command uv -ErrorAction SilentlyContinue) { uv venv (Join-Path $Backend '.venv') --python 3.11 }
+        else { py -3.11 -m venv (Join-Path $Backend '.venv') }
+    }
+    Push-Location $Backend
+    try {
+        & $Python -m pip install --disable-pip-version-check -e '.[dev]'
+        if ($LASTEXITCODE -ne 0) { throw 'Backend dependency installation failed.' }
+        Set-Content $pyprojectHashFile $pyprojectHash
+    } finally { Pop-Location }
 }
 Push-Location $Backend
 try {
-    & $Python -m pip install --disable-pip-version-check -e '.[dev]'
-    if ($LASTEXITCODE -ne 0) { throw 'Backend dependency installation failed.' }
     & $Python -m alembic upgrade head
     if ($LASTEXITCODE -ne 0) { throw 'Alembic migration failed.' }
 } finally { Pop-Location }
@@ -94,10 +101,24 @@ if (-not (Test-Path (Join-Path $Frontend 'node_modules\.bin\vite.cmd')) -or $ins
     } finally { Pop-Location }
 }
 
+function Start-TrackedBackgroundProcess([string]$Name, [string]$FilePath, [string[]]$Arguments, [string]$WorkingDirectory, [string]$LogBaseName) {
+    $stdout = Join-Path $Runtime "$LogBaseName.log"
+    $stderr = Join-Path $Runtime "$LogBaseName.error.log"
+    $batFile = Join-Path $Runtime "run-$Name.bat"
+    $argString = ($Arguments | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } }) -join ' '
+    $batContent = "@echo off`r`n`"$FilePath`" $argString >> `"$stdout`" 2>> `"$stderr`""
+    Set-Content -Path $batFile -Value $batContent -Encoding ASCII
+    $cmdProcess = Start-Process -WindowStyle Hidden -FilePath $batFile -WorkingDirectory $WorkingDirectory -PassThru
+    Start-Sleep -Milliseconds 400
+    $child = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.ParentProcessId -eq $cmdProcess.Id
+    } | Select-Object -First 1
+    $actualPid = if ($child) { $child.ProcessId } else { $cmdProcess.Id }
+    Set-Content (Join-Path $Runtime "$Name.pid") $actualPid
+}
+
 if (-not (Test-TrackedProcess 'backend' 'src.main:app' $Python)) {
-    $process = Start-Process -FilePath $Python -ArgumentList '-m','uvicorn','src.main:app','--host','127.0.0.1','--port','8000' -WorkingDirectory $Backend -RedirectStandardOutput (Join-Path $Runtime 'backend.log') -RedirectStandardError (Join-Path $Runtime 'backend.error.log') -PassThru
-    Set-Content (Join-Path $Runtime 'backend.pid') $process.Id
-    Start-Sleep -Milliseconds 500
+    Start-TrackedBackgroundProcess 'backend' $Python @('-m','uvicorn','src.main:app','--host','127.0.0.1','--port','8000') $Backend 'backend'
     Test-TrackedProcess 'backend' 'src.main:app' $Python | Out-Null
 }
 $health = Wait-Http 'http://127.0.0.1:8000/health'
@@ -106,16 +127,14 @@ if ($health.status -ne 'healthy' -or $ready.status -ne 'ready') { throw 'Backend
 
 # Start PostgreSQL-backed background job worker
 if (-not (Test-TrackedProcess 'worker' 'src.worker' $Python)) {
-    $process = Start-Process -FilePath $Python -ArgumentList '-m','src.worker' -WorkingDirectory $Backend -RedirectStandardOutput (Join-Path $Runtime 'worker.log') -RedirectStandardError (Join-Path $Runtime 'worker.error.log') -PassThru
-    Set-Content (Join-Path $Runtime 'worker.pid') $process.Id
-    Start-Sleep -Milliseconds 500
+    Start-TrackedBackgroundProcess 'worker' $Python @('-m','src.worker') $Backend 'worker'
     Test-TrackedProcess 'worker' 'src.worker' $Python | Out-Null
 }
 
 $viteScript = Join-Path $Frontend 'node_modules\vite\bin\vite.js'
 if (-not (Test-TrackedProcess 'frontend' 'vite.js')) {
-    $process = Start-Process -FilePath (Get-Command node).Source -ArgumentList $viteScript,'--host','127.0.0.1','--port','5173' -WorkingDirectory $Frontend -RedirectStandardOutput (Join-Path $Runtime 'frontend.log') -RedirectStandardError (Join-Path $Runtime 'frontend.error.log') -PassThru
-    Set-Content (Join-Path $Runtime 'frontend.pid') $process.Id
+    $node = (Get-Command node).Source
+    Start-TrackedBackgroundProcess 'frontend' $node @($viteScript,'--host','127.0.0.1','--port','5173') $Frontend 'frontend'
 }
 Wait-Http 'http://127.0.0.1:5173' | Out-Null
 

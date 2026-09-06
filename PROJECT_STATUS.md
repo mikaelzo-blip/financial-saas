@@ -9,7 +9,8 @@
   - R0: Source of truth and standardization documentation ratified (`docs/ACCOUNTING_REPORTING_STANDARDIZATION_V1.md`, `docs/RC1_IMPLEMENTATION_TRACKER.md`).
   - R2: Payment to Money Movement synchronization (`PAY_VENDOR_BILL`, `CUSTOMER_PAYMENT`, reversal decoupling, AP/AR integration).
   - R3: Interbank transfer flow completed (source/dest accounts, posting, validation, MoneyMovement synchronization, reversal line tracking, and frontend UI).
-- **Latest verified checkpoint**: R3 tested and verified. 168 backend tests, 48 frontend tests passing, frontend production build clean. Zero regressions.
+  - R5: PostgreSQL-backed Background Job runtime (`JobWorker`, lease timeout recovery, retry backoff, entrypoint `src/worker.py`).
+- **Latest verified checkpoint**: R5 tested and verified. 168 backend unit tests, 48 frontend tests passing. Zero regressions.
 - **UAT data**: Organization `PT Kontraktor Utama Indonesia` (`9670673b-c0fd-4ebe-87e4-a646358084ea`), Project `PRJ-2026-001`, registered sender Muhammad Fikri, journals, transactions, and balances preserved intact.
 - **Tests**: 165 unit tests passing, 48 frontend tests passing; zero regressions.
 - **Accounting integrity**: Total Debit == Total Credit; Assets = Liabilities + Equity; zero orphan AR/AP/retention; zero direct journals from transport ingestion; human review hard-stop preserved; period closing guards enforced.

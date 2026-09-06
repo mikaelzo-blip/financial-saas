@@ -21,7 +21,7 @@ from src.schemas.reporting import (
 SUPPORTED_REPORT_TYPES = frozenset({
     "profit-loss", "balance-sheet", "cash-flow", "trial-balance",
     "general-ledger", "receivables-aging", "payables-aging",
-    "project-profitability",
+    "project-profitability", "equity-changes", "calk",
 })
 
 
@@ -58,6 +58,8 @@ class ExportService:
             "receivables-aging": ExportService._receivables_aging,
             "payables-aging": ExportService._payables_aging,
             "project-profitability": ExportService._project_profitability,
+            "equity-changes": ExportService._equity_changes,
+            "calk": ExportService._calk,
         }
         try:
             return builders[report_type](report)
@@ -178,6 +180,53 @@ class ExportService:
         rows.append(ExportRow("total_cost", ("", "Total Biaya Proyek", data.total_project_cost), "total", {2: formula}))
         rows.append(ExportRow("gross_profit", ("", "LABA KOTOR PROYEK", data.gross_profit), "grand_total", {2: "=C{revenue}-C{total_cost}"}))
         return ReportExportModel("project-profitability", "LAPORAN PROFITABILITAS PROYEK", data.organization_name, f"{data.project_code} — {data.project_name}", ("Kode", "Komponen", "Jumlah (IDR)"), tuple(rows), f"Profitabilitas_Proyek_{data.project_code}")
+
+    @staticmethod
+    def _equity_changes(report: BaseModel) -> ReportExportModel:
+        from src.schemas.reporting import EquityChangesReportResponse
+        data = EquityChangesReportResponse.model_validate(report)
+        rows = [
+            ExportRow("opening_paid_in", ("3101", "Saldo Awal Modal Disetor", data.opening_paid_in_capital)),
+            ExportRow("opening_retained", ("3201", "Saldo Awal Laba Ditahan", data.opening_retained_earnings)),
+            ExportRow("opening_total", ("", "Total Ekuitas Awal", data.opening_total_equity), "total"),
+            ExportRow("contributions", ("3101", "Tambahan Setoran Modal", data.capital_contributions)),
+            ExportRow("net_profit", ("EQ-CY", "Laba / (Rugi) Periode Berjalan", data.current_period_net_profit)),
+            ExportRow("prive", ("3301", "Penarikan Pemilik (Prive)", -data.owner_draws_prive)),
+            ExportRow("closing_total", ("", "TOTAL EKUITAS AKHIR", data.closing_total_equity), "grand_total"),
+        ]
+        return ReportExportModel(
+            "equity-changes",
+            "LAPORAN PERUBAHAN EKUITAS",
+            data.organization_name,
+            f"Periode: {data.period_label}",
+            ("Kode Akun", "Komponen Ekuitas", "Jumlah (IDR)"),
+            tuple(rows),
+            f"Laporan_Perubahan_Ekuitas_{data.start_date}_{data.end_date}"
+        )
+
+    @staticmethod
+    def _calk(report: BaseModel) -> ReportExportModel:
+        from src.schemas.reporting import CALKReportResponse
+        data = CALKReportResponse.model_validate(report)
+        rows = [
+            ExportRow("basis", ("", "Basis Standar Akuntansi", data.accounting_standards_basis), "total"),
+            ExportRow("sec_policy", ("", "KEBIJAKAN AKUNTANSI PENTING", ""), "section"),
+        ]
+        for i, p in enumerate(data.accounting_policies):
+            rows.append(ExportRow(f"policy_{i}", (p.section, p.title, p.description)))
+        rows.append(ExportRow("sec_summary", ("", "RINGKASAN POSISI KEUANGAN", ""), "section"))
+        rows.append(ExportRow("sum_assets", ("", "Total Aset", data.balance_sheet_summary.get("total_assets", Decimal("0.00")))))
+        rows.append(ExportRow("sum_liab", ("", "Total Kewajiban", data.balance_sheet_summary.get("total_liabilities", Decimal("0.00")))))
+        rows.append(ExportRow("sum_eq", ("", "Total Ekuitas", data.balance_sheet_summary.get("total_equity", Decimal("0.00"))), "total"))
+        return ReportExportModel(
+            "calk",
+            "CATATAN ATAS LAPORAN KEUANGAN (CALK)",
+            data.organization_name,
+            data.period_label,
+            ("Ref", "Kebijakan / Komponen", "Uraian / Nilai"),
+            tuple(rows),
+            f"CALK_{data.as_of_date}"
+        )
 
 
 def safe_filename(stem: str, extension: str) -> str:

@@ -19,7 +19,9 @@ from src.schemas.reporting import (
     ProjectProfitabilityReportResponse,
     ProjectCashPositionReportResponse,
     BudgetVsActualReportResponse,
-    DashboardSummaryResponse
+    DashboardSummaryResponse,
+    EquityChangesReportResponse,
+    CALKReportResponse
 )
 from src.services.reporting.integrity_service import IntegrityService
 from src.services.reporting.trial_balance_service import TrialBalanceService
@@ -32,6 +34,7 @@ from src.services.reporting.ap_aging_service import APAgingService
 from src.services.reporting.project_reporting_service import ProjectReportingService
 from src.services.reporting.budget_service import BudgetVsActualService
 from src.services.reporting.dashboard_service import DashboardService
+from src.services.reporting.equity_changes_service import EquityChangesService, CALKService
 from src.services.reporting.excel_export_service import ExcelExportService
 from src.services.reporting.pdf_export_service import PdfExportService
 from src.services.reporting.export_service import SUPPORTED_REPORT_TYPES, ExportService, safe_filename
@@ -73,6 +76,14 @@ async def _get_authoritative_export_report(
         if not project_id:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="project_id is required for project-profitability export.")
         return await ProjectReportingService.get_project_profitability(db, org_id, project_id)
+    if report_type == "equity-changes":
+        s_date = start_date or date(as_of_date.year if as_of_date else date.today().year, 1, 1)
+        e_date = end_date or as_of_date or date.today()
+        from src.services.reporting.equity_changes_service import EquityChangesService
+        return await EquityChangesService.get_equity_changes(db, org_id, s_date, e_date)
+    if report_type == "calk":
+        from src.services.reporting.equity_changes_service import CALKService
+        return await CALKService.get_calk_report(db, org_id, as_of_date or end_date or date.today())
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unsupported report type. Supported values: {', '.join(sorted(SUPPORTED_REPORT_TYPES))}")
 
 
@@ -381,3 +392,37 @@ async def get_general_ledger(
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.get("/equity-changes", response_model=EquityChangesReportResponse)
+async def get_equity_changes(
+    start_date: date = Query(..., description="Start date of reporting period"),
+    end_date: date = Query(..., description="End date of reporting period"),
+    org_id: uuid.UUID = Depends(get_current_org_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Fetch authoritative Statement of Changes in Equity (Laporan Perubahan Ekuitas).
+    """
+    return await EquityChangesService.get_equity_changes(
+        session=db,
+        organization_id=org_id,
+        start_date=start_date,
+        end_date=end_date
+    )
+
+
+@router.get("/calk", response_model=CALKReportResponse)
+async def get_calk_report(
+    as_of_date: Optional[date] = Query(None, description="As-of cutoff date"),
+    org_id: uuid.UUID = Depends(get_current_org_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Fetch authoritative Catatan Atas Laporan Keuangan (CALK).
+    """
+    return await CALKService.get_calk_report(
+        session=db,
+        organization_id=org_id,
+        as_of_date=as_of_date
+    )

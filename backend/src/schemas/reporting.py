@@ -324,4 +324,52 @@ class DashboardSummaryResponse(BaseModel):
     integrity_status: str  # "VALID" | "INTEGRITY_ERROR"
 
 
+# Statement of Changes in Equity (Laporan Perubahan Ekuitas)
+class EquityChangeItem(BaseModel):
+    account_code: Optional[str] = None
+    line_name: str
+    amount: Decimal
+    comparative_amount: Optional[Decimal] = None
+
+
+class EquityChangesReportResponse(BaseModel):
+    organization_name: str
+    period_label: str
+    start_date: date
+    end_date: date
+    generated_at: str
+    opening_paid_in_capital: Decimal
+    opening_retained_earnings: Decimal
+    opening_total_equity: Decimal
+    capital_contributions: Decimal
+    current_period_net_profit: Decimal
+    owner_draws_prive: Decimal
+    other_equity_changes: Decimal
+    closing_paid_in_capital: Decimal
+    closing_retained_earnings: Decimal
+    closing_total_equity: Decimal
+    items: List[EquityChangeItem] = []
+
+
+# Notes to Financial Statements (CALK)
+class CALKPolicyItem(BaseModel):
+    section: str
+    title: str
+    description: str
+
+
+class CALKReportResponse(BaseModel):
+    organization_name: str
+    period_label: str
+    as_of_date: date
+    generated_at: str
+    general_information: Dict[str, Any]
+    accounting_standards_basis: str
+    accounting_policies: List[CALKPolicyItem]
+    balance_sheet_summary: Dict[str, Decimal]
+    profit_loss_summary: Dict[str, Decimal]
+    cash_flow_summary: Dict[str, Decimal]
+
+
+
 

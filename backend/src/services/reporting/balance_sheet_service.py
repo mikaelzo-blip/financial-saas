@@ -124,7 +124,7 @@ class BalanceSheetService:
         if current_year_earnings != Decimal("0.00"):
             equity_lines.append(
                 ReportLineItem(
-                    account_code="3301",
+                    account_code="EQ-CY",
                     line_name="Laba / (Rugi) Periode Berjalan",
                     amount=current_year_earnings
                 )

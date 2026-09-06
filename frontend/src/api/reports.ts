@@ -22,7 +22,9 @@ export type ReportExportType =
   | 'general-ledger'
   | 'receivables-aging'
   | 'payables-aging'
-  | 'project-profitability';
+  | 'project-profitability'
+  | 'equity-changes'
+  | 'calk';
 
 export type ReportExportFormat = 'xlsx' | 'pdf';
 
@@ -107,6 +109,19 @@ export const reportsApi = {
   getBalanceSheet: async (asOfDate?: string): Promise<BalanceSheetReportResponse> => {
     const params = asOfDate ? { as_of_date: asOfDate } : {};
     const res = await apiClient.get<BalanceSheetReportResponse>('/reports/balance-sheet', { params });
+    return res.data;
+  },
+
+  getEquityChanges: async (startDate: string, endDate: string): Promise<any> => {
+    const res = await apiClient.get<any>('/reports/equity-changes', {
+      params: { start_date: startDate, end_date: endDate },
+    });
+    return res.data;
+  },
+
+  getCALK: async (asOfDate?: string): Promise<any> => {
+    const params = asOfDate ? { as_of_date: asOfDate } : {};
+    const res = await apiClient.get<any>('/reports/calk', { params });
     return res.data;
   },
 

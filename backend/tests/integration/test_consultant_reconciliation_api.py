@@ -29,8 +29,14 @@ async def test_consultant_reconciliation_api_flow(db_session: AsyncSession):
     db_session.add(user)
     await db_session.commit()
 
-    # Override auth dependency for integration test
+    # Override auth and db dependencies for integration test
     from src.api.auth import require_application_user
+    from src.core.database import get_db
+
+    async def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[require_application_user] = lambda: user
 
     try:
@@ -85,3 +91,4 @@ async def test_consultant_reconciliation_api_flow(db_session: AsyncSession):
             assert resp_404.status_code == 404
     finally:
         app.dependency_overrides.pop(require_application_user, None)
+        app.dependency_overrides.pop(get_db, None)

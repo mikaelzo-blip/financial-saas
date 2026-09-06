@@ -100,7 +100,7 @@ export const PaymentAccountsPage: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-3">
           <div className="flex items-center gap-2">
             <History className="w-5 h-5 text-blue-600" />
-            <h3 className="text-base font-bold text-slate-900">Riwayat Arus Kas (Money Movement)</h3>
+            <h3 className="text-base font-bold text-slate-900">Riwayat Mutasi Kas & Bank</h3>
           </div>
           <select
             value={selectedAccount}

@@ -35,7 +35,7 @@ export const ARAgingPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Umur Piutang Usaha (AR Aging)</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Umur Piutang Pelanggan</h1>
           <p className="text-sm text-slate-500">
             Analisis jatuh tempo dan aging bucket piutang pelanggan kontraktor.
           </p>

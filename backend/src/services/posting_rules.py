@@ -443,6 +443,50 @@ class PostingRuleRegistry:
                 )
             )
 
+        elif t_type == TransactionType.FIXED_ASSET_DEPRECIATION:
+            # Debit Beban Penyusutan Aset Tetap (6105)
+            legs.append(
+                GeneratedJournalLeg(
+                    account_code="6105",
+                    debit_amount=amount,
+                    credit_amount=Decimal("0.00"),
+                    notes=transaction.description
+                )
+            )
+            # Credit Akumulasi Penyusutan Aset Tetap (1502)
+            legs.append(
+                GeneratedJournalLeg(
+                    account_code="1502",
+                    debit_amount=Decimal("0.00"),
+                    credit_amount=amount,
+                    notes=transaction.description
+                )
+            )
+
+        elif t_type == TransactionType.ASSET_PURCHASE:
+            # Debit Aset Tetap Operasional (1501)
+            legs.append(
+                GeneratedJournalLeg(
+                    account_code="1501",
+                    debit_amount=amount,
+                    credit_amount=Decimal("0.00"),
+                    notes=transaction.description,
+                    counterparty_id=transaction.counterparty_id
+                )
+            )
+            # Credit Cash/Bank (1101) or Accounts Payable (2101)
+            cr_code = "1101" if transaction.payment_account_id else "2101"
+            legs.append(
+                GeneratedJournalLeg(
+                    account_code=cr_code,
+                    debit_amount=Decimal("0.00"),
+                    credit_amount=amount,
+                    payment_account_id=transaction.payment_account_id,
+                    counterparty_id=transaction.counterparty_id,
+                    notes=transaction.description
+                )
+            )
+
         else:
 
             raise InvariantViolationException(

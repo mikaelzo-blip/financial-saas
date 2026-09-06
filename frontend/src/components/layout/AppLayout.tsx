@@ -43,32 +43,33 @@ export const AppLayout: React.FC = () => {
     { label: '1. Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { label: '2. WhatsApp Inbox', path: '/whatsapp-inbox', icon: MessageSquare },
     { label: '3. Proyek', path: '/projects', icon: Building2 },
-    { label: '4. Kas & Bank', path: '/payment-accounts', icon: Wallet },
-    { label: '5. Rekonsiliasi Bank', path: '/bank-reconciliation', icon: Landmark },
-    { label: '6. Perlu Review', path: '/review-queue', icon: AlertTriangle, badge: true },
+    { label: '4. Mutasi Kas & Bank', path: '/payment-accounts', icon: Wallet },
+    { label: '5. Cocokkan Mutasi Bank', path: '/bank-reconciliation', icon: Landmark },
+    { label: '6. Perlu Diperiksa', path: '/review-queue', icon: AlertTriangle, badge: true },
     { label: '7. Transaksi', path: '/transactions', icon: Receipt },
     { label: '8. Dokumen Bukti', path: '/documents', icon: FileText },
-    { label: '9. Piutang Usaha (AR)', path: '/receivables', icon: ArrowDownLeft },
-    { label: '10. Utang Usaha (AP)', path: '/payables', icon: ArrowUpRight },
+    { label: '9. Piutang Pelanggan', path: '/receivables', icon: ArrowDownLeft },
+    { label: '10. Utang Vendor', path: '/payables', icon: ArrowUpRight },
   ];
 
   const reportItems = [
-    { label: 'Laba Rugi (P&L)', path: '/reports/profit-loss', icon: TrendingUp },
-    { label: 'Neraca (Balance Sheet)', path: '/reports/balance-sheet', icon: Landmark },
-    { label: 'Arus Kas (Cash Flow)', path: '/reports/cash-flow', icon: ArrowUpRight },
+    { label: 'Laporan Laba Rugi', path: '/reports/profit-loss', icon: TrendingUp },
+    { label: 'Laporan Posisi Keuangan (Neraca)', path: '/reports/balance-sheet', icon: Landmark },
+    { label: 'Laporan Arus Kas', path: '/reports/cash-flow', icon: ArrowUpRight },
     { label: 'Profitabilitas Proyek', path: '/reports/project-profitability', icon: Building2 },
     { label: 'Posisi Kas Proyek', path: '/reports/project-cash', icon: Wallet },
     { label: 'Anggaran vs Realisasi', path: '/reports/budget-vs-actual', icon: FileText },
     { label: 'Neraca Saldo', path: '/reports/trial-balance', icon: Scale },
-    { label: 'Buku Besar (GL)', path: '/reports/general-ledger', icon: BookOpen },
-    { label: 'Umur Piutang (AR Aging)', path: '/reports/receivables', icon: ArrowDownLeft },
-    { label: 'Umur Utang (AP Aging)', path: '/reports/payables', icon: ArrowUpRight },
+    { label: 'Buku Besar', path: '/reports/general-ledger', icon: BookOpen },
+    { label: 'Umur Piutang Pelanggan', path: '/reports/receivables', icon: ArrowDownLeft },
+    { label: 'Umur Utang Vendor', path: '/reports/payables', icon: ArrowUpRight },
   ];
 
   const masterItems = [
-    { label: 'Pelanggan (Customer)', path: '/customers', icon: Users },
+    { label: 'Pelanggan', path: '/customers', icon: Users },
     { label: 'Vendor & Subkon', path: '/vendors', icon: Truck },
-    { label: 'Bagan Akun (COA)', path: '/chart-of-accounts', icon: BookOpen },
+    { label: 'Aset Tetap', path: '/fixed-assets', icon: Landmark },
+    { label: 'Daftar Akun Akuntansi', path: '/chart-of-accounts', icon: BookOpen },
   ];
 
   const handleLogout = () => {

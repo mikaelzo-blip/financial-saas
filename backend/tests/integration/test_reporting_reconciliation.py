@@ -25,7 +25,7 @@ async def test_all_sak_statements_reconcile_to_authoritative_ledger(db_session: 
     trial_balance = await TrialBalanceService.get_trial_balance(db_session, org.id, start, end, end)
     integrity = await IntegrityService.run_diagnostics(db_session, org.id, end)
 
-    current_earnings = next(line.amount for line in balance_sheet.equity.lines if line.account_code == "3301")
+    current_earnings = next(line.amount for line in balance_sheet.equity.lines if line.account_code == "EQ-CY")
     assert profit_loss.net_profit == current_earnings == Decimal("70000000.02")
 
     cash_account_ids = select(ChartOfAccount.id).where(ChartOfAccount.organization_id == org.id, ChartOfAccount.account_code.like("1101%"))

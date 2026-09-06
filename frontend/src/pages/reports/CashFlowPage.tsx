@@ -25,7 +25,7 @@ export const CashFlowPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Laporan Arus Kas (Cash Flow)</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Laporan Arus Kas</h1>
           <p className="text-sm text-slate-500">
             Metode Langsung (Direct Method) penerimaan dan pengeluaran kas riil operasional, investasi, & pendanaan.
           </p>

@@ -2,6 +2,15 @@ import { apiClient } from './client';
 import { DocumentResponse } from '../types/api';
 
 export const documentsApi = {
+  reviewQueue: async (): Promise<DocumentResponse[]> => {
+    try {
+      const res = await apiClient.get<DocumentResponse[]>('/documents/review-queue');
+      return res.data;
+    } catch {
+      return [];
+    }
+  },
+
   list: async (): Promise<DocumentResponse[]> => {
     try {
       const res = await apiClient.get<DocumentResponse[]>('/documents');

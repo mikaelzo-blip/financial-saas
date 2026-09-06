@@ -253,14 +253,33 @@ class ProjectProfitabilityReportResponse(BaseModel):
     project_name: str
     client_name: Optional[str] = None
     status: str
+    contract_value: Decimal = Decimal("0.00")
     original_contract_value: Decimal
     variation_orders_value: Decimal
     revised_contract_value: Decimal
+    invoiced_amount: Decimal = Decimal("0.00")
     revenue_recognized: Decimal
+    cash_received: Decimal = Decimal("0.00")
+    receivable_outstanding: Decimal = Decimal("0.00")
+    retention_withheld: Decimal = Decimal("0.00")
     cost_breakdown: List[ProjectCostCategoryLine] = []
+    direct_project_cost: Decimal = Decimal("0.00")
     total_project_cost: Decimal
     gross_profit: Decimal
+    gross_project_profit: Decimal = Decimal("0.00")
     gross_margin_percentage: Decimal
+    gross_margin: Decimal = Decimal("0.00")
+    cash_spent: Decimal = Decimal("0.00")
+    project_cash_position: Decimal = Decimal("0.00")
+    is_cash_surplus: bool = True
+    pph_withheld: Decimal = Decimal("0.00")
+    pph_final: Decimal = Decimal("0.00")
+    project_fee: Decimal = Decimal("0.00")
+    bank_charges: Decimal = Decimal("0.00")
+    loan_principal_paid: Decimal = Decimal("0.00")
+    has_net_contribution_data: bool = False
+    project_net_contribution: Optional[Decimal] = None
+    help_texts: Dict[str, str] = Field(default_factory=dict)
 
 
 # Project Cash Position
@@ -269,13 +288,21 @@ class ProjectCashPositionReportResponse(BaseModel):
     project_id: str
     project_code: str
     project_name: str
+    contract_value: Decimal = Decimal("0.00")
     invoiced_amount: Decimal
     cash_received: Decimal
     receivable_outstanding: Decimal
+    retention_withheld: Decimal = Decimal("0.00")
+    direct_project_cost: Decimal = Decimal("0.00")
+    gross_profit: Decimal = Decimal("0.00")
+    gross_margin_percentage: Decimal = Decimal("0.00")
     cash_spent: Decimal
     net_cash_position: Decimal
     is_surplus: bool
+    pph_withheld: Decimal = Decimal("0.00")
+    loan_principal_paid: Decimal = Decimal("0.00")
     notice_message: str = "Laba Proyek (Akrual) Berbeda dengan Posisi Kas Proyek (Likuiditas)."
+    help_texts: Dict[str, str] = Field(default_factory=dict)
 
 
 # Budget vs Actual
@@ -322,6 +349,54 @@ class DashboardSummaryResponse(BaseModel):
     active_projects_count: int
     review_queue_pending_count: int
     integrity_status: str  # "VALID" | "INTEGRITY_ERROR"
+
+
+# Statement of Changes in Equity (Laporan Perubahan Ekuitas)
+class EquityChangeItem(BaseModel):
+    account_code: Optional[str] = None
+    line_name: str
+    amount: Decimal
+    comparative_amount: Optional[Decimal] = None
+
+
+class EquityChangesReportResponse(BaseModel):
+    organization_name: str
+    period_label: str
+    start_date: date
+    end_date: date
+    generated_at: str
+    opening_paid_in_capital: Decimal
+    opening_retained_earnings: Decimal
+    opening_total_equity: Decimal
+    capital_contributions: Decimal
+    current_period_net_profit: Decimal
+    owner_draws_prive: Decimal
+    other_equity_changes: Decimal
+    closing_paid_in_capital: Decimal
+    closing_retained_earnings: Decimal
+    closing_total_equity: Decimal
+    items: List[EquityChangeItem] = []
+
+
+# Notes to Financial Statements (CALK)
+class CALKPolicyItem(BaseModel):
+    section: str
+    title: str
+    description: str
+
+
+class CALKReportResponse(BaseModel):
+    organization_name: str
+    period_label: str
+    as_of_date: date
+    generated_at: str
+    general_information: Dict[str, Any]
+    accounting_standards_basis: str
+    accounting_policies: List[CALKPolicyItem]
+    balance_sheet_summary: Dict[str, Decimal]
+    profit_loss_summary: Dict[str, Decimal]
+    cash_flow_summary: Dict[str, Decimal]
+
 
 
 

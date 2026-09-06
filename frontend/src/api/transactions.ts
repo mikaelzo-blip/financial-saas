@@ -20,6 +20,7 @@ export interface TransactionCreateInput {
   currency?: string;
   counterparty_id?: string;
   payment_account_id?: string;
+  destination_payment_account_id?: string;
   reference_no?: string;
   description: string;
   document_ids?: string[];

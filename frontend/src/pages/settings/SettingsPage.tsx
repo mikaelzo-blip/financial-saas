@@ -3,10 +3,11 @@ import { Card } from '../../components/ui/Card';
 import { useAuth } from '../../store/AuthContext';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { Input } from '../../components/ui/Input';
+import { AccountingPeriodTab } from './components/AccountingPeriodTab';
 
 export const SettingsPage: React.FC = () => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'profile' | 'organization' | 'audit'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'organization' | 'periods' | 'audit'>('profile');
 
   return (
     <div className="space-y-6">
@@ -39,6 +40,16 @@ export const SettingsPage: React.FC = () => {
           }`}
         >
           Profil Perusahaan (Tenant)
+        </button>
+        <button
+          onClick={() => setActiveTab('periods')}
+          className={`pb-3 text-xs font-semibold uppercase transition-colors cursor-pointer ${
+            activeTab === 'periods'
+              ? 'border-b-2 border-blue-600 text-blue-600'
+              : 'text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          Periode Akuntansi (Cutoff)
         </button>
         <button
           onClick={() => setActiveTab('audit')}
@@ -89,6 +100,8 @@ export const SettingsPage: React.FC = () => {
           </div>
         </Card>
       )}
+
+      {activeTab === 'periods' && <AccountingPeriodTab />}
 
       {activeTab === 'audit' && (
         <Card title="Log Jejak Audit Kriptografis (Audit Trail)">

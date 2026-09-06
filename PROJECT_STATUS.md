@@ -2,20 +2,25 @@
 
 - **Current origin/main baseline**: `d025efa` (PR #44 merged)
 - **Completed features**: 001 Contractor Finance System; 002 Core Financial Domain; 003 Core Operational UI; 004 Financial Reporting; 005 Document Intelligence; 006 Hermes Automation; 007 WhatsApp Integration; 008 AI Management Insights; 009 Production Readiness Foundation; 010 Dependency Security Gates; UAT Findings #1-#3; UAT #4 Customer Invoice; UAT #5 Customer Payment & AR Allocation; UAT #5.1 Active Tenant Identity; UAT #6 Vendor Bill & Accounts Payable; UAT #7 Vendor Payment & Cash Disbursement Safety; UAT #8 Reversal Flow; UAT #9 Financial Reporting; UAT #10 Project Completion & Retention Release; UAT #11 Document Ingestion & Storage Reliability; UAT #12 WhatsApp Media Transport & Review Queue Intake; UAT #13 Real Document Extraction & Candidate Review Flow; UAT #14 End-to-End Operational Workflows & Edge-Case Stress Testing; UAT #15 WhatsApp Sandbox Integration & Production Deployment Dry Run; UAT #16 Real Meta WhatsApp Cloud API Sandbox Pilot; UAT #17 Real WhatsApp Media Intake (Baileys Bridge); PRD v2.0 Remediation Program (Phases P0–P7); Minimal ECC Engineering Workflow Integration.
-- **Current feature**: Minimal ECC Integration (affaan-m/ECC v2.2.0)
-- **Current branch**: `hermes/ecc-minimal-integration`
-- **Execution state**: ACTIVE. ECC minimal profile integrated as supporting engineering workflow.
-- **ECC Integration Summary**:
-  - Version: `affaan-m/ECC v2.2.0` (stable release tag).
-  - Target: `hermes` (user-level `~/.hermes/`).
-  - Profile: `minimal` (modules: `rules-core`, `agents-core`, `commands-core`, `platform-configs`, `workflow-quality`).
-  - Installed surface: 485 managed files (78 skills, 23 rulesets, 102 commands).
-  - Prioritized workflow skills: `intent-driven-development`, `tdd-workflow`, `verification-loop`, `production-audit`, `git-workflow`, `error-handling`, `iterative-retrieval`, `architecture-decision-records`, `delivery-gate`, `repo-scan`.
-  - Intentionally disabled/omitted: Hook runtime, Memory Vault (`.ecc/memory`), Memory MCP (`ecc-memory-mcp`), continuous-learning runtime, external agent daemons, model routing overrides.
-  - Relationship to Spec Kit & Constitution: Spec Kit (`.specify/`) and `.specify/memory/constitution.md` remain authoritative and unchanged. `financial-saas-orchestrator` remains the governing project skill with explicit routing policy.
-- **Latest verified checkpoint**: ECC minimal installation verified with `node scripts/doctor.js --target hermes` (0 errors, 0 warnings). 165 backend unit tests passing, 48 frontend tests passing. Zero mutations to accounting models, migrations, or database.
+- **Current feature**: RC1 Implementation Backlog (R0-R14)
+- **Current branch**: `hermes/rc1-implementation`
+- **Execution state**: ACTIVE. Advancing through RC1 approved backlog one task at a time.
+- **Completed Tasks**:
+  - R0: Source of truth and standardization documentation ratified (`docs/ACCOUNTING_REPORTING_STANDARDIZATION_V1.md`, `docs/RC1_IMPLEMENTATION_TRACKER.md`).
+  - R2: Payment to Money Movement synchronization (`PAY_VENDOR_BILL`, `CUSTOMER_PAYMENT`, reversal decoupling, AP/AR integration).
+  - R3: Interbank transfer flow completed (source/dest accounts, posting, validation, MoneyMovement synchronization, reversal line tracking, and frontend UI).
+  - R5: PostgreSQL-backed Background Job runtime (`JobWorker`, lease timeout recovery, retry backoff, entrypoint `src/worker.py`).
+  - R6: Windows one-click startup & preflight script (`scripts/windows/Start-Financial-SaaS.ps1`, `Stop-Financial-SaaS.ps1`, worker process management, DB health check, idempotency).
+  - R7: Accounting period management UI & API (List, create, soft-close, hard-close, reopen reason requirement, and posting guards for closed/soft-closed periods).
+  - R8: Unified Review Queue experience (Document candidate & transaction ambiguity unified review pane, preview, mappings, actions).
+  - R9: Reporting standardization (EQ-CY synthetic profit fix, Laporan Perubahan Ekuitas, CALK framework, comparative reporting, export parity).
+  - R10: Opening balance workflow (OpeningBalanceService API/UI, balanced equity offset, double-entry audit trail).
+  - R11: Fixed assets minimum usable workflow (FixedAssetService, straight-line book depreciation, available-for-use date, capitalization threshold IDR 5M, period guards, Dr 6105 / Cr 1502 deterministic posting, and Indonesian Owner UI).
+  - R12: Project reporting hardening (Management summary distinction, contract value, invoiced revenue, cash received, retention, direct project cost, gross project profit primary, net contribution secondary, cash position separate, loan principal exclusion from costs, and owner-friendly terminology).
+  - R13: Integrated RC1 end-to-end business lifecycle UAT (Vendor AP/payment/MoneyMovement, Customer AR/payment/MoneyMovement, Project profitability/cash position, accounting period close and backdate guards, formal reporting tie-outs: Balance Sheet, P&L, Equity Changes, CALK, Cash Flow, Trial Balance, GL, AR/AP aging).
+- **Latest verified checkpoint**: R13 integrated RC1 business lifecycle UAT complete. 183 backend unit tests, 156 integration tests, 48 frontend tests passing, frontend production build verified. Zero regressions.
 - **UAT data**: Organization `PT Kontraktor Utama Indonesia` (`9670673b-c0fd-4ebe-87e4-a646358084ea`), Project `PRJ-2026-001`, registered sender Muhammad Fikri, journals, transactions, and balances preserved intact.
-- **Tests**: 165 unit tests passing, 48 frontend tests passing; zero regressions.
+- **Tests**: 183 backend unit tests passing, 156 integration tests passing, 48 frontend tests passing, Vite production build passing; zero regressions.
 - **Accounting integrity**: Total Debit == Total Credit; Assets = Liabilities + Equity; zero orphan AR/AP/retention; zero direct journals from transport ingestion; human review hard-stop preserved; period closing guards enforced.
 - **Real Provider Status**:
   - Meta Cloud API Sandbox Adapter: **PRESERVED AS INACTIVE/FUTURE TRANSPORT**
@@ -23,5 +28,7 @@
   - Receiver / Bot Number: `+628****9522` (Keuangan-CBL)
   - Allowed Sender Number: `+628****2760` (Muhammad Fikri)
   - Pair Mode: Bot Mode (`WHATSAPP_MODE=bot`, `WHATSAPP_ALLOWED_USERS=+628****2760`)
-- **Outstanding blockers**: None.
-- **Next Step**: Review and submit Pull Request for `hermes/ecc-minimal-integration` into `main`.
+- **Outstanding blockers**:
+  - R1: BLOCKED_EXTERNAL (Durable PC-off capture: remote edge host and auth credentials required for Cloudflare D1/R2 relay).
+  - R14: BLOCKED_EXTERNAL (External consultant financial report reconciliation: awaiting actual external consultant statements).
+- **Next Step**: Review and submit Pull Request for `hermes/rc1-implementation` into `main`.

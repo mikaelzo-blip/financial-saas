@@ -30,6 +30,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   const [description, setDescription] = useState('');
   const [counterpartyId, setCounterpartyId] = useState('');
   const [paymentAccountId, setPaymentAccountId] = useState('');
+  const [destinationPaymentAccountId, setDestinationPaymentAccountId] = useState('');
   const [referenceNo, setReferenceNo] = useState('');
   const [documentIds, setDocumentIds] = useState<string[]>([]);
 
@@ -109,6 +110,21 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       return;
     }
 
+    if (transactionType === 'INTERBANK_TRANSFER') {
+      if (!paymentAccountId) {
+        setFormError('Rekening asal transfer wajib dipilih.');
+        return;
+      }
+      if (!destinationPaymentAccountId) {
+        setFormError('Rekening tujuan transfer wajib dipilih.');
+        return;
+      }
+      if (paymentAccountId === destinationPaymentAccountId) {
+        setFormError('Rekening asal dan rekening tujuan transfer tidak boleh sama.');
+        return;
+      }
+    }
+
     if (isSplitMode) {
       const validation = validateAllocationSum(totalNominal, allocations);
       if (!validation.isValid) {
@@ -128,6 +144,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         amount: totalNominal,
         counterparty_id: counterpartyId || undefined,
         payment_account_id: requiresPaymentAccount ? paymentAccountId || undefined : undefined,
+        destination_payment_account_id: transactionType === 'INTERBANK_TRANSFER' ? destinationPaymentAccountId || undefined : undefined,
         reference_no: referenceNo || undefined,
         description,
         document_ids: documentIds,
@@ -145,6 +162,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         amount: totalNominal,
         counterparty_id: counterpartyId || undefined,
         payment_account_id: requiresPaymentAccount ? paymentAccountId || undefined : undefined,
+        destination_payment_account_id: transactionType === 'INTERBANK_TRANSFER' ? destinationPaymentAccountId || undefined : undefined,
         reference_no: referenceNo || undefined,
         description,
         document_ids: documentIds,
@@ -212,7 +230,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           required={requiresPaymentAccount}
           disabled={!requiresPaymentAccount}
         >
-          <option value="">-- Pilih Akun Kas / Bank --</option>
+          <option value="">-- Pilih {transactionType === 'INTERBANK_TRANSFER' ? 'Akun Kas / Bank Asal' : 'Akun Kas / Bank'} --</option>
           {paymentAccounts.map((acc) => (
             <option key={acc.id} value={acc.id}>
               {acc.name} ({acc.coa_account_code})
@@ -220,6 +238,29 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           ))}
         </Select>
       </div>
+
+      {transactionType === 'INTERBANK_TRANSFER' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-blue-50/50 p-4 rounded-xl border border-blue-200">
+          <Select
+            label="Akun Kas / Bank Tujuan (Penerima Transfer) *"
+            value={destinationPaymentAccountId}
+            onChange={(e) => setDestinationPaymentAccountId(e.target.value)}
+            required
+          >
+            <option value="">-- Pilih Rekening Kas / Bank Tujuan --</option>
+            {paymentAccounts
+              .filter((acc) => acc.id !== paymentAccountId)
+              .map((acc) => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.name} ({acc.coa_account_code})
+                </option>
+              ))}
+          </Select>
+          <div className="flex items-center text-xs text-blue-800 bg-white p-3 rounded-lg border border-blue-100">
+            <span>Mutasi Antar Rekening: Pemindahan dana tidak mempengaruhi pendapatan maupun beban operasional perusahaan.</span>
+          </div>
+        </div>
+      )}
 
       {/* Row 3: Counterparty & No Referensi */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

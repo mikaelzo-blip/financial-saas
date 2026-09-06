@@ -183,6 +183,13 @@ class AccountingEngine:
         old_status = transaction.workflow_status.value
         transaction.workflow_status = WorkflowStatus.POSTED
         transaction.posted_at = datetime.now()
+        await self.session.flush()
+
+        if transaction.transaction_type == TransactionType.INTERBANK_TRANSFER:
+            from src.services.money_movement_service import MoneyMovementService
+            await MoneyMovementService(self.session).synchronize_interbank_transfer_money_movement(
+                organization_id, transaction.id
+            )
 
         await AuditService(self.session).log_event(
             organization_id,

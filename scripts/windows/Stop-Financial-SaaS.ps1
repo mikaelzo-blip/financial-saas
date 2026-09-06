@@ -7,6 +7,7 @@ $Runtime = Join-Path $Root '.runtime'
 
 foreach ($entry in @(
     @{ Name = 'frontend'; Match = 'vite.js'; Executable = (Get-Command node -ErrorAction SilentlyContinue).Source },
+    @{ Name = 'worker'; Match = 'src.worker'; Executable = (Join-Path $Root 'backend\.venv\Scripts\python.exe') },
     @{ Name = 'backend'; Match = 'src.main:app'; Executable = (Join-Path $Root 'backend\.venv\Scripts\python.exe') }
 )) {
     $pidFile = Join-Path $Runtime "$($entry.Name).pid"

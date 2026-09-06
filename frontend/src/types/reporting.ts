@@ -213,14 +213,32 @@ export interface ProjectProfitabilityReportResponse {
   project_name: string;
   client_name?: string | null;
   status: string;
+  contract_value?: number | string;
   original_contract_value: number | string;
   variation_orders_value: number | string;
   revised_contract_value: number | string;
+  invoiced_amount?: number | string;
+  cash_received?: number | string;
+  receivable_outstanding?: number | string;
+  retention_receivable?: number | string;
   revenue_recognized: number | string;
   cost_breakdown: ProjectCostCategoryLine[];
+  direct_project_cost?: number | string;
   total_project_cost: number | string;
   gross_profit: number | string;
+  gross_project_profit?: number | string;
   gross_margin_percentage: number | string;
+  gross_margin?: number | string;
+  cash_spent?: number | string;
+  project_cash_position?: number | string;
+  project_net_contribution?: number | string;
+  project_fee?: number | string;
+  bank_charges?: number | string;
+  loan_principal_repayment?: number | string;
+  creditable_pph_withheld?: number | string;
+  final_pph?: number | string;
+  help_texts?: Record<string, string>;
+  disclaimer?: string;
 }
 
 export interface ProjectCashPositionReportResponse {

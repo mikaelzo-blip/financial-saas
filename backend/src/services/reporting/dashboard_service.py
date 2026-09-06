@@ -238,6 +238,6 @@ class DashboardService:
             cash_runway_months=cash_runway,
             active_projects_count=active_projects_count,
             review_queue_pending_count=pending_reviews,
-            integrity_status="VALID" if is_balanced else "INTEGRITY_ERROR"
+            integrity_status="VALID" if is_balanced else "REPORT_INTEGRITY_ERROR"
         )
 

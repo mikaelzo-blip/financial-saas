@@ -45,7 +45,7 @@ export const GeneralLedgerPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Buku Besar (General Ledger)</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Buku Besar</h1>
           <p className="text-sm text-slate-500">
             Rincian mutasi transaksi dan saldo berjalan per akun buku besar.
           </p>

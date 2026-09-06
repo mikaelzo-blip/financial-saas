@@ -10,7 +10,21 @@ from src.models.money_movement import MoneyMovement, Settlement, SettlementAlloc
 from src.models.coa import PaymentAccount
 from src.models.project import Project
 from src.models.transaction import Transaction
-from src.schemas.money_movement import MoneyMovementCreate
+from src.models.receivable import CustomerPaymentAllocation
+from src.models.payable import VendorPaymentAllocation
+from src.models.enums import (
+    MovementDirection,
+    MovementSourceType,
+    SettlementType,
+    CostCategory,
+    TransactionType,
+    WorkflowStatus,
+)
+from src.schemas.money_movement import (
+    MoneyMovementCreate,
+    SettlementCreate,
+    SettlementAllocationCreate,
+)
 from src.core.exceptions import InvariantViolationException, EntityNotFoundException
 
 
@@ -18,6 +32,199 @@ from src.core.exceptions import InvariantViolationException, EntityNotFoundExcep
 class MoneyMovementService:
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def synchronize_payment_money_movement(
+        self,
+        organization_id: uuid.UUID,
+        payment_transaction_id: uuid.UUID,
+    ) -> Optional[MoneyMovement]:
+        """
+        Synchronizes an authoritative MoneyMovement and Settlement record
+        for a posted CUSTOMER_PAYMENT or PAY_VENDOR_BILL transaction.
+        Guarantees that Journal, AP/AR settlement, and operational MoneyMovement cannot diverge.
+        """
+        stmt = (
+            select(Transaction)
+            .where(
+                and_(
+                    Transaction.organization_id == organization_id,
+                    Transaction.id == payment_transaction_id,
+                    Transaction.workflow_status == WorkflowStatus.POSTED,
+                )
+            )
+        )
+        trx = await self.session.scalar(stmt)
+        if not trx or not trx.payment_account_id:
+            return None
+
+        if trx.transaction_type == TransactionType.CUSTOMER_PAYMENT:
+            direction = MovementDirection.IN
+            # Get invoice allocations
+            cpa_stmt = (
+                select(CustomerPaymentAllocation)
+                .options(selectinload(CustomerPaymentAllocation.invoice))
+                .where(CustomerPaymentAllocation.payment_transaction_id == trx.id)
+            )
+            cpas = (await self.session.scalars(cpa_stmt)).all()
+            alloc_items = []
+            for cpa in cpas:
+                alloc_items.append(
+                    SettlementAllocationCreate(
+                        project_id=cpa.invoice.project_id if cpa.invoice else None,
+                        invoice_id=trx.id,
+                        amount=cpa.allocated_amount,
+                        cost_category=None,
+                        notes=f"Customer Payment for Invoice {cpa.invoice.invoice_code if cpa.invoice else ''}",
+                    )
+                )
+
+        elif trx.transaction_type in (TransactionType.PAY_VENDOR_BILL, TransactionType.PAY_SUBCONTRACTOR):
+            direction = MovementDirection.OUT
+            # Get bill allocations
+            vpa_stmt = (
+                select(VendorPaymentAllocation)
+                .options(selectinload(VendorPaymentAllocation.bill))
+                .where(VendorPaymentAllocation.payment_transaction_id == trx.id)
+            )
+            vpas = (await self.session.scalars(vpa_stmt)).all()
+            alloc_items = []
+            for vpa in vpas:
+                bill_trx = None
+                if vpa.bill and vpa.bill.transaction_id:
+                    bill_trx = vpa.bill.transaction_id
+                alloc_items.append(
+                    SettlementAllocationCreate(
+                        project_id=vpa.bill.project_id if vpa.bill else None,
+                        invoice_id=bill_trx,
+                        amount=vpa.allocated_amount,
+                        cost_category=CostCategory.MAT if trx.transaction_type == TransactionType.PAY_VENDOR_BILL else CostCategory.SUB,
+                        notes=f"Vendor Payment for Bill {vpa.bill.bill_code if vpa.bill else ''}",
+                    )
+                )
+        else:
+            return None
+
+        # Check if already exists for this transaction
+        existing_settlement = await self.session.scalar(
+            select(Settlement).where(
+                and_(
+                    Settlement.organization_id == organization_id,
+                    Settlement.transaction_id == trx.id,
+                )
+            )
+        )
+        if existing_settlement:
+            return await self.session.scalar(
+                select(MoneyMovement).where(MoneyMovement.id == existing_settlement.money_movement_id)
+            )
+
+        settlement_create = SettlementCreate(
+            settlement_type=SettlementType.INVOICE_PAYMENT,
+            amount=trx.amount,
+            transaction_id=trx.id,
+            notes=trx.description or f"Settlement for {trx.transaction_code}",
+            allocations=alloc_items,
+        )
+
+        source_type = MovementSourceType.TRANSFER_PROOF if trx.source_channel == "WHATSAPP" else MovementSourceType.MANUAL
+        mm_create = MoneyMovementCreate(
+            payment_account_id=trx.payment_account_id,
+            direction=direction,
+            amount=trx.amount,
+            movement_date=trx.transaction_date,
+            source_type=source_type,
+            reference_no=trx.reference_no,
+            description=trx.description,
+            settlements=[settlement_create],
+        )
+
+        return await self.create_money_movement(organization_id, mm_create)
+
+    async def synchronize_interbank_transfer_money_movement(
+        self,
+        organization_id: uuid.UUID,
+        transfer_transaction_id: uuid.UUID,
+    ) -> List[MoneyMovement]:
+        """
+        Synchronizes authoritative MoneyMovement records for an INTERBANK_TRANSFER transaction:
+        1. Source Outflow (MovementDirection.OUT) from payment_account_id
+        2. Destination Inflow (MovementDirection.IN) to destination_payment_account_id
+        Neither is revenue nor expense.
+        """
+        stmt = (
+            select(Transaction)
+            .where(
+                and_(
+                    Transaction.organization_id == organization_id,
+                    Transaction.id == transfer_transaction_id,
+                    Transaction.transaction_type == TransactionType.INTERBANK_TRANSFER,
+                    Transaction.workflow_status == WorkflowStatus.POSTED,
+                )
+            )
+        )
+        trx = await self.session.scalar(stmt)
+        if not trx or not trx.payment_account_id or not trx.destination_payment_account_id:
+            return []
+
+        # Check if settlements already created for this transaction
+        existing_settlements = (await self.session.scalars(
+            select(Settlement).where(
+                and_(
+                    Settlement.organization_id == organization_id,
+                    Settlement.transaction_id == trx.id,
+                )
+            )
+        )).all()
+        if existing_settlements:
+            mm_ids = [s.money_movement_id for s in existing_settlements]
+            mms = (await self.session.scalars(
+                select(MoneyMovement).where(MoneyMovement.id.in_(mm_ids))
+            )).all()
+            return list(mms)
+
+        source_type = MovementSourceType.TRANSFER_PROOF if trx.source_channel == "WHATSAPP" else MovementSourceType.MANUAL
+
+        # 1. Source outflow movement
+        source_settlement = SettlementCreate(
+            settlement_type=SettlementType.INTERBANK_TRANSFER,
+            amount=trx.amount,
+            transaction_id=trx.id,
+            notes=f"Mutasi Keluar: {trx.description or trx.transaction_code}",
+            allocations=[],
+        )
+        source_mm = MoneyMovementCreate(
+            payment_account_id=trx.payment_account_id,
+            direction=MovementDirection.OUT,
+            amount=trx.amount,
+            movement_date=trx.transaction_date,
+            source_type=source_type,
+            reference_no=trx.reference_no,
+            description=f"Transfer Keluar: {trx.description or ''}",
+            settlements=[source_settlement],
+        )
+        created_source = await self.create_money_movement(organization_id, source_mm)
+
+        # 2. Destination inflow movement
+        dest_settlement = SettlementCreate(
+            settlement_type=SettlementType.INTERBANK_TRANSFER,
+            amount=trx.amount,
+            transaction_id=trx.id,
+            notes=f"Mutasi Masuk: {trx.description or trx.transaction_code}",
+            allocations=[],
+        )
+        dest_mm = MoneyMovementCreate(
+            payment_account_id=trx.destination_payment_account_id,
+            direction=MovementDirection.IN,
+            amount=trx.amount,
+            movement_date=trx.transaction_date,
+            source_type=source_type,
+            reference_no=trx.reference_no,
+            description=f"Transfer Masuk: {trx.description or ''}",
+            settlements=[dest_settlement],
+        )
+        created_dest = await self.create_money_movement(organization_id, dest_mm)
+
+        return [created_source, created_dest]
 
     async def _generate_movement_code(self, organization_id: uuid.UUID, movement_date: date) -> str:
         year = movement_date.year

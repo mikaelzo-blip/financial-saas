@@ -301,11 +301,12 @@ def test_domain_enums_integrity():
     assert ExpenseCategory.SALARY == "SALARY"
     assert ExpenseCategory.DEPRECIATION == "DEPRECIATION"
 
-    assert len(TransactionType) == 36
+    assert len(TransactionType) == 37
     assert TransactionType.DIRECT_PURCHASE == "DIRECT_PURCHASE"
     assert TransactionType.RETENTION_RELEASE == "RETENTION_RELEASE"
     assert TransactionType.REVERSAL == "REVERSAL"
     assert TransactionType.JOURNAL_ADJUSTMENT == "JOURNAL_ADJUSTMENT"
+    assert TransactionType.FIXED_ASSET_DEPRECIATION == "FIXED_ASSET_DEPRECIATION"
 
     assert len(UserRole) == 4
     assert UserRole.ADMIN == "ADMIN"

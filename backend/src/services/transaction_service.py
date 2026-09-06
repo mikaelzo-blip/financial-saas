@@ -253,6 +253,14 @@ class TransactionService:
                     raise EntityNotFoundException("Document", doc_id)
 
         # Validate destination payment account if specified
+        if data.transaction_type == TransactionType.INTERBANK_TRANSFER:
+            if not data.payment_account_id:
+                raise InvariantViolationException("Interbank transfer requires a source payment account.")
+            if not data.destination_payment_account_id:
+                raise InvariantViolationException("Interbank transfer requires a destination payment account.")
+            if data.payment_account_id == data.destination_payment_account_id:
+                raise InvariantViolationException("Source and destination payment accounts must be different.")
+
         if data.destination_payment_account_id:
             pa_dest = await self.session.scalar(select(PaymentAccount).where(
                 PaymentAccount.id == data.destination_payment_account_id,

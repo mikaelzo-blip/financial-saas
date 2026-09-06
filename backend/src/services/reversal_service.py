@@ -153,7 +153,12 @@ class ReversalService:
                 await self.session.delete(alloc)
 
         # Invalidate/delete linked MoneyMovement and Settlement for reversed cash payment transactions
-        if original_trx.transaction_type in (TransactionType.CUSTOMER_PAYMENT, TransactionType.PAY_VENDOR_BILL, TransactionType.PAY_SUBCONTRACTOR):
+        if original_trx.transaction_type in (
+            TransactionType.CUSTOMER_PAYMENT,
+            TransactionType.PAY_VENDOR_BILL,
+            TransactionType.PAY_SUBCONTRACTOR,
+            TransactionType.INTERBANK_TRANSFER,
+        ):
             from src.models.money_movement import Settlement, MoneyMovement
             linked_settlements = (await self.session.scalars(
                 select(Settlement).where(
@@ -229,6 +234,7 @@ class ReversalService:
                 counterparty_id=line.counterparty_id,
                 cost_category=line.cost_category,
                 expense_category=line.expense_category,
+                payment_account_id=line.payment_account_id,
                 notes=f"Reversal of line #{line.line_number}"
             )
             self.session.add(rev_line)

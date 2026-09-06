@@ -140,6 +140,92 @@ class MoneyMovementService:
 
         return await self.create_money_movement(organization_id, mm_create)
 
+    async def synchronize_interbank_transfer_money_movement(
+        self,
+        organization_id: uuid.UUID,
+        transfer_transaction_id: uuid.UUID,
+    ) -> List[MoneyMovement]:
+        """
+        Synchronizes authoritative MoneyMovement records for an INTERBANK_TRANSFER transaction:
+        1. Source Outflow (MovementDirection.OUT) from payment_account_id
+        2. Destination Inflow (MovementDirection.IN) to destination_payment_account_id
+        Neither is revenue nor expense.
+        """
+        stmt = (
+            select(Transaction)
+            .where(
+                and_(
+                    Transaction.organization_id == organization_id,
+                    Transaction.id == transfer_transaction_id,
+                    Transaction.transaction_type == TransactionType.INTERBANK_TRANSFER,
+                    Transaction.workflow_status == WorkflowStatus.POSTED,
+                )
+            )
+        )
+        trx = await self.session.scalar(stmt)
+        if not trx or not trx.payment_account_id or not trx.destination_payment_account_id:
+            return []
+
+        # Check if settlements already created for this transaction
+        existing_settlements = (await self.session.scalars(
+            select(Settlement).where(
+                and_(
+                    Settlement.organization_id == organization_id,
+                    Settlement.transaction_id == trx.id,
+                )
+            )
+        )).all()
+        if existing_settlements:
+            mm_ids = [s.money_movement_id for s in existing_settlements]
+            mms = (await self.session.scalars(
+                select(MoneyMovement).where(MoneyMovement.id.in_(mm_ids))
+            )).all()
+            return list(mms)
+
+        source_type = MovementSourceType.TRANSFER_PROOF if trx.source_channel == "WHATSAPP" else MovementSourceType.MANUAL
+
+        # 1. Source outflow movement
+        source_settlement = SettlementCreate(
+            settlement_type=SettlementType.INTERBANK_TRANSFER,
+            amount=trx.amount,
+            transaction_id=trx.id,
+            notes=f"Mutasi Keluar: {trx.description or trx.transaction_code}",
+            allocations=[],
+        )
+        source_mm = MoneyMovementCreate(
+            payment_account_id=trx.payment_account_id,
+            direction=MovementDirection.OUT,
+            amount=trx.amount,
+            movement_date=trx.transaction_date,
+            source_type=source_type,
+            reference_no=trx.reference_no,
+            description=f"Transfer Keluar: {trx.description or ''}",
+            settlements=[source_settlement],
+        )
+        created_source = await self.create_money_movement(organization_id, source_mm)
+
+        # 2. Destination inflow movement
+        dest_settlement = SettlementCreate(
+            settlement_type=SettlementType.INTERBANK_TRANSFER,
+            amount=trx.amount,
+            transaction_id=trx.id,
+            notes=f"Mutasi Masuk: {trx.description or trx.transaction_code}",
+            allocations=[],
+        )
+        dest_mm = MoneyMovementCreate(
+            payment_account_id=trx.destination_payment_account_id,
+            direction=MovementDirection.IN,
+            amount=trx.amount,
+            movement_date=trx.transaction_date,
+            source_type=source_type,
+            reference_no=trx.reference_no,
+            description=f"Transfer Masuk: {trx.description or ''}",
+            settlements=[dest_settlement],
+        )
+        created_dest = await self.create_money_movement(organization_id, dest_mm)
+
+        return [created_source, created_dest]
+
     async def _generate_movement_code(self, organization_id: uuid.UUID, movement_date: date) -> str:
         year = movement_date.year
         prefix = f"MM-{year}-"

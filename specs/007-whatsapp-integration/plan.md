@@ -103,3 +103,38 @@ backend/tests/
    - Rate limiting middleware per sender
    - Comprehensive offline integration tests with `MockWhatsAppProvider`
    - Complete verification against quickstart scenarios
+
+---
+
+## 6. Approved RC1 Local-First Addendum
+
+### Active RC1 path
+
+```text
+WhatsApp -> Local Baileys Bridge -> Financial SaaS -> Document
+-> OCR / Hermes -> Review Queue -> Accounting after authorized review
+```
+
+The Windows one-click startup owns the supported local runtime. When `WHATSAPP_PROVIDER=baileys`, it must verify the installed bridge compatibility, locate a paired local session, derive the fail-closed sender allowlist from active tenant mappings, start the bridge, and require `/health` to report `connected` before declaring the system ready.
+
+### Deferred post-RC1 path
+
+Cloudflare Worker, D1 metadata, R2 media, `RemoteInboxClient`, remote sync contracts, claim/lease recovery, WAMID idempotency, and SHA-256 verification remain preserved as **POST-RC1 / FUTURE ALWAYS-ON CAPTURE INFRASTRUCTURE**. No accounting logic belongs in that remote domain. No external Baileys host, Meta activation, Meta-only relay deployment, or Cloudflare production provisioning is part of RC1.
+
+### Honest capability boundary
+
+- Finance PC ON: local WhatsApp intake is supported and must create exactly one Document before deferred analysis and Review Queue handling.
+- Finance PC OFF: durable capture is not guaranteed; status is `DEFERRED_POST_RC1`.
+- Owner UI: display *"WhatsApp aktif saat sistem keuangan sedang berjalan."* without future infrastructure terminology.
+
+### Verification gates
+
+1. Run the one-click start twice to prove idempotent startup of PostgreSQL, backend, worker, frontend, and local Baileys.
+2. Exercise authorized PC-on media intake through the Baileys provider boundary; verify Document, deferred analysis/Review Queue, WAMID idempotency, tenant isolation, and zero direct accounting mutation.
+3. Run accounting, formal reporting/tie-out, backup/restore, migration, dependency, lint, type, build, restart, and audit-trail gates.
+4. Preserve existing historical future-infrastructure evidence; do not reinterpret it as live PC-off proof.
+5. Deliver only after independent review and green GitHub CI.
+
+## 7. Constitution Re-check
+
+**PASS**. The local-first scope preserves Single Input, immutable evidence, tenant isolation, deterministic accounting, explicit review, auditability, and exact financial reporting. Deferring a non-operated external capture host is an honest capability reduction, not an accounting or security exception.

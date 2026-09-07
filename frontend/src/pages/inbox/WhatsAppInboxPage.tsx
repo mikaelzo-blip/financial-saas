@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   MessageSquare,
@@ -18,33 +18,18 @@ import { formatDate } from '../../utils/formatters';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { SkeletonLoader } from '../../components/feedback/SkeletonLoader';
-import { useToast } from '../../components/feedback/Toast';
 
 type FilterTab = 'ALL' | 'RECEIVED' | 'SYNCED' | 'PROCESSED' | 'FAILED';
 
 export const WhatsAppInboxPage: React.FC = () => {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { success, error } = useToast();
   const [selectedTab, setSelectedTab] = useState<FilterTab>('ALL');
 
-  const { data: messages, isLoading, isFetching } = useQuery({
+  const { data: messages, isLoading } = useQuery({
     queryKey: ['inbox-messages', selectedTab],
     queryFn: () => {
       const filter = selectedTab === 'ALL' ? undefined : (selectedTab as InboxMessageStatus);
       return inboxApi.listMessages(filter);
-    },
-  });
-
-  const syncMutation = useMutation({
-    mutationFn: () => inboxApi.syncBacklog(),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['inbox-messages'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-financial-summary'] });
-      success(`Berhasil menarik ${data.length} pesan backlog dari Remote Capture.`);
-    },
-    onError: (err: any) => {
-      error(err.response?.data?.detail || 'Gagal melakukan sinkronisasi backlog.');
     },
   });
 
@@ -93,33 +78,22 @@ export const WhatsAppInboxPage: React.FC = () => {
               <MessageSquare className="h-4 w-4" />
             </div>
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-              WhatsApp Durable Inbox
+              Kotak Masuk WhatsApp
             </h2>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Capture bukti transaksi offline via WhatsApp. Saat PC menyala, sinkronkan backlog untuk dianalisis Hermes.
+            WhatsApp aktif saat sistem keuangan sedang berjalan.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/review-queue')}
-            leftIcon={<Eye className="w-4 h-4" />}
-          >
-            Buka Antrean Review
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => syncMutation.mutate()}
-            isLoading={syncMutation.isPending || isFetching}
-            leftIcon={<RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />}
-          >
-            Tarik & Sinkronkan Backlog
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => navigate('/review-queue')}
+          leftIcon={<Eye className="w-4 h-4" />}
+        >
+          Buka Antrean Review
+        </Button>
       </div>
 
       {/* Filter Tabs */}

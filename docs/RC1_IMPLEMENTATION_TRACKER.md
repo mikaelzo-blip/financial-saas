@@ -3,7 +3,7 @@
 | ID | Priority | Description | Dependencies | Status | Branch/Commit | Tests | UAT | Blocker | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | **R0** | P0 | Source of truth and standardization documentation (Standardization guide & RC1 Tracker) | None | DONE | `hermes/rc1-implementation` | N/A (Doc) | N/A | None | Ratified SAK EP orientation, 4 reporting layers, COA invariants, tracker. |
-| **R1** | P1 | Durable PC-off capture (Remote inbox relay, durable metadata/media, sync poller) | R0 | DONE | `5804988` | Integration & Emulator tests passing (`test_remote_inbox_durable_flow.py`) | Verified | None | Cloudflare D1/R2 edge worker, in-memory emulator, RemoteInboxClient sync, WAMID dedup, SHA-256 media verification. |
+| **R1** | P1 | Durable PC-off capture (Remote inbox relay, durable metadata/media, sync poller) | R0 | DEFERRED_POST_RC1 | `5804988` (future components preserved) | Historical integration & emulator tests passing (`test_remote_inbox_durable_flow.py`) | Not claimed for live RC1 PC-off operation | Owner chose no VPS/external always-on host for the interim period | POST-RC1 / FUTURE ALWAYS-ON CAPTURE INFRASTRUCTURE: Cloudflare Worker, D1/R2, RemoteInboxClient, claim/lease, WAMID dedup, SHA-256 verification, and remote sync contracts remain preserved but inactive. |
 | **R2** | P0 | Payment to Money Movement synchronization (`PAY_VENDOR_BILL`, `CUSTOMER_PAYMENT`, AP/AR, Cash/Bank) | R0 | DONE | `5804988` | Unit & Integration passing | Verified | None | Synchronized MoneyMovement, Settlement, and SettlementAllocation on payment workflows and reversals. |
 | **R3** | P0 | Interbank transfer flow (source/dest accounts, posting, validation, MoneyMovement, UI) | R2 | DONE | `5804988` | Unit & Integration passing | Verified | None | Outflow/inflow without income/expense impact; Mutasi Antar Rekening; synchronized MoneyMovement; frontend UI complete. |
 | **R4** | P1 | Deferred analysis runtime (Remote/Local Inbox -> Document -> DocumentSession -> DeferredAnalysisService -> candidate) | R1 | DONE | `5804988` | Unit tests passing (queue, worker, session analysis) | Verified | None | Automatic ingestion pipeline without manual API triggering. |
@@ -17,3 +17,13 @@
 | **R12** | P1 | Project reporting hardening (Separate contract value, recognized revenue, invoiced, collected, retention, cost, profit, cash) | R9 | DONE | `5804988` | Unit & API tests passing (`test_project_reporting_service.py`) | Verified | None | Policy locked & implemented: Gross Project Profit as primary, Net Contribution secondary, Cash Position separate, loan principal excluded from costs, owner-friendly terminology. |
 | **R13** | P0 | Integrated RC1 end-to-end business lifecycle UAT (Vendor, customer, project, period close, all reports tie out) | R2, R3, R7, R8, R9 | DONE | `5804988` | Integration (`test_uat13_integrated_rc1_business_lifecycle.py`) & Unit passing | Verified | None | End-to-end audit verification across vendor, customer, project, period controls, and formal reporting tie-outs. |
 | **R14** | P3 | External consultant financial report reconciliation | R9, R13 | DONE | `5804988` | Integration tests passing (`test_consultant_reconciliation_api.py`) | Verified | None | Consultant financial report reconciliation service, verified historical statements (2023-2025), side-by-side comparison, difference taxonomy, UI page. |
+
+## RC1 Operating Note — 2026-09-07
+
+- **Operating model**: LOCAL-FIRST.
+- **PC Finance ON**: Local Baileys -> Financial SaaS intake is supported.
+- **PC Finance OFF**: Durable WhatsApp capture is not guaranteed (`DEFERRED_POST_RC1`).
+- **Startup**: `scripts/windows/Start-Financial-SaaS.ps1` starts or verifies PostgreSQL, backend, worker, frontend, and configured local Baileys bridge.
+- **Provider boundary**: Meta Cloud API remains inactive. No Meta-only relay or unnecessary Cloudflare production resource is deployed for RC1.
+- **Accounting hard-stop**: WhatsApp creates evidence/candidates only. Explicit authorized review and deterministic backend validation remain required before posting.
+- **Decision record**: `docs/decisions/ADR-2026-09-07-rc1-local-first-whatsapp.md`.

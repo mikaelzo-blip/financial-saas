@@ -1,12 +1,13 @@
 """Print the active canonical WhatsApp sender allowlist for local startup."""
 
 import asyncio
+import logging
 import re
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.database import AsyncSessionLocal
+from src.core.database import AsyncSessionLocal, engine
 from src.models.whatsapp import WhatsAppSenderMapping
 
 _E164 = re.compile(r"^\+[1-9]\d{7,14}$")
@@ -24,6 +25,8 @@ async def get_active_sender_phones(session: AsyncSession) -> list[str]:
 
 
 async def main() -> None:
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+    engine.echo = False
     async with AsyncSessionLocal() as session:
         print(",".join(await get_active_sender_phones(session)))
 

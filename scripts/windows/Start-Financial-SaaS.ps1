@@ -75,12 +75,15 @@ function Test-TrackedProcess([string]$Name, [string]$ExpectedCommand, [string]$E
     return $false
 }
 
-function Wait-Http([string]$Url, [int]$Seconds = 60) {
+function Wait-Http([string]$Url, [int]$Seconds = 60, [scriptblock]$Condition = $null) {
     $deadline = (Get-Date).AddSeconds($Seconds)
     do {
         try {
             $resp = Invoke-RestMethod -Uri $Url -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
-            return $resp
+            if (-not $Condition -or (& $Condition $resp)) {
+                return $resp
+            }
+            Start-Sleep -Seconds 1
         }
         catch { Start-Sleep -Seconds 1 }
     } while ((Get-Date) -lt $deadline)
@@ -215,7 +218,7 @@ if ($WhatsAppEnabled) {
         $nodeExecutable = (Get-Command node).Source
         Start-TrackedBackgroundProcess 'baileys' $nodeExecutable @($BridgeScript, '--port', "$BridgePort", '--session', $WhatsAppSession, '--mode', 'bot') $BridgeDirectory 'baileys' $bridgeEnv
     }
-    $bridgeHealth = Wait-Http "http://127.0.0.1:$BridgePort/health" 30
+    $bridgeHealth = Wait-Http "http://127.0.0.1:$BridgePort/health" 30 { param($r) $r.status -eq 'connected' }
     if ($bridgeHealth.status -ne 'connected') { throw "Local WhatsApp bridge is not connected (status: $($bridgeHealth.status))." }
 }
 
@@ -223,8 +226,8 @@ if (-not (Test-TrackedProcess 'backend' 'src.main:app' $Python)) {
     Start-TrackedBackgroundProcess 'backend' $Python @('-m','uvicorn','src.main:app','--host','127.0.0.1','--port','8000') $Backend 'backend'
     Test-TrackedProcess 'backend' 'src.main:app' $Python | Out-Null
 }
-$health = Wait-Http 'http://127.0.0.1:8000/health'
-$ready = Wait-Http 'http://127.0.0.1:8000/ready'
+$health = Wait-Http 'http://127.0.0.1:8000/health' 60 { param($r) $r.status -eq 'healthy' }
+$ready = Wait-Http 'http://127.0.0.1:8000/ready' 60 { param($r) $r.status -eq 'ready' }
 if ($health.status -ne 'healthy' -or $ready.status -ne 'ready') { throw 'Backend health checks failed.' }
 
 # Start PostgreSQL-backed background job worker

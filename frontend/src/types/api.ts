@@ -212,17 +212,19 @@ export interface ProjectProfitabilityResponse {
   };
   pnl: {
     recognized_revenue: string;
-    total_actual_cost: string;
+    actual_project_cost: string;
     gross_profit: string;
-    gross_margin_percentage: string;
+    margin_percentage: string;
   };
-  cash: {
+  cash_and_billing: {
     total_invoiced: string;
-    total_received: string;
-    outstanding_receivables: string;
-    net_cash_position: string;
+    total_cash_received: string;
+    outstanding_receivable: string;
+    cash_spent: string;
+    net_cash_flow: string;
+    project_cash_surplus: string;
   };
-  cost_breakdown: ProjectCostCategoryBreakdown[];
+  cost_categories: Record<string, string>;
 }
 
 export interface TransactionAllocationItem {

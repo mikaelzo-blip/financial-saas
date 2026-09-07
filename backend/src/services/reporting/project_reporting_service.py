@@ -60,7 +60,8 @@ class ProjectReportingService:
         ).where(
             and_(
                 CustomerInvoice.organization_id == organization_id,
-                CustomerInvoice.project_id == project_id
+                CustomerInvoice.project_id == project_id,
+                CustomerInvoice.status != "CANCELLED"
             )
         )
         invoices = (await session.execute(inv_stmt)).scalars().all()

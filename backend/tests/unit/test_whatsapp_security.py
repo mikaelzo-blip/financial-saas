@@ -47,6 +47,7 @@ async def test_http_handshake_and_auth_before_payload(client, monkeypatch):
     from src.core.config import settings
     monkeypatch.setattr(settings, "WHATSAPP_VERIFY_TOKEN", SecretStr("test-verify"))
     monkeypatch.setattr(settings, "WHATSAPP_WEBHOOK_APP_SECRET", SecretStr("test-secret"))
+    monkeypatch.setattr(settings, "WHATSAPP_ADAPTER_TOKEN", None)
     response = await client.get("/api/v1/integrations/whatsapp/webhook", params={"hub.mode": "subscribe", "hub.verify_token": "test-verify", "hub.challenge": "88991122"})
     assert response.status_code == 200 and response.text == "88991122"
     assert (await client.get("/api/v1/integrations/whatsapp/webhook")).status_code == 403

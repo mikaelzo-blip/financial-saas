@@ -79,6 +79,17 @@ export type CostCategory =
   | 'SIT'
   | 'OTH';
 
+export type ExpenseCategory =
+  | 'SALARY'
+  | 'FEE'
+  | 'OFFICE_ADMIN'
+  | 'TRAVEL_OFFICE'
+  | 'PERMITS'
+  | 'PROFESSIONAL_SERVICE'
+  | 'BANK_CHARGES'
+  | 'DEPRECIATION'
+  | 'OTHER_OPERATIONAL';
+
 
 export type ReviewFlag =
   | 'OCR_LOW_CONFIDENCE'
@@ -218,6 +229,7 @@ export interface TransactionAllocationItem {
   id?: string;
   project_id?: string;
   cost_category?: CostCategory;
+  expense_category?: ExpenseCategory;
   amount: string;
   notes?: string;
 }

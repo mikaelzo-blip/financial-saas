@@ -10,8 +10,8 @@
 
 | Checkpoint | Scope / Task | Status | Verification | Commit |
 |---|---|---|---|---|
-| **CP-UX-01** | P0: Document Review UX (hide raw JSON, select project & counterparty by name, role guards, status cards, friendly review flags) + Owner Reporting Terminology (hide EQ-CY, SAK EP wording, natural IDR format) | VERIFIED | 57 frontend tests pass, 196 backend unit tests pass, 160 backend integration tests pass, Vite build pass | Pending commit |
-| **CP-UX-02** | P0: Transaction Creation Flow (Step 1-4: Apa yang terjadi, Proyek vs Kantor context, filtered owner categories, summary preview) | PENDING | Pending | - |
+| **CP-UX-01** | P0: Document Review UX (hide raw JSON, select project & counterparty by name, role guards, status cards, friendly review flags) + Owner Reporting Terminology (hide EQ-CY, SAK EP wording, natural IDR format) | VERIFIED | 57 frontend tests pass, 196 backend unit tests pass, 160 backend integration tests pass, Vite build pass | `e3ae82e` |
+| **CP-UX-02** | P0: Transaction Creation Flow (Proyek vs Kantor context, filtered owner categories, operational expense posting rules, summary preview) | VERIFIED | 58 frontend tests pass, 197 backend unit tests pass, 160 backend integration tests pass, Vite build pass | Pending commit |
 | **CP-UX-03** | P1: Project Profitability UI label clarification ("belum termasuk overhead/pajak"), customer/vendor retention in project details | PENDING | Pending | - |
 | **CP-UX-04** | P1: Transaction list date sorting, Indonesian status labels, empty states | PENDING | Pending | - |
 

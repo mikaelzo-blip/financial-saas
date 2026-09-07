@@ -77,3 +77,52 @@ def test_posting_rule_vendor_bill_and_payment():
     pay_legs = PostingRuleRegistry.generate_journal_legs(pay)
     assert any(l.account_code == "2101" and l.debit_amount == Decimal("50000000.00") for l in pay_legs)
     assert any(l.account_code == "1101" and l.credit_amount == Decimal("50000000.00") for l in pay_legs)
+
+
+def test_posting_rule_direct_purchase_office_expenses():
+    """Verify operational expenses without project debit specific 610x accounts based on expense_category."""
+    from src.models.enums import ExpenseCategory
+
+    # Travel / Fuel office -> 6104
+    trx_travel = Transaction(
+        id=uuid.uuid4(),
+        organization_id=uuid.uuid4(),
+        transaction_code="TRX-2026-000004",
+        transaction_type=TransactionType.DIRECT_PURCHASE,
+        transaction_date="2026-03-01",
+        amount=Decimal("350000.00"),
+        description="Bensin Operasional Kantor",
+        workflow_status=WorkflowStatus.STAGED,
+        allocations=[
+            TransactionAllocation(
+                project_id=None,
+                expense_category=ExpenseCategory.TRAVEL_OFFICE,
+                amount=Decimal("350000.00"),
+            )
+        ],
+    )
+    legs = PostingRuleRegistry.generate_journal_legs(trx_travel)
+    assert any(l.account_code == "6104" and l.debit_amount == Decimal("350000.00") for l in legs)
+    assert any(l.account_code == "1101" and l.credit_amount == Decimal("350000.00") for l in legs)
+
+    # Office admin / supplies -> 6103
+    trx_admin = Transaction(
+        id=uuid.uuid4(),
+        organization_id=uuid.uuid4(),
+        transaction_code="TRX-2026-000005",
+        transaction_type=TransactionType.DIRECT_PURCHASE,
+        transaction_date="2026-03-02",
+        amount=Decimal("1200000.00"),
+        description="ATK dan Perlengkapan Kantor",
+        workflow_status=WorkflowStatus.STAGED,
+        allocations=[
+            TransactionAllocation(
+                project_id=None,
+                expense_category=ExpenseCategory.OFFICE_ADMIN,
+                amount=Decimal("1200000.00"),
+            )
+        ],
+    )
+    legs_admin = PostingRuleRegistry.generate_journal_legs(trx_admin)
+    assert any(l.account_code == "6103" and l.debit_amount == Decimal("1200000.00") for l in legs_admin)
+

@@ -27,6 +27,14 @@ Modul **WhatsApp Operational Messaging Integration** menyediakan saluran perpesa
 
 ## 2. Clarifications
 
+### Session 2026-09-07 — RC1 Local-First Scope
+
+- **Q11: Current RC1 operating model** → **Decision**: RC1 uses `WhatsApp -> Local Baileys Bridge -> Financial SaaS -> Document -> OCR / Hermes -> Review Queue -> Accounting after explicit authorized review`. The Finance PC and local services must be running when documents need to be captured.
+- **Q12: PC-off durability** → **Decision**: Durable capture while the Finance PC is off is not guaranteed and is `DEFERRED_POST_RC1`; it is not an RC1 release blocker.
+- **Q13: Future infrastructure** → **Decision**: Cloudflare Worker, D1/R2, `RemoteInboxClient`, claim/lease, WAMID idempotency, SHA-256 verification, and remote sync contracts remain preserved as post-RC1 future infrastructure. They are inactive for RC1 and contain no accounting logic.
+- **Q14: Provider activation** → **Decision**: Local Baileys is the active RC1 transport. Meta Cloud API remains inactive future-compatibility code; no Meta-only relay or unnecessary Cloudflare production resources are deployed.
+- **Q15: Owner startup and UX** → **Decision**: The Windows one-click workflow starts or verifies the local Baileys bridge when configured. Owner screens state: *"WhatsApp aktif saat sistem keuangan sedang berjalan."* They do not promise offline capture or expose future infrastructure terms.
+
 ### Session 2026-08-30
 
 - **Q01: Arsitektur Integrasi WhatsApp & Hermes** → **Decision**: Alur data wajib mengikuti: $\text{WhatsApp} \to \text{WhatsApp Adapter} \to \text{Hermes Client} \to \text{SaaS API} \to \text{Document Intelligence / Review Queue}$. Tidak ada jalan pintas dari WhatsApp langsung ke database atau jurnal.
@@ -203,15 +211,35 @@ Untuk menghubungkan adapter ini ke WhatsApp Cloud API resmi di lingkungan produk
 
 ---
 
-## 9. Assumptions & Out of Scope
+## 9. RC1 Local-First Requirements
+
+- **FR-022**: The supported RC1 transport MUST be the local Baileys bridge and MUST require the Finance PC and Financial SaaS services to be running during capture.
+- **FR-023**: The Windows one-click startup MUST start or verify PostgreSQL, FastAPI, the background worker, frontend, and local Baileys bridge when WhatsApp is configured. It MUST fail closed if the paired bridge or active authorized sender is unavailable.
+- **FR-024**: Owner-facing WhatsApp guidance MUST state *"WhatsApp aktif saat sistem keuangan sedang berjalan."* and MUST NOT promise capture while the system is stopped.
+- **FR-025**: Durable PC-off capture MUST be recorded as `DEFERRED_POST_RC1`, not as an RC1 blocker or verified RC1 capability.
+- **FR-026**: Cloudflare Worker, D1/R2, `RemoteInboxClient`, claim/lease, WAMID idempotency, SHA-256 verification, and remote sync contracts MUST remain preserved as post-RC1 future infrastructure without accounting logic.
+- **FR-027**: Meta Cloud API and any Meta-only relay MUST remain inactive for RC1; no Cloudflare production resource is required for RC1 readiness.
+
+### RC1 Success Criteria
+
+- **SC-008**: One Owner action starts or verifies every configured local service, including a connected local Baileys bridge, without individual service commands.
+- **SC-009**: An authorized WhatsApp media event received while the Finance PC is on creates exactly one Document, proceeds to deferred analysis and Review Queue, and creates zero accounting entries before explicit authorized approval.
+- **SC-010**: All RC1 status and UI surfaces consistently mark PC-off capture as `DEFERRED_POST_RC1` and make no offline-capture promise.
+
+---
+
+## 10. Assumptions & Out of Scope
 
 ### Assumptions:
 - Modul Feature 005 (Document Intelligence) dan Feature 006 (Hermes Automation API) telah selesai dan beroperasi di branch utama.
 - Pengguna WhatsApp lapangan telah memiliki nomor telepon yang dicatat oleh Administrator saat pembuatan akun.
 - Format penulisan nomor WhatsApp menggunakan format internasional standar (E.164).
+- Finance PC dan layanan Financial SaaS berjalan ketika dokumen perlu diterima melalui WhatsApp selama periode RC1 local-first.
 
 ### Explicitly Out of Scope:
-- **WhatsApp Web Scraping / Unofficial Browser Automation**: Penggunaan bot browser tidak resmi dilarang demi keandalan dan keamanan audit.
+- **Browser Scraping**: RC1 menggunakan Baileys sebagai bridge protokol WhatsApp Web lokal, bukan otomasi browser/scraping.
 - **Persetujuan Jurnal Otomatis**: WhatsApp tidak boleh digunakan untuk melakukan final journal posting bypass.
-- **Modifikasi Database Langsung**: Tidak ada direct query atau bypassing API boundary.
-- **Aktivasi Akun Berbayar Meta**: Penyediaan akun berbayar ditunda hingga deployment staging/production berlisensi resmi.
+- **Modifikasi Database Langsung**: Tidak ada direct query atau bypassing API boundary dari transport WhatsApp.
+- **Aktivasi Akun Berbayar Meta**: Meta Cloud API tetap inactive/future compatibility.
+- **PC-Off Capture untuk RC1**: Durable capture ketika Finance PC mati adalah `DEFERRED_POST_RC1`.
+- **External Always-On Hosting untuk RC1**: VPS/external Baileys host serta provisioning Cloudflare production resources tidak termasuk deployment RC1.

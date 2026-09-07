@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param([switch]$NoBrowser)
+param(
+    [switch]$NoBrowser,
+    [string]$WhatsAppSessionPath = ''
+)
 
 $ErrorActionPreference = 'Stop'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -8,19 +11,67 @@ $Frontend = Join-Path $Root 'frontend'
 $Runtime = Join-Path $Root '.runtime'
 $Python = Join-Path $Backend '.venv\Scripts\python.exe'
 $Container = 'financial-saas-postgres'
+$HermesInstall = Join-Path $env:LOCALAPPDATA 'hermes\hermes-agent'
+$BridgeScript = Join-Path $HermesInstall 'scripts\whatsapp-bridge\bridge.js'
+$BridgeDirectory = Split-Path $BridgeScript -Parent
+$BridgePort = 3000
+
+function Read-DotEnv([string]$Path) {
+    $values = @{}
+    if (-not (Test-Path $Path)) { return $values }
+    foreach ($line in Get-Content $Path) {
+        if ($line -match '^\s*#' -or $line -notmatch '=') { continue }
+        $name, $value = $line -split '=', 2
+        $values[$name.Trim()] = $value.Trim().Trim('"').Trim("'")
+    }
+    return $values
+}
+
+function Get-BackendSetting([hashtable]$Values, [string]$Name) {
+    $processValue = [Environment]::GetEnvironmentVariable($Name)
+    if ($processValue) { return $processValue }
+    return $Values[$Name]
+}
+
+function Resolve-WhatsAppSession([string]$ExplicitPath) {
+    if ($ExplicitPath) { return [IO.Path]::GetFullPath($ExplicitPath) }
+    if ($env:FINANCIAL_SAAS_WHATSAPP_SESSION) {
+        return [IO.Path]::GetFullPath($env:FINANCIAL_SAAS_WHATSAPP_SESSION)
+    }
+    foreach ($candidate in @(
+        (Join-Path $env:LOCALAPPDATA 'hermes\profiles\financial-saas\platforms\whatsapp\session'),
+        (Join-Path $env:LOCALAPPDATA 'hermes\profiles\financial-saas\whatsapp\session'),
+        (Join-Path $env:USERPROFILE '.hermes\whatsapp\session')
+    )) {
+        if (Test-Path (Join-Path $candidate 'creds.json')) { return $candidate }
+    }
+    return $null
+}
 
 function Test-TrackedProcess([string]$Name, [string]$ExpectedCommand, [string]$ExpectedExecutable = '') {
     $pidFile = Join-Path $Runtime "$Name.pid"
-    if (-not (Test-Path $pidFile)) { return $false }
-    $processId = (Get-Content $pidFile -Raw).Trim()
-    if ($processId -notmatch '^\d+$') { Remove-Item $pidFile -Force; return $false }
-    $process = Get-CimInstance Win32_Process -Filter "ProcessId = $processId" -ErrorAction SilentlyContinue
-    if ($process -and $process.CommandLine -like "*$ExpectedCommand*") { return $true }
-    $child = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-        $_.ParentProcessId -eq [int]$processId -and $_.CommandLine -like "*$ExpectedCommand*"
+    if (Test-Path $pidFile) {
+        $processId = (Get-Content $pidFile -Raw).Trim()
+        if ($processId -match '^\d+$') {
+            $process = Get-CimInstance Win32_Process -Filter "ProcessId = $processId" -ErrorAction SilentlyContinue
+            if ($process -and $process.CommandLine -like "*$ExpectedCommand*") { return $true }
+            $child = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+                $_.ParentProcessId -eq [int]$processId -and $_.CommandLine -like "*$ExpectedCommand*"
+            } | Select-Object -First 1
+            if ($child) { Set-Content $pidFile $child.ProcessId; return $true }
+        }
+        Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+    }
+
+    # Recover PID if process is already running
+    $running = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        $_ -and $_.CommandLine -like "*$ExpectedCommand*" -and
+        ($_.ExecutablePath -like '*\python.exe' -or $_.ExecutablePath -like '*\node.exe' -or $_.ExecutablePath -like '*\cmd.exe')
     } | Select-Object -First 1
-    if ($child) { Set-Content $pidFile $child.ProcessId; return $true }
-    Remove-Item $pidFile -Force
+    if ($running) {
+        Set-Content $pidFile $running.ProcessId
+        return $true
+    }
     return $false
 }
 
@@ -67,6 +118,18 @@ if ($envContent -match 'postgres:postgres@localhost:5432/financial_saas') {
     $envContent = $envContent.Replace('postgres:postgres@localhost:5432/financial_saas', 'financial:financial_dev_2026@localhost:5432/financial_saas')
     Set-Content $envPath $envContent
 }
+$backendEnv = Read-DotEnv $envPath
+$WhatsAppEnabled = (Get-BackendSetting $backendEnv 'WHATSAPP_PROVIDER') -eq 'baileys'
+if ($WhatsAppEnabled) {
+    foreach ($required in @('WHATSAPP_ADAPTER_TOKEN', 'WHATSAPP_TENANT_TOKENS')) {
+        if (-not (Get-BackendSetting $backendEnv $required)) { throw "Local WhatsApp requires $required in backend/.env or the process environment." }
+    }
+    if (-not (Test-Path $BridgeScript)) { throw "Local Baileys bridge not found at $BridgeScript." }
+    $WhatsAppSession = Resolve-WhatsAppSession $WhatsAppSessionPath
+    if (-not $WhatsAppSession -or -not (Test-Path (Join-Path $WhatsAppSession 'creds.json'))) {
+        throw "WhatsApp is configured but no paired local session was found. Pair once with 'hermes whatsapp'."
+    }
+}
 
 $pyprojectHash = (Get-FileHash (Join-Path $Backend 'pyproject.toml') -Algorithm SHA256).Hash
 $pyprojectHashFile = Join-Path $Backend '.venv\.financial-saas-pyproject.sha256'
@@ -101,12 +164,23 @@ if (-not (Test-Path (Join-Path $Frontend 'node_modules\.bin\vite.cmd')) -or $ins
     } finally { Pop-Location }
 }
 
-function Start-TrackedBackgroundProcess([string]$Name, [string]$FilePath, [string[]]$Arguments, [string]$WorkingDirectory, [string]$LogBaseName) {
+function Start-TrackedBackgroundProcess(
+    [string]$Name,
+    [string]$FilePath,
+    [string[]]$Arguments,
+    [string]$WorkingDirectory,
+    [string]$LogBaseName,
+    [hashtable]$Environment = @{}
+) {
     $stdout = Join-Path $Runtime "$LogBaseName.log"
     $stderr = Join-Path $Runtime "$LogBaseName.error.log"
     $batFile = Join-Path $Runtime "run-$Name.bat"
     $argString = ($Arguments | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } }) -join ' '
-    $batContent = "@echo off`r`n`"$FilePath`" $argString >> `"$stdout`" 2>> `"$stderr`""
+    $envLines = @($Environment.GetEnumerator() | ForEach-Object {
+        if ([string]$_.Value -match '[\r\n"]') { throw "Invalid process environment value for $($_.Key)." }
+        "set `"$($_.Key)=$($_.Value)`""
+    })
+    $batContent = (@('@echo off') + $envLines + @("`"$FilePath`" $argString >> `"$stdout`" 2>> `"$stderr`"")) -join "`r`n"
     Set-Content -Path $batFile -Value $batContent -Encoding ASCII
     $cmdProcess = Start-Process -WindowStyle Hidden -FilePath $batFile -WorkingDirectory $WorkingDirectory -PassThru
     Start-Sleep -Milliseconds 400
@@ -115,6 +189,34 @@ function Start-TrackedBackgroundProcess([string]$Name, [string]$FilePath, [strin
     } | Select-Object -First 1
     $actualPid = if ($child) { $child.ProcessId } else { $cmdProcess.Id }
     Set-Content (Join-Path $Runtime "$Name.pid") $actualPid
+}
+
+if ($WhatsAppEnabled) {
+    & (Get-Command node).Source (Join-Path $Root 'scripts\verify_and_patch_baileys_bridge.mjs')
+    if ($LASTEXITCODE -ne 0) { throw 'Local Baileys bridge verification failed.' }
+    if (-not (Test-TrackedProcess 'baileys' 'whatsapp-bridge\bridge.js')) {
+        Push-Location $Backend
+        try {
+            $allowedUsers = (& $Python 'scripts/export_whatsapp_allowlist.py').Trim()
+            if ($LASTEXITCODE -ne 0) { throw 'Could not load the local WhatsApp sender allowlist.' }
+        } finally { Pop-Location }
+        if (-not $allowedUsers) {
+            throw 'Local WhatsApp has no active authorized sender. Register an Owner sender first.'
+        }
+        $bridgeEnv = @{
+            WHATSAPP_MODE = 'bot'
+            WHATSAPP_ALLOWED_USERS = $allowedUsers
+            WHATSAPP_DM_POLICY = 'allowlist'
+            HERMES_IMAGE_CACHE_DIR = (Join-Path $Runtime 'whatsapp-cache\images')
+            HERMES_DOCUMENT_CACHE_DIR = (Join-Path $Runtime 'whatsapp-cache\documents')
+            HERMES_AUDIO_CACHE_DIR = (Join-Path $Runtime 'whatsapp-cache\audio')
+        }
+        New-Item -ItemType Directory -Force -Path $bridgeEnv.HERMES_IMAGE_CACHE_DIR, $bridgeEnv.HERMES_DOCUMENT_CACHE_DIR, $bridgeEnv.HERMES_AUDIO_CACHE_DIR | Out-Null
+        $nodeExecutable = (Get-Command node).Source
+        Start-TrackedBackgroundProcess 'baileys' $nodeExecutable @($BridgeScript, '--port', "$BridgePort", '--session', $WhatsAppSession, '--mode', 'bot') $BridgeDirectory 'baileys' $bridgeEnv
+    }
+    $bridgeHealth = Wait-Http "http://127.0.0.1:$BridgePort/health" 30
+    if ($bridgeHealth.status -ne 'connected') { throw "Local WhatsApp bridge is not connected (status: $($bridgeHealth.status))." }
 }
 
 if (-not (Test-TrackedProcess 'backend' 'src.main:app' $Python)) {

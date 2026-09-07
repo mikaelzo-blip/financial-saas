@@ -2959,7 +2959,61 @@ Sistem tetap sederhana bagi Owner tetapi memiliki accounting foundation yang dap
 
 ---
 
-# 55. Implementation Command for Hermes
+# 55. RC1 Local-First Product Decision Addendum
+
+**Decision date:** 2026-09-07
+
+**Status:** APPROVED
+
+**Scope:** RC1 and the interim 4–6 month operating period
+
+This addendum supersedes the RC1 release-blocking effect of the PC-off requirements above without deleting or rewriting their historical rationale.
+
+## Current RC1 Operating Model
+
+```text
+WhatsApp
+-> Local Baileys Bridge
+-> Financial SaaS
+-> Document
+-> OCR / Hermes
+-> Review Queue
+-> Accounting after authorized review
+```
+
+The Finance PC and Financial SaaS services are expected to be running when WhatsApp documents need to be captured. Supported behavior:
+
+- **PC Finance ON:** local Baileys intake is supported.
+- **PC Finance OFF:** durable WhatsApp capture is not guaranteed.
+
+R1 Durable PC-Off Capture is therefore `DEFERRED_POST_RC1`, not an RC1 release blocker. The Owner intentionally declines a VPS/external always-on Baileys host for the interim period.
+
+## Preserved Post-RC1 Work
+
+Cloudflare Worker, D1 metadata, R2 media, `RemoteInboxClient`, remote sync contracts, claim/lease recovery, WAMID idempotency, and SHA-256 verification remain preserved as **POST-RC1 / FUTURE ALWAYS-ON CAPTURE INFRASTRUCTURE**. They remain outside the local finance domain and contain no accounting logic.
+
+Meta Cloud API remains inactive future-compatibility code. RC1 must not deploy a Meta-only relay or provision unnecessary Cloudflare production resources.
+
+## Revised RC1 Definition of Done
+
+For the approved local-first scope, the earlier Definition of Done items requiring PC-off capture and post-boot remote backlog are replaced by:
+
+1. one-click Windows startup starts or verifies PostgreSQL, backend, worker, frontend, and configured local Baileys;
+2. an authorized WhatsApp media message received while the PC is on creates exactly one Document;
+3. OCR/Hermes processing remains deferred and Review Queue governed;
+4. WhatsApp intake causes zero direct accounting posting;
+5. accounting, reporting tie-outs, backup/restore, restart/idempotency, and audit-trail gates pass;
+6. PC-off capture remains explicitly `DEFERRED_POST_RC1`.
+
+Normal Owner screens state:
+
+> WhatsApp aktif saat sistem keuangan sedang berjalan.
+
+Detailed rationale: `docs/decisions/ADR-2026-09-07-rc1-local-first-whatsapp.md`.
+
+---
+
+# 56. Implementation Command for Hermes
 
 Sebelum menulis kode baru, Hermes harus:
 

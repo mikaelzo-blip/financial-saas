@@ -105,6 +105,22 @@
 
 ---
 
+## Phase 7: RC1 Local-First Scope Revision
+
+**Purpose**: Apply the Owner-approved local-first release boundary without deleting future-ready remote inbox components or rewriting historical evidence.
+
+- [X] T035 Document the approved scope and `DEFERRED_POST_RC1` decision in `docs/decisions/ADR-2026-09-07-rc1-local-first-whatsapp.md`
+- [X] T036 Update local-first requirements, implementation plan, tracker, and project status in `specs/007-whatsapp-integration/`, `docs/RC1_IMPLEMENTATION_TRACKER.md`, and `PROJECT_STATUS.md`
+- [X] T037 Add failing bridge compatibility tests then implement idempotent fail-closed patching in `scripts/tests/verify_and_patch_baileys_bridge.test.mjs` and `scripts/verify_and_patch_baileys_bridge.mjs`
+- [X] T038 Add failing sender allowlist test then implement tenant-mapping export in `backend/tests/unit/test_whatsapp_startup_allowlist.py` and `backend/scripts/export_whatsapp_allowlist.py`
+- [X] T039 Wire paired local Baileys start, health verification, and safe stop into `scripts/windows/Start-Financial-SaaS.ps1` and `scripts/windows/Stop-Financial-SaaS.ps1`
+- [X] T040 Add failing Owner guidance test then replace offline promises in `frontend/tests/pages/WhatsAppInboxPage.test.tsx` and `frontend/src/pages/inbox/WhatsAppInboxPage.tsx`
+- [X] T041 Run Spec Kit consistency analysis, bounded RC1 gates, real one-click restart/idempotency, independent review, PR, CI, merge, and merged-main synchronization
+
+**Checkpoint**: PC-on local WhatsApp is the supported RC1 path; PC-off capture is honestly deferred and preserved infrastructure remains future-only.
+
+---
+
 ## Dependencies & Execution Order
 
 ```mermaid

@@ -143,7 +143,7 @@ export const TransactionDetailPage: React.FC = () => {
               </dd>
             </div>
             <div className="flex justify-between py-2.5">
-              <dt className="text-slate-500">Pihak Terkait (Counterparty)</dt>
+              <dt className="text-slate-500">Vendor / Pelanggan</dt>
               <dd className="font-semibold text-slate-800">
                 {trx.counterparty_name || '-'}
               </dd>

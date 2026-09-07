@@ -61,6 +61,17 @@ def test_contractor_document_classification_has_signals(text, kind):
     assert result.needs_review is (kind == DocumentType.UNKNOWN)
 
 
+def test_bank_transfer_receipt_with_project_references_stays_transfer_proof():
+    result = classify_text(
+        "PT BANK CENTRAL ASIA Tbk\nBUKTI TRANSAKSI\nTRANSFER BERHASIL\n"
+        "Berita: Pembayaran SPK-026/2026 sesuai kontrak dan BAST\n"
+        "Nominal Rp 5.000.000"
+    )
+
+    assert result.document_type == DocumentType.TRANSFER_PROOF
+    assert result.confidence >= Decimal("0.90")
+
+
 def test_extracted_fields_require_value_confidence_evidence_and_validation():
     extraction = StructuredExtraction(field_evidence={
         "total_amount": ExtractedField(value="1250000.00", confidence=Decimal("0.98"),

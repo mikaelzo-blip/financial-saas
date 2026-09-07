@@ -1,10 +1,11 @@
 import React from 'react';
-import { render, renderHook, screen, waitFor } from '@testing-library/react';
+import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/App';
 import { authApi } from '../../src/api/auth';
 import { apiClient } from '../../src/api/client';
+import { queryClient } from '../../src/api/queryClient';
 import { AppLayout } from '../../src/components/layout/AppLayout';
 import { AuthProvider, useAuth } from '../../src/store/AuthContext';
 import type { UserSession } from '../../src/types/api';
@@ -95,5 +96,16 @@ describe('authoritative tenant identity', () => {
 
     expect(requestHeaders['X-Organization-ID']).toBe(authoritativeSession.organizationId);
     expect(requestHeaders.Authorization).toBe(`Bearer ${authoritativeSession.accessToken}`);
+  });
+
+  it('clears cached tenant data when the authenticated session changes', async () => {
+    queryClient.setQueryData(['projects'], { name: 'Tenant lama' });
+    const wrapper = ({ children }: { children: React.ReactNode }) => <AuthProvider>{children}</AuthProvider>;
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    act(() => result.current.login(authoritativeSession));
+
+    expect(queryClient.getQueryData(['projects'])).toBeUndefined();
   });
 });

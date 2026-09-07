@@ -52,7 +52,7 @@ def classify_text(text: str) -> ClassificationResult:
         return ClassificationResult(DocumentType.TAX_INVOICE, Decimal("0.95"), ("tax-invoice signal",), False)
     if re.search(r"\b(?:customer\s+invoice|invoice\s+pelanggan|faktur\s+penjualan)\b", first_lines, re.I):
         return ClassificationResult(DocumentType.CUSTOMER_INVOICE, Decimal("0.95"), ("customer-invoice signal",), False)
-    if re.search(r"\b(?:bukti\s+transfer|transfer\s+bank|m-banking|internet\s+banking)\b", first_lines, re.I):
+    if re.search(r"\b(?:bukti\s+transfer|transfer\s+bank|transfer\s+berhasil|m-banking|internet\s+banking)\b", first_lines, re.I):
         return ClassificationResult(DocumentType.TRANSFER_PROOF, Decimal("0.95"), ("payment-transfer signal",), False)
 
     matches = [(kind, reason) for kind, pattern, reason in _CLASSIFICATION_RULES if re.search(pattern, text, re.I)]

@@ -80,7 +80,7 @@ export const ProfitLossPage: React.FC = () => {
               </div>
             </Card>
             <Card className="p-4 bg-indigo-50/60 border-indigo-200">
-              <span className="text-xs font-semibold text-indigo-800 uppercase tracking-wider">Laba Kotor (Gross Profit)</span>
+              <span className="text-xs font-semibold text-indigo-800 uppercase tracking-wider">Laba Kotor</span>
               <div className="text-xl font-bold font-mono text-indigo-950 mt-1 flex items-baseline justify-between">
                 <span>{formatIDR(data.gross_profit)}</span>
                 <span className="text-xs font-normal text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded">
@@ -89,7 +89,7 @@ export const ProfitLossPage: React.FC = () => {
               </div>
             </Card>
             <Card className="p-4 bg-blue-50/60 border-blue-200">
-              <span className="text-xs font-semibold text-blue-800 uppercase tracking-wider">Laba Bersih (Net Profit)</span>
+              <span className="text-xs font-semibold text-blue-800 uppercase tracking-wider">Laba Setelah Pajak</span>
               <div className="text-xl font-bold font-mono text-blue-950 mt-1">
                 {formatIDR(data.net_profit)}
               </div>
@@ -136,16 +136,14 @@ export const ProfitLossPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* LABA KOTOR SUB-BAR */}
               <div className="bg-slate-100 p-3 rounded flex justify-between font-bold text-slate-900">
-                <span>LABA KOTOR (GROSS PROFIT):</span>
+                <span>LABA KOTOR</span>
                 <span className="font-mono text-emerald-800">{formatIDR(data.gross_profit)}</span>
               </div>
 
-              {/* 3. BEBAN OPERASIONAL */}
               <div>
                 <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wide border-b border-slate-200 pb-2 flex justify-between">
-                  <span>III. BEBAN OPERASIONAL KANTOR</span>
+                  <span>III. BEBAN UMUM DAN ADMINISTRASI</span>
                   <span className="font-mono text-red-700">({formatIDR(data.operating_expenses_section.subtotal)})</span>
                 </h3>
                 <div className="divide-y divide-slate-100 text-xs font-mono mt-2">
@@ -158,21 +156,26 @@ export const ProfitLossPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* LABA USAHA SUB-BAR */}
               <div className="bg-slate-100 p-3 rounded flex justify-between font-bold text-slate-900">
-                <span>LABA USAHA (OPERATING PROFIT):</span>
+                <span>LABA USAHA</span>
                 <span className="font-mono text-indigo-900">{formatIDR(data.operating_profit)}</span>
               </div>
 
-              {/* 4. PENDAPATAN / BEBAN LAIN */}
-              {data.other_income_expense_section.lines.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wide border-b border-slate-200 pb-2">
+                  IV. PENDAPATAN DAN BIAYA LAIN-LAIN
+                </h3>
                 <div>
-                  <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wide border-b border-slate-200 pb-2 flex justify-between">
-                    <span>IV. PENDAPATAN / (BEBAN) LAIN-LAIN</span>
-                    <span className="font-mono">{formatIDR(data.other_income_expense_section.subtotal)}</span>
-                  </h3>
-                  <div className="divide-y divide-slate-100 text-xs font-mono mt-2">
-                    {data.other_income_expense_section.lines.map((l) => (
+                  <div className="flex justify-between text-xs font-semibold text-slate-700">
+                    <span>+ PENDAPATAN LAIN-LAIN</span>
+                    <span className="font-mono">
+                      {formatIDR(data.other_income_expense_section.lines.reduce(
+                        (sum, line) => sum + Math.max(Number(line.amount), 0), 0,
+                      ))}
+                    </span>
+                  </div>
+                  <div className="divide-y divide-slate-100 text-xs font-mono mt-1">
+                    {data.other_income_expense_section.lines.filter((line) => Number(line.amount) >= 0).map((l) => (
                       <button type="button" key={l.account_code || l.line_name} className={lineClass(l.account_code)} onClick={() => openLedger(l.account_code)} disabled={!l.account_code}>
                         <span className="font-sans text-slate-800 pl-4">{l.account_code} — {l.line_name}</span>
                         <span>{formatIDR(l.amount)}</span>
@@ -180,11 +183,36 @@ export const ProfitLossPage: React.FC = () => {
                     ))}
                   </div>
                 </div>
-              )}
+                <div>
+                  <div className="flex justify-between text-xs font-semibold text-slate-700">
+                    <span>- BIAYA LAIN-LAIN / BANK</span>
+                    <span className="font-mono text-red-700">
+                      ({formatIDR(data.other_income_expense_section.lines.reduce(
+                        (sum, line) => sum + Math.max(-Number(line.amount), 0), 0,
+                      ))})
+                    </span>
+                  </div>
+                  <div className="divide-y divide-slate-100 text-xs font-mono mt-1">
+                    {data.other_income_expense_section.lines.filter((line) => Number(line.amount) < 0).map((l) => (
+                      <button type="button" key={l.account_code || l.line_name} className={lineClass(l.account_code)} onClick={() => openLedger(l.account_code)} disabled={!l.account_code}>
+                        <span className="font-sans text-slate-800 pl-4">{l.account_code} — {l.line_name}</span>
+                        <span>({formatIDR(Math.abs(Number(l.amount)))})</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
 
-              {/* FINAL NET PROFIT BAR */}
+              <div className="border-t-2 border-slate-300 pt-3 flex justify-between font-bold text-slate-900">
+                <span>LABA SEBELUM PAJAK</span>
+                <span className="font-mono">{formatIDR(data.earnings_before_tax)}</span>
+              </div>
+              <div className="flex justify-between text-sm text-slate-800">
+                <span>PAJAK PENGHASILAN</span>
+                <span className="font-mono text-red-700">({formatIDR(data.tax_expense)})</span>
+              </div>
               <div className="bg-slate-900 text-white p-4 rounded-lg flex justify-between items-center font-bold">
-                <span className="text-base uppercase tracking-wider">LABA BERSIH TAHUN/PERIODE BERJALAN:</span>
+                <span className="text-base uppercase tracking-wider">LABA SETELAH PAJAK</span>
                 <span className="text-xl font-mono text-emerald-400">{formatIDR(data.net_profit)}</span>
               </div>
             </div>

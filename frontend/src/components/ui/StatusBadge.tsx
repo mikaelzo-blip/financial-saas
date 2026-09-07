@@ -25,7 +25,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
       variant = 'success';
       break;
     case 'REVIEW_REQUIRED':
-      label = 'Perlu Review';
+      label = 'Perlu Diperiksa';
       variant = 'warning';
       break;
     case 'REVERSED':

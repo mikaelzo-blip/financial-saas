@@ -246,7 +246,7 @@ export const FixedAssetsPage: React.FC = () => {
       align: 'center',
       render: (a) => (
         <span className="text-xs text-slate-700">
-          {a.useful_life_months} bln ({Math.round(a.useful_life_months / 12)} thn)
+          {a.useful_life_months} bulan ({(a.useful_life_months / 12).toLocaleString('id-ID', { maximumFractionDigits: 1 })} tahun)
         </span>
       ),
     },
@@ -327,7 +327,7 @@ export const FixedAssetsPage: React.FC = () => {
             <h2 className="text-xl font-bold text-slate-900 tracking-tight">Daftar Aset Tetap</h2>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Pencatatan barang modal dan penyusutan garis lurus (Straight Line) sesuai kebijakan SAK EP.
+            Pencatatan barang modal dan penyusutan garis lurus yang berorientasi pada SAK EP.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -387,9 +387,9 @@ export const FixedAssetsPage: React.FC = () => {
         <div className="text-xs text-blue-900 space-y-1">
           <p className="font-semibold">Pedoman Kapitalisasi Aset Tetap Perusahaan:</p>
           <p className="text-blue-800 leading-relaxed">
-            Barang modal dengan harga perolehan <strong>$\ge$ Rp 5.000.000</strong> dan masa manfaat <strong>&gt; 12 bulan</strong> dicatat sebagai Aset Tetap.
-            Pembelian di bawah Rp 5.000.000 dibebankan langsung pada periode berjalan (Harga Pokok Proyek / Beban Operasional).
-            Penyusutan mulai dihitung saat aset <strong>Mulai Digunakan</strong>.
+            Barang modal dengan harga perolehan <strong>minimal Rp5.000.000</strong> dan masa manfaat <strong>lebih dari 12 bulan</strong> dicatat sebagai aset tetap.
+            Pembelian di bawah Rp5.000.000 dibebankan langsung pada periode berjalan (Harga Pokok Proyek / Beban Operasional).
+            Penyusutan mulai dihitung saat aset <strong>mulai digunakan</strong>.
           </p>
         </div>
       </Card>

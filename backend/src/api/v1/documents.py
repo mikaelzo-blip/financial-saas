@@ -7,7 +7,7 @@ from sqlalchemy import and_, select
 
 from src.core.database import get_db
 from src.api.deps import get_current_org_id, get_current_user_id
-from src.models.enums import DocumentType, DocumentProcessingStatus, CandidateStatus, TransactionType
+from src.models.enums import DocumentType, DocumentProcessingStatus, CandidateStatus, ProjectStatus, TransactionType
 from src.models.document import DocumentCorrection
 from src.models.project import Project
 from src.models.counterparty import Counterparty
@@ -130,11 +130,38 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
     old = {key: candidate.get(key) for key in data.changes}
     candidate.update(data.changes)
     validated = TransactionCandidate.model_validate(candidate)
-    checks = ((validated.project_id, Project), (validated.counterparty_id, Counterparty),
-              (validated.payment_account_id, PaymentAccount))
-    for entity_id, model in checks:
-        if entity_id and not await db.scalar(select(model.id).where(and_(model.id == entity_id, model.organization_id == org_id))):
-            raise HTTPException(status_code=422, detail=f"{model.__name__} is not available in this organization")
+    if validated.project_id:
+        project = await db.scalar(select(Project).where(and_(
+            Project.id == validated.project_id, Project.organization_id == org_id,
+            Project.project_status.in_([ProjectStatus.PLANNED, ProjectStatus.ACTIVE, ProjectStatus.ON_HOLD]),
+        )))
+        if not project:
+            raise HTTPException(status_code=422, detail="Project is no longer available for new transactions")
+    if validated.counterparty_id:
+        counterparty = await db.scalar(select(Counterparty).where(and_(
+            Counterparty.id == validated.counterparty_id, Counterparty.organization_id == org_id,
+            Counterparty.is_active.is_(True),
+        )))
+        if not counterparty:
+            raise HTTPException(status_code=422, detail="Counterparty is not available in this organization")
+        vendor_types = {
+            TransactionType.VENDOR_BILL, TransactionType.PAY_VENDOR_BILL, TransactionType.VENDOR_ADVANCE,
+            TransactionType.SETTLE_VENDOR_ADVANCE, TransactionType.SUBCONTRACTOR_BILL,
+            TransactionType.PAY_SUBCONTRACTOR, TransactionType.VENDOR_REFUND,
+        }
+        customer_types = {
+            TransactionType.CUSTOMER_INVOICE, TransactionType.CUSTOMER_PAYMENT,
+            TransactionType.CUSTOMER_ADVANCE, TransactionType.CUSTOMER_REFUND,
+        }
+        if validated.proposed_transaction_type in vendor_types and not counterparty.is_vendor:
+            raise HTTPException(status_code=422, detail="Counterparty must be an active vendor for this transaction")
+        if validated.proposed_transaction_type in customer_types and not counterparty.is_customer:
+            raise HTTPException(status_code=422, detail="Counterparty must be an active customer for this transaction")
+    if validated.payment_account_id and not await db.scalar(select(PaymentAccount.id).where(and_(
+        PaymentAccount.id == validated.payment_account_id, PaymentAccount.organization_id == org_id,
+        PaymentAccount.is_active.is_(True),
+    ))):
+        raise HTTPException(status_code=422, detail="PaymentAccount is not available in this organization")
     if validated.allocation_target_id:
         allocation_models = ((CustomerInvoice,) if validated.proposed_transaction_type == TransactionType.CUSTOMER_PAYMENT
             else (VendorBill,) if validated.proposed_transaction_type == TransactionType.PAY_VENDOR_BILL

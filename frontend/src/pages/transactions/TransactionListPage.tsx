@@ -100,7 +100,7 @@ export const TransactionListPage: React.FC = () => {
           { label: 'Semua Transaksi', value: '' },
           { label: 'Siap Posting', value: 'STAGED' },
           { label: 'Terposting', value: 'POSTED' },
-          { label: 'Perlu Review', value: 'REVIEW_REQUIRED' },
+          { label: 'Perlu Diperiksa', value: 'REVIEW_REQUIRED' },
           { label: 'Dibatalkan (Reversed)', value: 'REVERSED' },
         ].map((tab) => (
           <button

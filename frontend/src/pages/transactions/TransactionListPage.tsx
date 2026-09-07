@@ -5,6 +5,7 @@ import { Plus, Receipt } from 'lucide-react';
 import { transactionsApi } from '../../api/transactions';
 import { TransactionResponse, WorkflowStatus } from '../../types/api';
 import { formatIDR, formatDate } from '../../utils/formatters';
+import { formatTransactionType } from '../../utils/labels';
 import { Button } from '../../components/ui/Button';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { DataTable, Column } from '../../components/tables/DataTable';
@@ -43,7 +44,7 @@ export const TransactionListPage: React.FC = () => {
         <div>
           <p className="font-medium text-slate-900">{t.description}</p>
           <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
-            <span>{t.transaction_type}</span>
+            <span>{formatTransactionType(t.transaction_type)}</span>
             {t.counterparty_name && <span>• {t.counterparty_name}</span>}
           </div>
         </div>

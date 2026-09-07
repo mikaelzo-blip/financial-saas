@@ -3,6 +3,7 @@ import { X, CheckCircle2, FileText, CheckSquare } from 'lucide-react';
 import { TransactionResponse, ReviewFlagResponse } from '../../../types/api';
 import { reviewApi } from '../../../api/review';
 import { formatIDR, formatDate } from '../../../utils/formatters';
+import { formatTransactionType } from '../../../utils/labels';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { Button } from '../../../components/ui/Button';
 import { ApprovalActionControls } from './ApprovalActionControls';
@@ -74,7 +75,7 @@ export const ReviewDrawer: React.FC<ReviewDrawerProps> = ({
                 <StatusBadge status={transaction.workflow_status} />
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                {transaction.transaction_type} • {formatDate(transaction.transaction_date)}
+                {formatTransactionType(transaction.transaction_type)} • {formatDate(transaction.transaction_date)}
               </p>
             </div>
             <button

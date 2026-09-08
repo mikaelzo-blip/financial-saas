@@ -19,13 +19,16 @@ Preserve all approved business, accounting, audit, security, and tenancy decisio
 ## Responsibilities
 
 - Spec Kit owns specification, clarification, technical planning, task generation, and consistency analysis.
-- Hermes is the primary development orchestrator: research, Spec Kit execution, implementation, verification, review, delivery, and synchronization.
+- Hermes Coder is the primary development orchestrator: research, Spec Kit execution, implementation, verification, review, delivery, and synchronization.
 - GitHub CI is an independent verification gate. Codex and AGY are optional external reviewers or repair agents, not mandatory workflow participants.
-- Hermes is an orchestration client, not the accounting engine; deterministic backend accounting rules remain authoritative.
+- Hermes Runtime is the product-facing operational agent for intake, extraction, candidate staging, and notification routing.
+- Hermes Coder and Hermes Runtime are separate profiles and responsibilities. Neither is the accounting engine; deterministic backend accounting rules remain authoritative.
 
 ## Required Workflow
 
-For the active feature, continue from actual repository state and run the applicable lifecycle without manual prompt handoffs:
+Before selecting work, reconcile `PROJECT_STATUS.md` with `git branch --show-current`, `git status`, and the current `origin/main` commit. Git is authoritative for branch and commit facts; approved artifacts are authoritative for requirements. Correct stale status before implementation.
+
+For the active feature, continue from the reconciled repository state and run the applicable lifecycle without manual prompt handoffs:
 
 `research -> specify -> clarify -> plan -> tasks -> analyze -> implementation -> tests -> review -> commit -> push -> Pull Request -> GitHub CI -> automatic squash merge -> synchronize main`
 
@@ -56,7 +59,7 @@ Use controlled implementation batches with hard verification checkpoints. Diagno
 
 ## Safety and Delivery Gates
 
-Do not modify production databases, deploy or push externally, expose secrets, commit `.env`, delete financial history, perform destructive migrations without explicit approval, create paid resources, or expand into unrelated features.
+Do not modify production databases, deploy externally, expose secrets, commit `.env`, delete financial history, perform destructive migrations without explicit approval, create paid resources, or expand into unrelated features. Remote Git delivery is allowed only under the scoped Hermes Coder Delivery Workflow below.
 
 Local development commands, dependency installation, non-destructive migrations, tests, lint, type checks, builds, debugging, and local git commits are allowed when in scope.
 
@@ -72,9 +75,9 @@ Before feature completion require:
 - 100% Spec Kit requirement coverage.
 
 
-## Hermes Delivery Workflow
+## Hermes Coder Delivery Workflow
 
-Hermes may autonomously, after the relevant verification checkpoint passes:
+Hermes Coder may autonomously, after the relevant verification checkpoint passes:
 
 - create `hermes/*` feature branches
 - edit repository files, implement application code, and run local/non-destructive migrations
@@ -84,16 +87,16 @@ Hermes may autonomously, after the relevant verification checkpoint passes:
 
 Automatic squash merge is permitted only when required tasks are complete, all applicable tests and migration/frontend gates pass, repository safety passes, GitHub CI passes, the PR is mergeable, and there are zero Critical findings, zero High findings, financial invariant violations, or tenant/security violations.
 
-Hermes must stop before real production deployment, destructive production database operations, paid external service activation, production credential changes, real WhatsApp Business provisioning, sending real financial data to external AI providers, or irreversible production infrastructure actions.
+Hermes Coder must stop before real production deployment, destructive production database operations, paid external service activation, production credential changes, real WhatsApp Business provisioning, sending real financial data to external AI providers, or irreversible production infrastructure actions.
 
-Hermes must only auto-push after the relevant checkpoint passes its required:
+Hermes Coder must only auto-push after the relevant checkpoint passes its required:
 - tests
 - lint
 - type checks
 - builds
 - migration validation where applicable
 
-Hermes MUST NOT autonomously:
+Hermes Coder MUST NOT autonomously:
 
 - push directly to `main` (verified checkpoints may auto-push only to `hermes/*` branches)
 - force-push
@@ -116,5 +119,4 @@ feat(document-intelligence): add document intake pipeline
 test(document-intelligence): cover duplicate detection
 fix(document-intelligence): enforce confidence review gating
 
-Push verified checkpoint commits automatically to the current `codex/*`
-branch without asking the user each time.
+Push verified checkpoint commits only to the current `hermes/*` branch. Never auto-push a `codex/*`, `agy/*`, or other agent-owned branch.

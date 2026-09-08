@@ -1,38 +1,17 @@
 # Project Status
 
-- **Current origin/main baseline**: `4e871a0` (PR #50 merged)
-- **Completed features**: 001 Contractor Finance System; 002 Core Financial Domain; 003 Core Operational UI; 004 Financial Reporting; 005 Document Intelligence; 006 Hermes Automation; 007 WhatsApp Integration; 008 AI Management Insights; 009 Production Readiness Foundation; 010 Dependency Security Gates; UAT Findings #1-#3; UAT #4 Customer Invoice; UAT #5 Customer Payment & AR Allocation; UAT #5.1 Active Tenant Identity; UAT #6 Vendor Bill & Accounts Payable; UAT #7 Vendor Payment & Cash Disbursement Safety; UAT #8 Reversal Flow; UAT #9 Financial Reporting; UAT #10 Project Completion & Retention Release; UAT #11 Document Ingestion & Storage Reliability; UAT #12 WhatsApp Media Transport & Review Queue Intake; UAT #13 Real Document Extraction & Candidate Review Flow; UAT #14 End-to-End Operational Workflows & Edge-Case Stress Testing; UAT #15 WhatsApp Sandbox Integration & Production Deployment Dry Run; UAT #16 Real Meta WhatsApp Cloud API Sandbox Pilot; UAT #17 Real WhatsApp Media Intake (Baileys Bridge); PRD v2.0 Remediation Program; Minimal ECC Engineering Workflow Integration; RC1 Implementation Backlog (R0, R2–R14 complete; R1 deferred post-RC1); PRD UX v3.0 Checkpoints CP-UX-01 to CP-UX-04.
-- **Current feature**: PRD UX v3.0 (Accountant UX, Transaction Classification, Project Profitability, and Indonesian Terminology)
-- **Current branch**: `hermes/fix-owner-review-language`
-- **Execution state**: CP-UX-01 through CP-UX-04 complete; pre-merge remediation verified locally and ready for PR review.
-- **Completed Tasks**:
-  - R0: Source of truth and standardization documentation ratified (`docs/ACCOUNTING_REPORTING_STANDARDIZATION_V1.md`, `docs/RC1_IMPLEMENTATION_TRACKER.md`).
-  - R1: `DEFERRED_POST_RC1`. Future-ready Cloudflare Worker, D1/R2, RemoteInboxClient, claim/lease, WAMID dedup, SHA-256 verification, and remote sync contracts remain preserved and inactive; live PC-off capture is not claimed.
-  - R2: Payment to Money Movement synchronization (`PAY_VENDOR_BILL`, `CUSTOMER_PAYMENT`, reversal decoupling, AP/AR integration).
-  - R3: Interbank transfer flow completed (source/dest accounts, posting, validation, MoneyMovement synchronization, reversal line tracking, and frontend UI).
-  - R4: Deferred analysis runtime (Remote/Local Inbox -> Document -> DocumentSession -> DeferredAnalysisService -> candidate).
-  - R5: PostgreSQL-backed Background Job runtime (`JobWorker`, lease timeout recovery, retry backoff, entrypoint `src/worker.py`).
-  - R6: Windows one-click startup & preflight script (`scripts/windows/Start-Financial-SaaS.ps1`, `Stop-Financial-SaaS.ps1`, dependency hash caching, detached background processes, DB health check, graceful shutdown).
-  - R7: Accounting period management UI & API (List, create, soft-close, hard-close, reopen reason requirement, and posting guards for closed/soft-closed periods).
-  - R8: Unified Review Queue experience (Document candidate & transaction ambiguity unified review pane, preview, mappings, actions).
-  - R9: Reporting standardization (EQ-CY synthetic profit fix, Laporan Perubahan Ekuitas, CALK framework, comparative reporting, export parity).
-  - R10: Opening balance workflow (OpeningBalanceService API/UI, balanced equity offset, double-entry audit trail).
-  - R11: Fixed assets minimum usable workflow (FixedAssetService, straight-line book depreciation, available-for-use date, capitalization threshold IDR 5M, period guards, Dr 6105 / Cr 1502 deterministic posting, and Indonesian Owner UI).
-  - R12: Project reporting hardening (Management summary distinction, contract value, invoiced revenue, cash received, retention, direct project cost, gross project profit primary, net contribution secondary, cash position separate, loan principal exclusion from costs, and owner-friendly terminology).
-  - R13: Integrated RC1 end-to-end business lifecycle UAT (Vendor AP/payment/MoneyMovement, Customer AR/payment/MoneyMovement, Project profitability/cash position, accounting period close and backdate guards, formal reporting tie-outs: Balance Sheet, P&L, Equity Changes, CALK, Cash Flow, Trial Balance, GL, AR/AP aging).
-  - R14: Consultant financial report reconciliation framework & UI (Historical statements 2023-2025, side-by-side comparative ledger analysis, difference taxonomy, no plug journals invariant).
-- **Historical verified checkpoint**: RC1 Final Release Delivery Complete at PR #48. Historical test/UAT evidence remains intact and is not evidence of live PC-off capture.
-- **UAT data**: Organization `PT Kontraktor Utama Indonesia` (`9670673b-c0fd-4ebe-87e4-a646358084ea`), Project `PRJ-2026-001`, registered sender Muhammad Fikri, journals, transactions, and balances preserved intact.
-- **Tests**: 391 backend unit and integration tests passing, 66 frontend tests passing, 6 Node bridge/contract tests passing; frontend lint/typecheck and Vite production build passing.
-- **Accounting integrity**: Total Debit == Total Credit; Assets = Liabilities + Equity; zero orphan AR/AP/retention; zero direct journals from transport ingestion; human review hard-stop preserved; period closing guards enforced.
-- **RC1 Operating Model**: **LOCAL-FIRST**.
-  - Finance PC ON: Local Baileys intake is the supported WhatsApp path.
-  - Finance PC OFF: durable capture is not guaranteed (`DEFERRED_POST_RC1`).
-- **Provider Status**:
-  - Meta Cloud API Adapter: **PRESERVED AS INACTIVE/FUTURE TRANSPORT**
-  - Local Baileys WhatsApp Web Bridge: **ACTIVE RC1 TRANSPORT WHEN LOCAL SERVICES ARE RUNNING**
-  - Future Cloudflare Worker/D1/R2 relay: **PRESERVED, INACTIVE, POST-RC1**
-- **Decision record**: `docs/decisions/ADR-2026-09-07-rc1-local-first-whatsapp.md`.
-- **Existing baseline follow-up**: Fixed-asset depreciation still posts debit account `6105` in `PostingRuleRegistry.generate_journal_legs`; the authoritative concept defines depreciation as `6108`. This independent defect predates the current branch and requires a separate focused correction.
-- **Outstanding blockers**: None found by the local pre-merge remediation gates; GitHub CI remains an independent PR gate.
-- **Next Step**: Create the PR when authorized, then run GitHub CI and the normal review gates before merge.
+- **Last reconciled**: 2026-09-08
+- **Current origin/main baseline**: `a367de8` (PR #52 merged)
+- **Current branch**: `hermes/governance-cleanup`
+- **Active work**: Repository governance and disposable-artifact cleanup before creating the isolated Hermes Coder profile.
+- **Active Spec Kit feature**: None. The stale local pointer to completed feature 005 must not be used to select work.
+- **Completed baseline**: Product features 001-010, production-readiness work, document-intelligence UAT, RC1 remediation, PRD UX v3.0 checkpoints, and storage-path remediation are merged through PR #52. Detailed historical evidence remains in `specs/`, Git history, and the retained trackers.
+- **Operating model**: Local-first. Local Baileys intake is supported while the Finance PC services are running; durable PC-off capture remains `DEFERRED_POST_RC1`.
+- **Current verification**: 393 backend tests passed and 3 skipped; 66 frontend tests and 6 Node bridge/contract tests passed; frontend lint completed with pre-existing warnings; typecheck and production build passed; backend dependency and complete offline migration-chain validation passed; diff and repository-safety checks passed.
+- **Protected local data**: Both `backend/storage` and `backend/backend/storage` contain ignored source-document files. Do not delete or merge either tree until database references and SHA-256 hashes are reconciled.
+- **Known accounting follow-up**: `FIXED_ASSET_DEPRECIATION` still posts debit account `6105` although the authoritative concept assigns depreciation to `6108`. The existing `6108` regression test exercises `DIRECT_PURCHASE`, not the fixed-asset depreciation transaction path. Fix in a separate focused feature.
+- **Current cleanup checkpoint**: Governance terminology, authority, routing, state-source normalization, and disposable-artifact cleanup are implemented and verified locally.
+- **Blockers**: None within the cleanup. The Hermes Coder profile must not perform autonomous development until this governance cleanup is reviewed and merged.
+- **Local cleanup checkpoint**: Committed as `chore(governance): prepare repository for Hermes Coder` on `hermes/governance-cleanup`.
+- **Delivery state**: Local commit complete. Push/PR awaits explicit confirmation that the configured `origin` remote is an approved destination.
+- **Next action**: Push `hermes/governance-cleanup`, run PR/CI review, merge the verified cleanup, then create the new Hermes Coder profile.

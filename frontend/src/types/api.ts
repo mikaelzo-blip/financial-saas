@@ -22,43 +22,47 @@ export type ProjectStatus =
   | 'CLOSED'
   | 'CANCELLED';
 
-export type TransactionType =
-  | 'DIRECT_PURCHASE'
-  | 'VENDOR_BILL'
-  | 'PAY_VENDOR_BILL'
-  | 'VENDOR_ADVANCE'
-  | 'SETTLE_VENDOR_ADVANCE'
-  | 'SUBCONTRACTOR_BILL'
-  | 'PAY_SUBCONTRACTOR'
-  | 'EMPLOYEE_ADVANCE'
-  | 'EMPLOYEE_SETTLEMENT'
-  | 'CUSTOMER_ADVANCE'
-  | 'REIMBURSEMENT'
-  | 'PAY_REIMBURSEMENT'
-  | 'PETTY_CASH_EXPENSE'
-  | 'TOPUP_PETTY_CASH'
-  | 'RETURN_PETTY_CASH'
-  | 'BANK_TO_CASH'
-  | 'CASH_TO_BANK'
-  | 'INTERBANK_TRANSFER'
-  | 'ASSET_PURCHASE'
-  | 'INVENTORY_PURCHASE'
-  | 'INVENTORY_USAGE'
-  | 'CUSTOMER_INVOICE'
-  | 'CUSTOMER_PAYMENT'
-  | 'RETENTION_RELEASE'
-  | 'REVENUE_RECOGNITION'
-  | 'CUSTOMER_REFUND'
-  | 'VENDOR_REFUND'
-  | 'OWNER_CONTRIBUTION'
-  | 'OWNER_WITHDRAWAL'
-  | 'LOAN_RECEIVED'
-  | 'LOAN_PAYMENT'
-  | 'BANK_CHARGE'
-  | 'OTHER_INCOME'
-  | 'OTHER_EXPENSE'
-  | 'JOURNAL_ADJUSTMENT'
-  | 'REVERSAL';
+export const TRANSACTION_TYPES = [
+  'DIRECT_PURCHASE',
+  'VENDOR_BILL',
+  'PAY_VENDOR_BILL',
+  'SUBCONTRACTOR_BILL',
+  'PAY_SUBCONTRACTOR',
+  'VENDOR_ADVANCE',
+  'SETTLE_VENDOR_ADVANCE',
+  'EMPLOYEE_ADVANCE',
+  'EMPLOYEE_SETTLEMENT',
+  'CUSTOMER_ADVANCE',
+  'REIMBURSEMENT',
+  'PAY_REIMBURSEMENT',
+  'PETTY_CASH_EXPENSE',
+  'TOPUP_PETTY_CASH',
+  'RETURN_PETTY_CASH',
+  'BANK_TO_CASH',
+  'CASH_TO_BANK',
+  'INTERBANK_TRANSFER',
+  'ASSET_PURCHASE',
+  'FIXED_ASSET_DEPRECIATION',
+  'INVENTORY_PURCHASE',
+  'INVENTORY_USAGE',
+  'CUSTOMER_INVOICE',
+  'CUSTOMER_PAYMENT',
+  'RETENTION_RELEASE',
+  'REVENUE_RECOGNITION',
+  'CUSTOMER_REFUND',
+  'VENDOR_REFUND',
+  'OWNER_CONTRIBUTION',
+  'OWNER_WITHDRAWAL',
+  'LOAN_RECEIVED',
+  'LOAN_PAYMENT',
+  'BANK_CHARGE',
+  'OTHER_INCOME',
+  'OTHER_EXPENSE',
+  'JOURNAL_ADJUSTMENT',
+  'REVERSAL',
+] as const;
+
+export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 
 
 export type WorkflowStatus =
@@ -68,16 +72,9 @@ export type WorkflowStatus =
   | 'REVERSED'
   | 'REJECTED';
 
-export type CostCategory =
-  | 'MAT'
-  | 'SUB'
-  | 'LAB'
-  | 'TRN'
-  | 'TRV'
-  | 'LOG'
-  | 'EQP'
-  | 'SIT'
-  | 'OTH';
+export const COST_CATEGORIES = ['MAT', 'SUB', 'LAB', 'TRN', 'TRV', 'LOG', 'EQP', 'SIT', 'OTH'] as const;
+
+export type CostCategory = (typeof COST_CATEGORIES)[number];
 
 export type ExpenseCategory =
   | 'SALARY'
@@ -89,6 +86,33 @@ export type ExpenseCategory =
   | 'BANK_CHARGES'
   | 'DEPRECIATION'
   | 'OTHER_OPERATIONAL';
+
+export const DOCUMENT_TYPES = [
+  'PO_CUSTOMER',
+  'SPK',
+  'CONTRACT',
+  'VARIATION_ORDER',
+  'PURCHASE_ORDER',
+  'QUOTATION',
+  'VENDOR_INVOICE',
+  'SUBCONTRACT_AGREEMENT',
+  'TRANSFER_PROOF',
+  'RECEIPT',
+  'BANK_STATEMENT',
+  'PETTY_CASH_PROOF',
+  'SURAT_JALAN',
+  'BAST',
+  'PROGRESS_REPORT',
+  'TIMESHEET',
+  'CUSTOMER_INVOICE',
+  'CUSTOMER_RECEIPT',
+  'TAX_INVOICE',
+  'WITHHOLDING_DOCUMENT',
+  'OTHER_TAX_DOCUMENT',
+  'UNKNOWN',
+] as const;
+
+export type DocumentType = (typeof DOCUMENT_TYPES)[number];
 
 
 export type ReviewFlag =
@@ -279,7 +303,7 @@ export interface DocumentResponse {
   id: string;
   organization_id: string;
   document_code: string;
-  document_type: string;
+  document_type: DocumentType;
   file_name: string;
   file_hash: string;
   file_size_bytes: number;

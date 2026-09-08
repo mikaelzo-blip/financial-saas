@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, test, vi } from 'vitest';
 import { DocumentReviewForm } from '../../src/components/documents/DocumentReviewForm';
+import { getDocumentReviewLookupRequirements } from '../../src/utils/documentReview';
 import type { CounterpartyResponse, DocumentResponse, ProjectResponse } from '../../src/types/api';
 
 const projects = [
@@ -118,4 +119,92 @@ test('explains evidence-only documents without technical jargon', () => {
   expect(screen.getByText(/disimpan sebagai bukti dan tidak langsung mengubah saldo/i)).toBeInTheDocument();
   expect(screen.queryByText(/Evidence-Only/i)).not.toBeInTheDocument();
   expect(screen.getByText('Detail Teknis')).toBeInTheDocument();
+});
+
+test('requires only vendor lookup for a vendor advance and project lookup for a vendor bill', () => {
+  const vendorAdvance = {
+    ...document,
+    processing_status: 'READY_FOR_APPROVAL',
+    candidate_transaction: {
+      proposed_transaction_type: 'VENDOR_ADVANCE',
+      counterparty_id: counterparties[0].id,
+    },
+    review_flags: [],
+  } satisfies DocumentResponse;
+  expect(getDocumentReviewLookupRequirements(vendorAdvance)).toEqual({
+    project: false,
+    customer: false,
+    vendor: true,
+  });
+
+  const vendorBill = {
+    ...vendorAdvance,
+    candidate_transaction: {
+      proposed_transaction_type: 'VENDOR_BILL',
+      project_id: projects[0].id,
+      counterparty_id: counterparties[0].id,
+    },
+  } satisfies DocumentResponse;
+  expect(getDocumentReviewLookupRequirements(vendorBill)).toEqual({
+    project: true,
+    customer: false,
+    vendor: true,
+  });
+});
+
+test('allows vendor approval when an optional project lookup is unavailable', async () => {
+  const onApprove = vi.fn().mockResolvedValue(undefined);
+  render(
+    <DocumentReviewForm
+      document={{
+        ...document,
+        processing_status: 'READY_FOR_APPROVAL',
+        candidate_transaction: {
+          proposed_transaction_type: 'VENDOR_ADVANCE',
+          counterparty_id: counterparties[0].id,
+          status: 'READY_FOR_APPROVAL',
+        },
+        review_flags: [],
+      }}
+      projects={[]}
+      counterparties={[counterparties[0]]}
+      projectLookupError="Daftar proyek tidak dapat dimuat."
+      onSave={vi.fn()}
+      onApprove={onApprove}
+      onReject={vi.fn()}
+    />,
+  );
+
+  const approveButton = screen.getByRole('button', { name: 'Setujui & Buat Transaksi' });
+  expect(approveButton).toBeEnabled();
+  await userEvent.click(approveButton);
+  expect(onApprove).toHaveBeenCalledOnce();
+});
+
+test('blocks approval when a required project lookup is unavailable', () => {
+  render(
+    <DocumentReviewForm
+      document={{
+        ...document,
+        processing_status: 'READY_FOR_APPROVAL',
+        candidate_transaction: {
+          proposed_transaction_type: 'VENDOR_BILL',
+          project_id: projects[0].id,
+          counterparty_id: counterparties[0].id,
+          status: 'READY_FOR_APPROVAL',
+        },
+        review_flags: [],
+      }}
+      projects={[]}
+      counterparties={[counterparties[0]]}
+      projectLookupError="Daftar proyek tidak dapat dimuat."
+      approvalLookupError="Daftar proyek yang diperlukan untuk persetujuan tidak dapat dimuat."
+      onSave={vi.fn()}
+      onApprove={vi.fn()}
+      onReject={vi.fn()}
+    />,
+  );
+
+  expect(screen.getByRole('button', { name: 'Setujui & Buat Transaksi' })).toBeDisabled();
+  expect(screen.getByText(/diperlukan untuk persetujuan/)).toBeInTheDocument();
 });

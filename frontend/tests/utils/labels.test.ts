@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { formatDocumentType, formatSourceChannel, formatTransactionType } from '../../src/utils/labels';
+import { DOCUMENT_TYPES, TRANSACTION_TYPES } from '../../src/types/api';
 
 describe('owner-facing enum labels', () => {
   it('converts internal transaction, document, and source enums to Indonesian labels', () => {
@@ -12,8 +13,16 @@ describe('owner-facing enum labels', () => {
     expect(formatSourceChannel('WHATSAPP')).toBe('WhatsApp');
   });
 
-  it('formats unknown enum values without exposing underscore codes', () => {
-    expect(formatTransactionType('FUTURE_TRANSACTION')).toBe('future transaction');
-    expect(formatDocumentType('FUTURE_DOCUMENT')).toBe('future document');
+  it('localizes every known transaction and document enum without a raw fallback', () => {
+    for (const transactionType of TRANSACTION_TYPES) {
+      expect(formatTransactionType(transactionType)).not.toMatch(/_|tidak dikenal/i);
+    }
+    for (const documentType of DOCUMENT_TYPES) {
+      expect(formatDocumentType(documentType)).not.toMatch(/_|tidak dikenal/i);
+    }
+    expect(formatTransactionType('OWNER_WITHDRAWAL')).toBe('Prive pemilik');
+    expect(formatTransactionType('LOAN_RECEIVED')).toBe('Penerimaan pinjaman');
+    expect(formatTransactionType('FIXED_ASSET_DEPRECIATION')).toBe('Penyusutan aset tetap');
+    expect(formatDocumentType('TRANSFER_PROOF')).toBe('Bukti transfer');
   });
 });

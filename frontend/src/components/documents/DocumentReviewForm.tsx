@@ -9,8 +9,12 @@ interface Props {
   document: DocumentResponse;
   projects: ProjectResponse[];
   counterparties: CounterpartyResponse[];
-  lookupsLoading?: boolean;
-  lookupError?: string;
+  projectLookupLoading?: boolean;
+  counterpartyLookupLoading?: boolean;
+  projectLookupError?: string;
+  counterpartyLookupError?: string;
+  approvalLookupLoading?: boolean;
+  approvalLookupError?: string;
   onSave: (changes: Record<string, unknown>, reason: string) => Promise<void>;
   onApprove: () => Promise<void>;
   onReject: (reason: string) => Promise<void>;
@@ -49,7 +53,18 @@ const reviewFlagLabel = (flag: string) =>
   reviewFlagLabels[flag] ?? flag.toLowerCase().replaceAll('_', ' ');
 
 export const DocumentReviewForm: React.FC<Props> = ({
-  document, projects, counterparties, lookupsLoading = false, lookupError, onSave, onApprove, onReject,
+  document,
+  projects,
+  counterparties,
+  projectLookupLoading = false,
+  counterpartyLookupLoading = false,
+  projectLookupError,
+  counterpartyLookupError,
+  approvalLookupLoading = false,
+  approvalLookupError,
+  onSave,
+  onApprove,
+  onReject,
 }) => {
   const candidate = document.candidate_transaction || {};
   const extracted = document.extracted_data || {};
@@ -240,9 +255,19 @@ export const DocumentReviewForm: React.FC<Props> = ({
       )}
 
       {/* Form Fields for Candidate Modification */}
-      {lookupError && (
+      {projectLookupError && (
         <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
-          {lookupError}
+          {projectLookupError}
+        </div>
+      )}
+      {counterpartyLookupError && (
+        <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+          {counterpartyLookupError}
+        </div>
+      )}
+      {approvalLookupError && (
+        <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+          {approvalLookupError}
         </div>
       )}
       <div className="space-y-2">
@@ -256,11 +281,11 @@ export const DocumentReviewForm: React.FC<Props> = ({
           placeholder="Cari nama atau kode proyek"
           value={projectSearch}
           onChange={(event) => setProjectSearch(event.target.value)}
-          disabled={lookupsLoading || !!lookupError}
+          disabled={projectLookupLoading || !!projectLookupError}
         />
         <Select
           aria-label="Pilih Proyek"
-          disabled={lookupsLoading || !!lookupError}
+          disabled={projectLookupLoading || !!projectLookupError}
           value={projectId}
           onChange={(e) => setProjectId(e.target.value)}
           helperText="Pilih nama proyek yang berkaitan dengan dokumen ini."
@@ -284,11 +309,11 @@ export const DocumentReviewForm: React.FC<Props> = ({
           placeholder="Cari nama vendor atau pelanggan"
           value={counterpartySearch}
           onChange={(event) => setCounterpartySearch(event.target.value)}
-          disabled={lookupsLoading || !!lookupError}
+          disabled={counterpartyLookupLoading || !!counterpartyLookupError}
         />
         <Select
           aria-label="Pilih Vendor / Pelanggan"
-          disabled={lookupsLoading || !!lookupError}
+          disabled={counterpartyLookupLoading || !!counterpartyLookupError}
           value={counterpartyId}
           onChange={(e) => setCounterpartyId(e.target.value)}
           helperText="Pilih vendor, pelanggan, atau pihak penerima dana yang tertulis pada dokumen."
@@ -324,13 +349,18 @@ export const DocumentReviewForm: React.FC<Props> = ({
 
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-2">
-        <Button onClick={save} isLoading={busy} disabled={lookupsLoading || !!lookupError}>
+        <Button onClick={save} isLoading={busy}>
           Simpan Koreksi
         </Button>
         <Button
           variant="secondary"
           onClick={onApprove}
-          disabled={document.review_flags.length > 0 || isEvidenceOnly || lookupsLoading || !!lookupError}
+          disabled={
+            document.review_flags.length > 0 ||
+            isEvidenceOnly ||
+            approvalLookupLoading ||
+            !!approvalLookupError
+          }
         >
           Setujui & Buat Transaksi
         </Button>

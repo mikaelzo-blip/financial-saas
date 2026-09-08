@@ -2,7 +2,7 @@ from decimal import Decimal
 import uuid
 import pytest
 
-from src.models.enums import TransactionType, CostCategory, WorkflowStatus
+from src.models.enums import TransactionType, CostCategory, ExpenseCategory, WorkflowStatus
 from src.models.transaction import Transaction, TransactionAllocation
 from src.services.posting_rules import PostingRuleRegistry
 from src.core.exceptions import InvariantViolationException
@@ -81,8 +81,6 @@ def test_posting_rule_vendor_bill_and_payment():
 
 def test_posting_rule_direct_purchase_office_expenses():
     """Verify operational expenses without project debit specific 610x accounts based on expense_category."""
-    from src.models.enums import ExpenseCategory
-
     # Travel / Fuel office -> 6104
     trx_travel = Transaction(
         id=uuid.uuid4(),
@@ -126,3 +124,29 @@ def test_posting_rule_direct_purchase_office_expenses():
     legs_admin = PostingRuleRegistry.generate_journal_legs(trx_admin)
     assert any(l.account_code == "6103" and l.debit_amount == Decimal("1200000.00") for l in legs_admin)
 
+
+def test_posting_rule_depreciation_expense_uses_authoritative_6108_account():
+    """Depreciation expense must never be posted to the 6105 permits account."""
+    transaction = Transaction(
+        id=uuid.uuid4(),
+        organization_id=uuid.uuid4(),
+        transaction_code="TRX-2026-000006",
+        transaction_type=TransactionType.DIRECT_PURCHASE,
+        transaction_date="2026-03-03",
+        amount=Decimal("2500000.00"),
+        description="Penyusutan aset tetap operasional",
+        workflow_status=WorkflowStatus.STAGED,
+        allocations=[
+            TransactionAllocation(
+                project_id=None,
+                expense_category=ExpenseCategory.DEPRECIATION,
+                amount=Decimal("2500000.00"),
+            )
+        ],
+    )
+
+    legs = PostingRuleRegistry.generate_journal_legs(transaction)
+    debit_accounts = {leg.account_code for leg in legs if leg.debit_amount > Decimal("0.00")}
+
+    assert "6108" in debit_accounts
+    assert "6105" not in debit_accounts

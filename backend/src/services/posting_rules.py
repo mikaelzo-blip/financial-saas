@@ -30,7 +30,7 @@ _EXPENSE_CATEGORY_ACCOUNT_MAP: Dict[ExpenseCategory, str] = {
     ExpenseCategory.PERMITS: "6105",
     ExpenseCategory.PROFESSIONAL_SERVICE: "6106",
     ExpenseCategory.BANK_CHARGES: "6107",
-    ExpenseCategory.DEPRECIATION: "6105",
+    ExpenseCategory.DEPRECIATION: "6108",
     ExpenseCategory.OTHER_OPERATIONAL: "6199",
 }
 

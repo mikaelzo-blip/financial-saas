@@ -1,14 +1,14 @@
 # PRD UX v3.0 — Financial SaaS Kontraktor
 ## Owner-First UX, Accounting Classification, Review Workflow & Consultant-Aligned Reporting
 
-**Versi:** 3.0  
-**Tanggal:** 7 September 2026  
-**Status:** IMPLEMENTATION DRAFT — menunggu Owner sign-off setelah implementasi visual  
-**Produk:** Financial SaaS Kontraktor  
-**Primary User:** Owner / Direktur / Administrator non-akuntan  
-**Operating Model:** Local-first pada PC Windows  
-**WhatsApp Transport:** Baileys lokal saat PC menyala  
-**Accounting Model:** Accrual accounting + double-entry backend  
+**Versi:** 3.0<br>
+**Tanggal:** 7 September 2026<br>
+**Status:** IMPLEMENTATION DRAFT — menunggu Owner sign-off setelah implementasi visual<br>
+**Produk:** Financial SaaS Kontraktor<br>
+**Primary User:** Owner / Direktur / Administrator non-akuntan<br>
+**Operating Model:** Local-first pada PC Windows<br>
+**WhatsApp Transport:** Baileys lokal saat PC menyala<br>
+**Accounting Model:** Accrual accounting + double-entry backend
 **Prinsip utama:** Owner tidak perlu memilih debit/kredit secara manual.
 
 ---
@@ -619,7 +619,7 @@ Perbedaan utama dengan BBM proyek:
 
 > **Apakah biaya ini terjadi untuk satu proyek tertentu?**
 
-Ya → proyek.  
+Ya → proyek.<br>
 Tidak → kantor.
 
 ---
@@ -1564,7 +1564,7 @@ Jangan hanya menampilkan area kosong.
 
 Contoh Projects:
 
-> Belum ada proyek.  
+> Belum ada proyek.<br>
 > Tambahkan proyek pertama agar transaksi dapat dialokasikan dan profitabilitas dapat dihitung.
 
 Button:

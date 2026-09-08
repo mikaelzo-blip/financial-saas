@@ -4,7 +4,13 @@ import { Plus, Trash2, Split, AlertCircle, Info } from 'lucide-react';
 import { projectsApi } from '../../api/projects';
 import { masterApi } from '../../api/master';
 import { TransactionCreateInput, TransactionAllocationInput } from '../../api/transactions';
-import { TransactionType, CostCategory, ExpenseCategory, DocumentResponse } from '../../types/api';
+import {
+  COST_CATEGORIES,
+  TransactionType,
+  CostCategory,
+  ExpenseCategory,
+  DocumentResponse,
+} from '../../types/api';
 import { validateAllocationSum } from '../../utils/transactionValidation';
 import { formatIDR } from '../../utils/formatters';
 import { Button } from '../ui/Button';
@@ -17,6 +23,21 @@ export interface TransactionFormProps {
   isLoading?: boolean;
   onCancel?: () => void;
 }
+
+const COST_CATEGORY_LABELS: Record<CostCategory, string> = {
+  MAT: 'Material & Bahan Bangunan',
+  SUB: 'Subkontraktor / Jasa Spesialis',
+  LAB: 'Upah Tukang & Tenaga Kerja',
+  TRN: 'Transportasi & BBM Lapangan',
+  TRV: 'Perjalanan & Akomodasi Lapangan',
+  LOG: 'Logistik & Ekspedisi Material',
+  EQP: 'Sewa Alat Berat & Perkakas',
+  SIT: 'Biaya Keselamatan & Lapangan',
+  OTH: 'Biaya Lapangan Lainnya',
+};
+
+const isCostCategory = (value: string): value is CostCategory =>
+  (COST_CATEGORIES as readonly string[]).includes(value);
 
 export const TransactionForm: React.FC<TransactionFormProps> = ({
   onSubmit,
@@ -89,18 +110,6 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   const selectedProject = projects.find((p) => p.id === projectId);
   const selectedCounterparty = counterparties.find((c) => c.id === counterpartyId);
   const selectedPaymentAccount = paymentAccounts.find((a) => a.id === paymentAccountId);
-
-  const costCategoryLabels: Record<CostCategory, string> = {
-    MAT: 'Material & Bahan Bangunan',
-    SUB: 'Subkontraktor / Jasa Spesialis',
-    LAB: 'Upah Tukang & Tenaga Kerja',
-    TRN: 'Transportasi & BBM Lapangan',
-    TRV: 'Perjalanan & Akomodasi Lapangan',
-    LOG: 'Logistik & Ekspedisi Material',
-    EQP: 'Sewa Alat Berat & Perkakas',
-    SIT: 'Biaya Keselamatan & Lapangan',
-    OTH: 'Biaya Lapangan Lainnya',
-  };
 
   const expenseCategoryLabels: Record<ExpenseCategory, string> = {
     OFFICE_ADMIN: 'Keperluan Kantor & ATK',
@@ -443,17 +452,15 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                   <Select
                     label="Kategori Biaya Konstruksi"
                     value={costCategory}
-                    onChange={(e) => setCostCategory(e.target.value as CostCategory)}
+                    onChange={(e) => {
+                      if (isCostCategory(e.target.value)) setCostCategory(e.target.value);
+                    }}
                   >
-                    <option value="MAT">MAT — Material & Bahan Bangunan</option>
-                    <option value="SUB">SUB — Upah Subkontraktor</option>
-                    <option value="LAB">LAB — Upah Tukang & Tenaga Kerja</option>
-                    <option value="EQP">EQP — Sewa Alat Berat & Perkakas</option>
-                    <option value="TRN">TRN — Transportasi & Logistik</option>
-                    <option value="UTL">UTL — Listrik, Air & Utilitas Proyek</option>
-                    <option value="PRM">PRM — Perizinan & Koordinasi Lapangan</option>
-                    <option value="OHD">OHD — Biaya Operasional Lapangan</option>
-                    <option value="OTH">OTH — Biaya Lain-lain</option>
+                    {COST_CATEGORIES.map((category) => (
+                      <option key={category} value={category}>
+                        {category} — {COST_CATEGORY_LABELS[category]}
+                      </option>
+                    ))}
                   </Select>
                 )}
               </div>
@@ -500,13 +507,17 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                 <div className="w-48">
                   <Select
                     value={line.cost_category}
-                    onChange={(e) => handleUpdateSplitLine(idx, 'cost_category', e.target.value as CostCategory)}
+                    onChange={(e) => {
+                      if (isCostCategory(e.target.value)) {
+                        handleUpdateSplitLine(idx, 'cost_category', e.target.value);
+                      }
+                    }}
                   >
-                    <option value="MAT">MAT (Material)</option>
-                    <option value="SUB">SUB (Subkon)</option>
-                    <option value="LAB">LAB (Tenaga)</option>
-                    <option value="EQP">EQP (Alat)</option>
-                    <option value="OTH">OTH (Lainnya)</option>
+                    {COST_CATEGORIES.map((category) => (
+                      <option key={category} value={category}>
+                        {category} ({COST_CATEGORY_LABELS[category]})
+                      </option>
+                    ))}
                   </Select>
                 </div>
 
@@ -593,7 +604,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             <span className="text-slate-500 block">Kategori:</span>
             <strong className="text-slate-900">
               {allocationContext === 'PROJECT'
-                ? costCategoryLabels[costCategory]
+                ? COST_CATEGORY_LABELS[costCategory]
                 : isExpenseOrBillType
                   ? expenseCategoryLabels[expenseCategory]
                   : 'Operasional'}

@@ -4,7 +4,7 @@
 - **Completed features**: 001 Contractor Finance System; 002 Core Financial Domain; 003 Core Operational UI; 004 Financial Reporting; 005 Document Intelligence; 006 Hermes Automation; 007 WhatsApp Integration; 008 AI Management Insights; 009 Production Readiness Foundation; 010 Dependency Security Gates; UAT Findings #1-#3; UAT #4 Customer Invoice; UAT #5 Customer Payment & AR Allocation; UAT #5.1 Active Tenant Identity; UAT #6 Vendor Bill & Accounts Payable; UAT #7 Vendor Payment & Cash Disbursement Safety; UAT #8 Reversal Flow; UAT #9 Financial Reporting; UAT #10 Project Completion & Retention Release; UAT #11 Document Ingestion & Storage Reliability; UAT #12 WhatsApp Media Transport & Review Queue Intake; UAT #13 Real Document Extraction & Candidate Review Flow; UAT #14 End-to-End Operational Workflows & Edge-Case Stress Testing; UAT #15 WhatsApp Sandbox Integration & Production Deployment Dry Run; UAT #16 Real Meta WhatsApp Cloud API Sandbox Pilot; UAT #17 Real WhatsApp Media Intake (Baileys Bridge); PRD v2.0 Remediation Program; Minimal ECC Engineering Workflow Integration; RC1 Implementation Backlog (R0, R2–R14 complete; R1 deferred post-RC1); PRD UX v3.0 Checkpoints CP-UX-01 to CP-UX-04.
 - **Current feature**: PRD UX v3.0 (Accountant UX, Transaction Classification, Project Profitability, and Indonesian Terminology)
 - **Current branch**: `hermes/fix-owner-review-language`
-- **Execution state**: AUTONOMOUS LOOP ACTIVE — CP-UX-01, CP-UX-02, CP-UX-03, CP-UX-04 COMPLETE & PUSHED.
+- **Execution state**: CP-UX-01 through CP-UX-04 complete; pre-merge remediation verified locally and ready for PR review.
 - **Completed Tasks**:
   - R0: Source of truth and standardization documentation ratified (`docs/ACCOUNTING_REPORTING_STANDARDIZATION_V1.md`, `docs/RC1_IMPLEMENTATION_TRACKER.md`).
   - R1: `DEFERRED_POST_RC1`. Future-ready Cloudflare Worker, D1/R2, RemoteInboxClient, claim/lease, WAMID dedup, SHA-256 verification, and remote sync contracts remain preserved and inactive; live PC-off capture is not claimed.
@@ -23,7 +23,7 @@
   - R14: Consultant financial report reconciliation framework & UI (Historical statements 2023-2025, side-by-side comparative ledger analysis, difference taxonomy, no plug journals invariant).
 - **Historical verified checkpoint**: RC1 Final Release Delivery Complete at PR #48. Historical test/UAT evidence remains intact and is not evidence of live PC-off capture.
 - **UAT data**: Organization `PT Kontraktor Utama Indonesia` (`9670673b-c0fd-4ebe-87e4-a646358084ea`), Project `PRJ-2026-001`, registered sender Muhammad Fikri, journals, transactions, and balances preserved intact.
-- **Tests**: 387 backend unit and integration tests passing, 49 frontend tests passing, 6 Node bridge/contract tests passing, Vite production build passing; zero regressions.
+- **Tests**: 391 backend unit and integration tests passing, 66 frontend tests passing, 6 Node bridge/contract tests passing; frontend lint/typecheck and Vite production build passing.
 - **Accounting integrity**: Total Debit == Total Credit; Assets = Liabilities + Equity; zero orphan AR/AP/retention; zero direct journals from transport ingestion; human review hard-stop preserved; period closing guards enforced.
 - **RC1 Operating Model**: **LOCAL-FIRST**.
   - Finance PC ON: Local Baileys intake is the supported WhatsApp path.
@@ -33,5 +33,6 @@
   - Local Baileys WhatsApp Web Bridge: **ACTIVE RC1 TRANSPORT WHEN LOCAL SERVICES ARE RUNNING**
   - Future Cloudflare Worker/D1/R2 relay: **PRESERVED, INACTIVE, POST-RC1**
 - **Decision record**: `docs/decisions/ADR-2026-09-07-rc1-local-first-whatsapp.md`.
-- **Outstanding blockers**: Current bounded local-first verification and delivery gates.
-- **Next Step**: Complete local runtime, accounting, reporting, backup/restore, review, CI, and merge gates.
+- **Existing baseline follow-up**: Fixed-asset depreciation still posts debit account `6105` in `PostingRuleRegistry.generate_journal_legs`; the authoritative concept defines depreciation as `6108`. This independent defect predates the current branch and requires a separate focused correction.
+- **Outstanding blockers**: None found by the local pre-merge remediation gates; GitHub CI remains an independent PR gate.
+- **Next Step**: Create the PR when authorized, then run GitHub CI and the normal review gates before merge.

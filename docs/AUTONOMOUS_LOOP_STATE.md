@@ -1,6 +1,6 @@
 # Autonomous Loop State
 
-- **Timestamp**: 2026-09-08T01:13:00+07:00
+- **Timestamp**: 2026-09-08T11:55:54+07:00
 - **Baseline commit**: `4e871a0` (PR #50 on main)
 - **Active Branch**: `hermes/fix-owner-review-language`
 - **Active Feature**: PRD UX v3.0 (Accountant UX, Accounting Classification, Review Workflow & Consultant-Aligned Reporting)
@@ -13,7 +13,8 @@
 | **CP-UX-01** | P0: Document Review UX (hide raw JSON, select project & counterparty by name, role guards, status cards, friendly review flags) + Accountant Reporting Terminology (hide EQ-CY, SAK EP wording, natural IDR format) | VERIFIED | 57 frontend tests pass, 196 backend unit tests pass, 160 backend integration tests pass, Vite build pass | `e3ae82e` |
 | **CP-UX-02** | P0: Transaction Creation Flow (Proyek vs Kantor context, filtered business categories, operational expense posting rules, summary preview) | VERIFIED | 58 frontend tests pass, 197 backend unit tests pass, 160 backend integration tests pass, Vite build pass | `c8daf50` |
 | **CP-UX-03** | P1: Project Profitability contract alignment, permanent management-report/overhead-tax scope labels, customer retention visibility, cancelled-invoice exclusion | VERIFIED | 60 frontend tests pass, 197 backend unit tests pass, frontend lint/build pass; independent review PASS (zero Critical/High) | `8d28678` |
-| **CP-UX-04** | P1: Transaction list date sorting, Indonesian enum labels, actionable empty states | VERIFIED | 63 frontend tests pass, 197 backend unit tests pass, frontend lint/build pass; all raw enums localized | Pending commit |
+| **CP-UX-04** | P1: Transaction list date sorting, Indonesian enum labels, actionable empty states | VERIFIED | 63 frontend tests pass, 197 backend unit tests pass, frontend lint/build pass | `1037a68` |
+| **CP-UX-05** | Pre-merge remediation: authoritative depreciation mapping, enum contracts/localization, dependency-aware document approval, and repository quality gates | VERIFIED | 391 backend tests pass, 66 frontend tests pass, 6 Node contract tests pass; lint, typecheck, build, dependency, migration-head, and diff checks pass | Current remediation commit |
 
 ## Deferred Policy Work
 
@@ -25,3 +26,7 @@
 - Zero orphan subledgers: PASS
 - No direct WhatsApp to journal: PASS
 - Review queue human hard-stop: PASS
+
+## Existing Baseline Follow-up
+
+- Fixed-asset depreciation in `PostingRuleRegistry.generate_journal_legs` still uses debit account `6105`; the authoritative concept defines depreciation as `6108`. This predates the current branch and remains intentionally out of scope for a separate focused fix.

@@ -5,6 +5,7 @@ import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 import { TransactionForm } from '../../src/components/forms/TransactionForm';
 import { projectsApi } from '../../src/api/projects';
 import { masterApi } from '../../src/api/master';
+import { COST_CATEGORIES } from '../../src/types/api';
 
 const createTestQueryClient = () =>
   new QueryClient({
@@ -63,6 +64,13 @@ describe('Owner Transaction Classification (Proyek vs Kantor)', () => {
     // Default is Project: shows project cost categories
     expect(screen.getByText('Kategori Biaya Konstruksi')).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /MAT — Material & Bahan Bangunan/ })).toBeInTheDocument();
+    const projectCategorySelect = screen.getByLabelText('Kategori Biaya Konstruksi');
+    expect(
+      within(projectCategorySelect).getAllByRole('option').map((option) =>
+        (option as HTMLOptionElement).value
+      )
+    ).toEqual([...COST_CATEGORIES]);
+    expect(within(projectCategorySelect).queryByRole('option', { name: /UTL|PRM|OHD/ })).not.toBeInTheDocument();
 
     // Switch to Operasional kantor
     fireEvent.click(screen.getByText('Operasional kantor'));

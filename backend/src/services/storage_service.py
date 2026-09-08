@@ -14,7 +14,11 @@ class StorageService:
     Path layout: storage/documents/{org_id}/{YYYY}/{MM}/{file_id}.{ext}
     """
     def __init__(self, base_dir: Optional[str] = None):
-        self.base_dir = Path(base_dir or settings.STORAGE_DIR)
+        configured_dir = Path(base_dir or settings.STORAGE_DIR)
+        if not configured_dir.is_absolute():
+            repository_root = Path(__file__).resolve().parents[3]
+            configured_dir = repository_root / configured_dir
+        self.base_dir = configured_dir.resolve()
 
     def save_file(
         self,

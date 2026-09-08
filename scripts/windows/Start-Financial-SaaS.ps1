@@ -8,6 +8,7 @@ $ErrorActionPreference = 'Stop'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $Backend = Join-Path $Root 'backend'
 $Frontend = Join-Path $Root 'frontend'
+$Storage = Join-Path $Backend 'storage'
 $Runtime = Join-Path $Root '.runtime'
 $Python = Join-Path $Backend '.venv\Scripts\python.exe'
 $Container = 'financial-saas-postgres'
@@ -90,7 +91,7 @@ function Wait-Http([string]$Url, [int]$Seconds = 60, [scriptblock]$Condition = $
     throw "Timed out waiting for $Url"
 }
 
-New-Item -ItemType Directory -Force -Path $Runtime, 'C:\financial-saas\storage' | Out-Null
+New-Item -ItemType Directory -Force -Path $Runtime, $Storage | Out-Null
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw 'Docker CLI is not available.' }
 docker info *> $null
@@ -122,6 +123,7 @@ if ($envContent -match 'postgres:postgres@localhost:5432/financial_saas') {
     Set-Content $envPath $envContent
 }
 $backendEnv = Read-DotEnv $envPath
+$backendProcessEnv = @{ STORAGE_DIR = $Storage }
 $WhatsAppEnabled = (Get-BackendSetting $backendEnv 'WHATSAPP_PROVIDER') -eq 'baileys'
 if ($WhatsAppEnabled) {
     foreach ($required in @('WHATSAPP_ADAPTER_TOKEN', 'WHATSAPP_TENANT_TOKENS')) {
@@ -223,7 +225,7 @@ if ($WhatsAppEnabled) {
 }
 
 if (-not (Test-TrackedProcess 'backend' 'src.main:app' $Python)) {
-    Start-TrackedBackgroundProcess 'backend' $Python @('-m','uvicorn','src.main:app','--host','127.0.0.1','--port','8000') $Backend 'backend'
+    Start-TrackedBackgroundProcess 'backend' $Python @('-m','uvicorn','src.main:app','--host','127.0.0.1','--port','8000') $Backend 'backend' $backendProcessEnv
     Test-TrackedProcess 'backend' 'src.main:app' $Python | Out-Null
 }
 $health = Wait-Http 'http://127.0.0.1:8000/health' 60 { param($r) $r.status -eq 'healthy' }
@@ -232,7 +234,7 @@ if ($health.status -ne 'healthy' -or $ready.status -ne 'ready') { throw 'Backend
 
 # Start PostgreSQL-backed background job worker
 if (-not (Test-TrackedProcess 'worker' 'src.worker' $Python)) {
-    Start-TrackedBackgroundProcess 'worker' $Python @('-m','src.worker') $Backend 'worker'
+    Start-TrackedBackgroundProcess 'worker' $Python @('-m','src.worker') $Backend 'worker' $backendProcessEnv
     Test-TrackedProcess 'worker' 'src.worker' $Python | Out-Null
 }
 

@@ -39,7 +39,7 @@ export const SettingsPage: React.FC = () => {
               : 'text-slate-500 hover:text-slate-900'
           }`}
         >
-          Profil Perusahaan (Tenant)
+          Profil Perusahaan
         </button>
         <button
           onClick={() => setActiveTab('periods')}
@@ -49,7 +49,7 @@ export const SettingsPage: React.FC = () => {
               : 'text-slate-500 hover:text-slate-900'
           }`}
         >
-          Periode Akuntansi (Cutoff)
+          Periode Akuntansi
         </button>
         <button
           onClick={() => setActiveTab('audit')}
@@ -81,7 +81,6 @@ export const SettingsPage: React.FC = () => {
 
             <Input label="Nama Lengkap" value={user?.fullName || ''} disabled />
             <Input label="Alamat Email" value={user?.email || ''} disabled />
-            <Input label="ID Organisasi (Tenant)" value={user?.organizationId || ''} disabled />
           </div>
         </Card>
       )}
@@ -96,7 +95,7 @@ export const SettingsPage: React.FC = () => {
             />
             <Input label="Sektor Usaha" value="Konstruksi & Sipil" disabled />
             <Input label="Mata Uang Pembukuan" value="IDR (Rupiah Indonesia)" disabled />
-            <Input label="Standar Akuntansi" value="SAK ETAP / Standar Jasa Konstruksi" disabled />
+            <Input label="Acuan Akuntansi" value="Berorientasi pada SAK EP" disabled />
           </div>
         </Card>
       )}

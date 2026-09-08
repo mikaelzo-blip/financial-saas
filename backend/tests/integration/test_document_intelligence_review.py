@@ -86,6 +86,72 @@ async def test_review_rejects_cross_tenant_master_ids(client: AsyncClient, db_se
 
 
 @pytest.mark.asyncio
+async def test_review_rejects_customer_for_vendor_bill(client: AsyncClient, db_session):
+    org = Organization(slug="review-role", legal_name="Review Role")
+    db_session.add(org); await db_session.flush()
+    manager = User(organization_id=org.id, email="manager@role.test", full_name="Manager",
+                   password_hash="x", role=UserRole.MANAGER)
+    customer = Counterparty(organization_id=org.id, name="Customer Only", is_customer=True)
+    db_session.add_all([manager, customer]); await db_session.flush()
+    doc = await DocumentService(db_session).ingest_document(
+        org.id, io.BytesIO(b"%PDF-1.4\nrole"), "role.pdf", "application/pdf", DocumentType.VENDOR_INVOICE,
+    )
+    doc.candidate_transaction = TransactionCandidate(
+        id=doc.id, proposed_transaction_type=TransactionType.VENDOR_BILL,
+        status=CandidateStatus.REVIEW_REQUIRED,
+    ).model_dump(mode="json")
+    doc.review_flags = ["VENDOR_UNKNOWN"]
+    doc.processing_status = DocumentProcessingStatus.REVIEW_REQUIRED
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/v1/documents/{doc.id}/corrections",
+        headers={"X-Organization-ID": str(org.id), "X-User-ID": str(manager.id)},
+        json={"changes": {"counterparty_id": str(customer.id)}, "reason": "wrong role"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Counterparty must be an active vendor for this transaction"
+
+
+@pytest.mark.asyncio
+async def test_review_rejects_terminal_project(client: AsyncClient, db_session):
+    org = Organization(slug="review-terminal-project", legal_name="Review Terminal Project")
+    db_session.add(org); await db_session.flush()
+    manager = User(organization_id=org.id, email="manager@terminal.test", full_name="Manager",
+                   password_hash="x", role=UserRole.MANAGER)
+    customer = Counterparty(organization_id=org.id, name="Customer", is_customer=True)
+    vendor = Counterparty(organization_id=org.id, name="Vendor", is_vendor=True)
+    db_session.add_all([manager, customer, vendor]); await db_session.flush()
+    project = Project(
+        organization_id=org.id, project_code="PRJ-CLOSED", project_name="Closed Project",
+        customer_id=customer.id, start_date=date(2026, 1, 1), project_status=ProjectStatus.CLOSED,
+        original_contract_value=Decimal("0"), revised_contract_value=Decimal("0"),
+    )
+    db_session.add(project); await db_session.flush()
+    doc = await DocumentService(db_session).ingest_document(
+        org.id, io.BytesIO(b"%PDF-1.4\nclosed"), "closed.pdf", "application/pdf", DocumentType.VENDOR_INVOICE,
+    )
+    doc.candidate_transaction = TransactionCandidate(
+        id=doc.id, proposed_transaction_type=TransactionType.VENDOR_BILL,
+        status=CandidateStatus.REVIEW_REQUIRED,
+    ).model_dump(mode="json")
+    doc.review_flags = ["PROJECT_UNKNOWN", "VENDOR_UNKNOWN"]
+    doc.processing_status = DocumentProcessingStatus.REVIEW_REQUIRED
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/v1/documents/{doc.id}/corrections",
+        headers={"X-Organization-ID": str(org.id), "X-User-ID": str(manager.id)},
+        json={"changes": {"project_id": str(project.id), "counterparty_id": str(vendor.id)},
+              "reason": "closed project"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Project is no longer available for new transactions"
+
+
+@pytest.mark.asyncio
 async def test_review_rejects_cross_tenant_allocation_target(client: AsyncClient, db_session):
     org1 = Organization(slug="allocation-one", legal_name="Allocation One")
     org2 = Organization(slug="allocation-two", legal_name="Allocation Two")

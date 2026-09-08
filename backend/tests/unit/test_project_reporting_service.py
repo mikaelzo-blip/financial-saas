@@ -83,6 +83,19 @@ async def test_project_profitability_and_cash_position(db_session: AsyncSession)
     db_session.add(alloc)
     await db_session.flush()
 
+    cancelled_inv = CustomerInvoice(
+        organization_id=org.id,
+        customer_id=client.id,
+        project_id=proj.id,
+        invoice_code="INV-PRJ-CANCELLED",
+        invoice_date=date(2026, 2, 2),
+        due_date=date(2026, 3, 2),
+        total_amount=Decimal("900000000.00"),
+        status="CANCELLED"
+    )
+    db_session.add(cancelled_inv)
+    await db_session.flush()
+
     # 2. Direct Costs: Material 60M (Dr Material, Cr Kas), Labor 40M (Dr Labor, Cr Kas)
     trx1 = Transaction(organization_id=org.id, transaction_code="TRX-MAT-01", transaction_type=TransactionType.DIRECT_PURCHASE, transaction_date=date(2026, 2, 5), amount=Decimal("60000000.00"), description="Material", source_channel="WEB", workflow_status=WorkflowStatus.POSTED)
     trx2 = Transaction(organization_id=org.id, transaction_code="TRX-LAB-01", transaction_type=TransactionType.DIRECT_PURCHASE, transaction_date=date(2026, 2, 10), amount=Decimal("40000000.00"), description="Upah", source_channel="WEB", workflow_status=WorkflowStatus.POSTED)

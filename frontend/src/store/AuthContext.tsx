@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authApi } from '../api/auth';
+import { queryClient } from '../api/queryClient';
 import { UserSession, UserRole } from '../types/api';
 
 interface AuthContextType {
@@ -43,12 +44,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = (session: UserSession) => {
+    queryClient.clear();
     setSessionError(null);
     setUser(session);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
   };
 
   const logout = () => {
+    queryClient.clear();
     setSessionError(null);
     setUser(null);
     localStorage.removeItem(STORAGE_KEY);

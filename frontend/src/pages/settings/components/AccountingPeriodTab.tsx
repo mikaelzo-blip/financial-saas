@@ -111,7 +111,7 @@ export const AccountingPeriodTab: React.FC = () => {
         <form onSubmit={handleCreatePeriod} className="space-y-4 max-w-xl">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Input
-              label="Nama Periode (e.g. 2026-01)"
+              label="Nama Periode (contoh: 2026-01)"
               value={periodName}
               onChange={(e) => setPeriodName(e.target.value)}
               placeholder="2026-01"
@@ -146,7 +146,7 @@ export const AccountingPeriodTab: React.FC = () => {
         </div>
       )}
 
-      <Card title="Daftar Periode Akuntansi & Status Cutoff">
+      <Card title="Daftar Periode Akuntansi">
         {loading ? (
           <p className="text-xs text-slate-500 py-4">Memuat daftar periode...</p>
         ) : periods.length === 0 ? (

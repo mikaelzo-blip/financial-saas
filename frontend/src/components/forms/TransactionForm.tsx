@@ -1,11 +1,18 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, Trash2, Split, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Split, AlertCircle, Info } from 'lucide-react';
 import { projectsApi } from '../../api/projects';
 import { masterApi } from '../../api/master';
 import { TransactionCreateInput, TransactionAllocationInput } from '../../api/transactions';
-import { TransactionType, CostCategory, DocumentResponse } from '../../types/api';
+import {
+  COST_CATEGORIES,
+  TransactionType,
+  CostCategory,
+  ExpenseCategory,
+  DocumentResponse,
+} from '../../types/api';
 import { validateAllocationSum } from '../../utils/transactionValidation';
+import { formatIDR } from '../../utils/formatters';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
@@ -16,6 +23,21 @@ export interface TransactionFormProps {
   isLoading?: boolean;
   onCancel?: () => void;
 }
+
+const COST_CATEGORY_LABELS: Record<CostCategory, string> = {
+  MAT: 'Material & Bahan Bangunan',
+  SUB: 'Subkontraktor / Jasa Spesialis',
+  LAB: 'Upah Tukang & Tenaga Kerja',
+  TRN: 'Transportasi & BBM Lapangan',
+  TRV: 'Perjalanan & Akomodasi Lapangan',
+  LOG: 'Logistik & Ekspedisi Material',
+  EQP: 'Sewa Alat Berat & Perkakas',
+  SIT: 'Biaya Keselamatan & Lapangan',
+  OTH: 'Biaya Lapangan Lainnya',
+};
+
+const isCostCategory = (value: string): value is CostCategory =>
+  (COST_CATEGORIES as readonly string[]).includes(value);
 
 export const TransactionForm: React.FC<TransactionFormProps> = ({
   onSubmit,
@@ -34,9 +56,11 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   const [referenceNo, setReferenceNo] = useState('');
   const [documentIds, setDocumentIds] = useState<string[]>([]);
 
-  // Single-project mode (default)
+  // Project vs Office Context
+  const [allocationContext, setAllocationContext] = useState<'PROJECT' | 'OFFICE'>('PROJECT');
   const [projectId, setProjectId] = useState('');
   const [costCategory, setCostCategory] = useState<CostCategory>('MAT');
+  const [expenseCategory, setExpenseCategory] = useState<ExpenseCategory>('OFFICE_ADMIN');
 
   // Split-allocation mode
   const [isSplitMode, setIsSplitMode] = useState(false);
@@ -74,8 +98,63 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   const requiresPaymentAccount =
     transactionType !== 'CUSTOMER_INVOICE' &&
     transactionType !== 'VENDOR_BILL';
+  const isExpenseOrBillType =
+    transactionType === 'DIRECT_PURCHASE' ||
+    transactionType === 'VENDOR_BILL' ||
+    transactionType === 'VENDOR_ADVANCE';
 
   const counterparties = isCustomerType ? customers : vendors;
+  const activeProjects = projects.filter(
+    (p) => !p.project_status || ['PLANNED', 'ACTIVE', 'ON_HOLD'].includes(p.project_status)
+  );
+  const selectedProject = projects.find((p) => p.id === projectId);
+  const selectedCounterparty = counterparties.find((c) => c.id === counterpartyId);
+  const selectedPaymentAccount = paymentAccounts.find((a) => a.id === paymentAccountId);
+
+  const expenseCategoryLabels: Record<ExpenseCategory, string> = {
+    OFFICE_ADMIN: 'Keperluan Kantor & ATK',
+    TRAVEL_OFFICE: 'BBM, Parkir & Transportasi Kantor',
+    SALARY: 'Gaji & Upah Karyawan Kantor',
+    FEE: 'Fee & Jasa Profesional Non-Proyek',
+    PROFESSIONAL_SERVICE: 'Konsultan Pajak & Jasa Legalitas',
+    PERMITS: 'Perizinan & Sertifikasi Perusahaan',
+    BANK_CHARGES: 'Biaya Administrasi Bank',
+    DEPRECIATION: 'Penyusutan Aset Tetap',
+    OTHER_OPERATIONAL: 'Operasional Kantor Lainnya',
+  };
+
+  const getSummaryImpact = () => {
+    switch (transactionType) {
+      case 'DIRECT_PURCHASE':
+        return allocationContext === 'PROJECT'
+          ? 'Mencatat biaya langsung proyek dan pengeluaran kas/bank.'
+          : 'Mencatat beban operasional umum kantor dan pengeluaran kas/bank.';
+      case 'VENDOR_BILL':
+        return allocationContext === 'PROJECT'
+          ? 'Mencatat tagihan utang usaha vendor dan membebankan biaya proyek tanpa kas keluar sekarang.'
+          : 'Mencatat tagihan utang usaha vendor dan membebankan beban kantor tanpa kas keluar sekarang.';
+      case 'PAY_VENDOR_BILL':
+        return 'Melunasi utang usaha vendor dan mencatat pengeluaran kas/bank.';
+      case 'VENDOR_ADVANCE':
+        return 'Mencatat kasbon/uang muka vendor dan pengeluaran kas/bank.';
+      case 'CUSTOMER_INVOICE':
+        return 'Mencatat piutang usaha pelanggan dan mengakui pendapatan proyek.';
+      case 'CUSTOMER_PAYMENT':
+        return 'Mencatat penerimaan kas/bank dari pelanggan dan mengurangi piutang usaha.';
+      case 'INTERBANK_TRANSFER':
+        return 'Mutasi dana antar rekening kas/bank tanpa mempengaruhi pendapatan atau beban.';
+      case 'OWNER_CONTRIBUTION':
+        return 'Mencatat setoran modal pemilik ke rekening kas/bank.';
+      case 'OWNER_WITHDRAWAL':
+        return 'Mencatat penarikan dana pemilik (prive) dari rekening kas/bank.';
+      case 'BANK_TO_CASH':
+        return 'Tarik tunai dari bank ke kas tanpa mempengaruhi laba rugi.';
+      case 'CASH_TO_BANK':
+        return 'Setor tunai dari kas ke bank tanpa mempengaruhi laba rugi.';
+      default:
+        return 'Transaksi operasional dicatat ke jurnal keuangan.';
+    }
+  };
 
   const handleAddSplitLine = () => {
     setAllocations((prev) => [...prev, { project_id: '', cost_category: 'MAT', amount: '' }]);
@@ -166,8 +245,9 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         reference_no: referenceNo || undefined,
         description,
         document_ids: documentIds,
-        project_id: projectId || undefined,
-        cost_category: costCategory || undefined,
+        project_id: (allocationContext === 'PROJECT' || isCustomerType) && projectId ? projectId : undefined,
+        cost_category: (allocationContext === 'PROJECT' && !isCustomerType) ? costCategory : undefined,
+        expense_category: (allocationContext === 'OFFICE' && isExpenseOrBillType) ? expenseCategory : undefined,
       });
     }
   };
@@ -286,63 +366,126 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       </div>
 
       {/* Row 4: Project Allocation Mode */}
-      <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-              Alokasi Proyek & Kategori Biaya
-            </h4>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              Tentukan proyek yang membebankan biaya atau menerima pendapatan ini.
-            </p>
+      {(isExpenseOrBillType || isCustomerType) && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                Alokasi Proyek & Kategori Biaya
+              </h4>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Tentukan konteks penggunaan dana dan kategori biaya atau pendapatan.
+              </p>
+            </div>
+
+            {isExpenseOrBillType && (
+              <button
+                type="button"
+                onClick={() => setIsSplitMode(!isSplitMode)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                  isSplitMode
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                }`}
+              >
+                <Split className="h-3.5 w-3.5" />
+                {isSplitMode ? 'Mode Multi-Proyek Aktif' : 'Bagi Multi-Proyek'}
+              </button>
+            )}
           </div>
 
-          <button
-            type="button"
-            onClick={() => setIsSplitMode(!isSplitMode)}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-              isSplitMode
-                ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
-            }`}
-          >
-            <Split className="h-3.5 w-3.5" />
-            {isSplitMode ? 'Mode Multi-Proyek Aktif' : 'Bagi Multi-Proyek'}
-          </button>
-        </div>
+          {/* Context Selector: Proyek vs Kantor */}
+          {isExpenseOrBillType && !isSplitMode && (
+            <div className="space-y-2">
+              <span className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                Digunakan untuk apa?
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md">
+                <button
+                  type="button"
+                  onClick={() => setAllocationContext('PROJECT')}
+                  className={`p-3 rounded-lg border text-left text-xs transition-all cursor-pointer ${
+                    allocationContext === 'PROJECT'
+                      ? 'border-blue-600 bg-blue-50 text-blue-900 font-semibold shadow-xs'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="block font-semibold">Proyek tertentu</span>
+                  <span className="text-[11px] text-slate-500 font-normal">Biaya langsung yang dibebankan ke satu proyek</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAllocationContext('OFFICE');
+                    setProjectId('');
+                  }}
+                  className={`p-3 rounded-lg border text-left text-xs transition-all cursor-pointer ${
+                    allocationContext === 'OFFICE'
+                      ? 'border-blue-600 bg-blue-50 text-blue-900 font-semibold shadow-xs'
+                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="block font-semibold">Operasional kantor</span>
+                  <span className="text-[11px] text-slate-500 font-normal">Biaya operasional kantor, ATK, transportasi kantor, gaji</span>
+                </button>
+              </div>
+            </div>
+          )}
 
-        {!isSplitMode ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Select
-              label="Pilih Proyek"
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-            >
-              <option value="">-- Tanpa Alokasi Proyek (Operasional Umum) --</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.project_name} ({p.project_code})
-                </option>
-              ))}
-            </Select>
+          {!isSplitMode ? (
+            allocationContext === 'PROJECT' || isCustomerType ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Select
+                  label="Pilih Proyek"
+                  value={projectId}
+                  onChange={(e) => setProjectId(e.target.value)}
+                >
+                  <option value="">-- Tanpa Alokasi Proyek (Operasional Umum) --</option>
+                  {activeProjects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.project_name} ({p.project_code})
+                    </option>
+                  ))}
+                </Select>
 
-            <Select
-              label="Kategori Biaya Konstruksi"
-              value={costCategory}
-              onChange={(e) => setCostCategory(e.target.value as CostCategory)}
-            >
-              <option value="MAT">MAT — Material & Bahan Bangunan</option>
-              <option value="SUB">SUB — Upah Subkontraktor</option>
-              <option value="LAB">LAB — Upah Tukang & Tenaga Kerja</option>
-              <option value="EQP">EQP — Sewa Alat Berat & Perkakas</option>
-              <option value="TRN">TRN — Transportasi & Logistik</option>
-              <option value="UTL">UTL — Listrik, Air & Utilitas Proyek</option>
-              <option value="PRM">PRM — Perizinan & Koordinasi Lapangan</option>
-              <option value="OHD">OHD — Biaya Operasional Lapangan</option>
-              <option value="OTH">OTH — Biaya Lain-lain</option>
-            </Select>
-          </div>
-        ) : (
+                {isExpenseOrBillType && (
+                  <Select
+                    label="Kategori Biaya Konstruksi"
+                    value={costCategory}
+                    onChange={(e) => {
+                      if (isCostCategory(e.target.value)) setCostCategory(e.target.value);
+                    }}
+                  >
+                    {COST_CATEGORIES.map((category) => (
+                      <option key={category} value={category}>
+                        {category} — {COST_CATEGORY_LABELS[category]}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Select
+                  label="Kategori Biaya Operasional Kantor"
+                  value={expenseCategory}
+                  onChange={(e) => setExpenseCategory(e.target.value as ExpenseCategory)}
+                >
+                  <option value="OFFICE_ADMIN">Keperluan Kantor & ATK</option>
+                  <option value="TRAVEL_OFFICE">BBM, Parkir & Transportasi Kantor</option>
+                  <option value="SALARY">Gaji & Upah Karyawan Kantor</option>
+                  <option value="FEE">Fee & Jasa Profesional Non-Proyek</option>
+                  <option value="PROFESSIONAL_SERVICE">Konsultan Profesional & Jasa Pajak</option>
+                  <option value="PERMITS">Legalitas & Perizinan Perusahaan</option>
+                  <option value="BANK_CHARGES">Biaya Administrasi Bank</option>
+                  <option value="OTHER_OPERATIONAL">Operasional Kantor Lainnya</option>
+                </Select>
+                <div className="flex items-center text-xs text-slate-500 bg-white p-3 rounded-lg border border-slate-200">
+                  <span>Beban kantor dicatat pada Laporan Laba Rugi dan tidak membebankan biaya langsung proyek.</span>
+                </div>
+              </div>
+            )
+          ) : (
           <div className="space-y-3">
             {allocations.map((line, idx) => (
               <div key={idx} className="flex items-center gap-3 bg-white p-3 rounded-lg border border-slate-200">
@@ -364,13 +507,17 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                 <div className="w-48">
                   <Select
                     value={line.cost_category}
-                    onChange={(e) => handleUpdateSplitLine(idx, 'cost_category', e.target.value as CostCategory)}
+                    onChange={(e) => {
+                      if (isCostCategory(e.target.value)) {
+                        handleUpdateSplitLine(idx, 'cost_category', e.target.value);
+                      }
+                    }}
                   >
-                    <option value="MAT">MAT (Material)</option>
-                    <option value="SUB">SUB (Subkon)</option>
-                    <option value="LAB">LAB (Tenaga)</option>
-                    <option value="EQP">EQP (Alat)</option>
-                    <option value="OTH">OTH (Lainnya)</option>
+                    {COST_CATEGORIES.map((category) => (
+                      <option key={category} value={category}>
+                        {category} ({COST_CATEGORY_LABELS[category]})
+                      </option>
+                    ))}
                   </Select>
                 </div>
 
@@ -409,6 +556,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           </div>
         )}
       </div>
+      )}
 
       {/* Row 5: Keterangan */}
       <div>
@@ -431,6 +579,60 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             setDocumentIds((prev) => [...prev, doc.id]);
           }}
         />
+      </div>
+
+      {/* Ringkasan Transaksi & Dampak Finansial */}
+      <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 space-y-3" aria-label="Ringkasan Transaksi">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+          <Info className="h-4 w-4 text-blue-600" />
+          Ringkasan Transaksi
+        </h4>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
+          <div>
+            <span className="text-slate-500 block">Konteks:</span>
+            <strong className="text-slate-900">
+              {allocationContext === 'PROJECT' && selectedProject
+                ? selectedProject.project_name
+                : allocationContext === 'OFFICE' && isExpenseOrBillType
+                  ? 'Operasional Kantor'
+                  : isCustomerType
+                    ? 'Pelanggan Proyek'
+                    : 'Umum'}
+            </strong>
+          </div>
+          <div>
+            <span className="text-slate-500 block">Kategori:</span>
+            <strong className="text-slate-900">
+              {allocationContext === 'PROJECT'
+                ? COST_CATEGORY_LABELS[costCategory]
+                : isExpenseOrBillType
+                  ? expenseCategoryLabels[expenseCategory]
+                  : 'Operasional'}
+            </strong>
+          </div>
+          <div>
+            <span className="text-slate-500 block">{isCustomerType ? 'Pelanggan:' : 'Vendor / Pihak:'}</span>
+            <strong className="text-slate-900">
+              {selectedCounterparty ? selectedCounterparty.name : '-'}
+            </strong>
+          </div>
+          <div>
+            <span className="text-slate-500 block">Nominal:</span>
+            <strong className="text-slate-900 font-mono">
+              {amount ? formatIDR(parseFloat(amount) || 0) : 'Rp 0'}
+            </strong>
+          </div>
+          <div>
+            <span className="text-slate-500 block">Rekening / Kas:</span>
+            <strong className="text-slate-900">
+              {selectedPaymentAccount ? selectedPaymentAccount.name : '-'}
+            </strong>
+          </div>
+        </div>
+        <div className="pt-2 border-t border-blue-200/60 text-blue-950 font-medium">
+          <span className="text-blue-700">Dampak: </span>
+          <span>{getSummaryImpact()}</span>
+        </div>
       </div>
 
       {/* Submit Button Bar */}

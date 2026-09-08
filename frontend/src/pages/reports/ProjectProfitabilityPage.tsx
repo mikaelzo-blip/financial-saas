@@ -45,7 +45,7 @@ export const ProjectProfitabilityPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Profitabilitas Proyek</h1>
           <p className="text-sm text-slate-500">
-            Ringkasan manajemen proyek: Penjualan invoiced, biaya langsung riil, dan posisi kas proyek.
+            Ringkasan manajemen proyek: pendapatan diakui, biaya langsung terposting, dan posisi kas proyek.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -61,7 +61,8 @@ export const ProjectProfitabilityPage: React.FC = () => {
         <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
         <div>
           <strong className="font-semibold block mb-0.5">Catatan Manajemen (Bukan Laporan Keuangan Formal):</strong>
-          Laporan ini adalah ringkasan manajemen untuk evaluasi performa proyek. Laporan ini tidak membuat jurnal akuntansi, tidak mengakui pendapatan perusahaan secara mandiri, dan tidak menggantikan Laporan Laba Rugi Resmi perusahaan.
+          Laporan ini adalah ringkasan manajemen untuk evaluasi performa proyek. Laporan ini tidak membuat jurnal akuntansi, tidak mengakui pendapatan perusahaan secara mandiri, dan tidak menggantikan Laporan Laba Rugi resmi perusahaan.
+          <strong className="block mt-1">Belum termasuk alokasi biaya kantor umum dan pajak perusahaan.</strong>
         </div>
       </div>
 
@@ -98,9 +99,12 @@ export const ProjectProfitabilityPage: React.FC = () => {
               </Card>
 
               <Card className="p-3.5 bg-blue-50/50 border-blue-200">
-                <span className="text-[11px] font-semibold text-blue-700 uppercase">Sudah Diinvoice</span>
+                <span className="text-[11px] font-semibold text-blue-700 uppercase">Sudah Ditagih</span>
                 <div className="text-base font-bold font-mono text-blue-900 mt-1">
-                  {formatIDR(data.invoiced_amount ?? data.revenue_recognized)}
+                  {formatIDR(data.invoiced_amount ?? 0)}
+                </div>
+                <div className="text-[10px] text-blue-600 mt-0.5">
+                  Basis sementara pendapatan proyek: invoice terposting
                 </div>
               </Card>
 
@@ -121,7 +125,7 @@ export const ProjectProfitabilityPage: React.FC = () => {
               <Card className="p-3.5 bg-purple-50/50 border-purple-200">
                 <span className="text-[11px] font-semibold text-purple-800 uppercase">Retensi</span>
                 <div className="text-base font-bold font-mono text-purple-950 mt-1">
-                  {formatIDR(data.retention_receivable ?? 0)}
+                  {formatIDR(data.retention_withheld ?? 0)}
                 </div>
               </Card>
             </div>
@@ -174,10 +178,14 @@ export const ProjectProfitabilityPage: React.FC = () => {
               <Card className="p-4 bg-teal-50/60 border-teal-200">
                 <span className="text-xs font-semibold text-teal-800 uppercase tracking-wider">Kontribusi Bersih Proyek</span>
                 <div className="text-lg font-bold font-mono text-teal-950 mt-1">
-                  {formatIDR(data.project_net_contribution ?? data.gross_profit)}
+                  {data.has_net_contribution_data && data.project_net_contribution != null
+                    ? formatIDR(data.project_net_contribution)
+                    : 'Belum tersedia'}
                 </div>
                 <div className="text-[11px] text-teal-600 mt-1">
-                  Setelah fee, bunga & PPh Final
+                  {data.has_net_contribution_data
+                    ? 'Setelah fee, bunga & PPh Final'
+                    : 'Butuh data fee, bunga, atau PPh Final terposting'}
                 </div>
               </Card>
             </div>
@@ -210,7 +218,7 @@ export const ProjectProfitabilityPage: React.FC = () => {
                   </span>
                 </div>
                 <div className="text-lg font-bold font-mono text-slate-900 mt-1">
-                  {formatIDR(data.creditable_pph_withheld ?? 0)}
+                  {formatIDR(data.pph_withheld ?? 0)}
                 </div>
                 <div className="text-[11px] text-slate-500 mt-1">
                   Uang Muka PPh (Bukan pengurang Laba Kotor)
@@ -225,7 +233,7 @@ export const ProjectProfitabilityPage: React.FC = () => {
                   </span>
                 </div>
                 <div className="text-lg font-bold font-mono text-slate-900 mt-1">
-                  {formatIDR(data.loan_principal_repayment ?? 0)}
+                  {formatIDR(data.loan_principal_paid ?? 0)}
                 </div>
                 <div className="text-[11px] text-slate-500 mt-1">
                   Pengembalian Pokok (Non-Biaya Laba Rugi)
@@ -238,7 +246,7 @@ export const ProjectProfitabilityPage: React.FC = () => {
           <Card className="overflow-hidden p-0">
             <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center text-xs text-slate-600">
               <span>Proyek: <strong className="text-slate-900">{data.project_code} — {data.project_name}</strong></span>
-              <span>Klien: <strong className="text-slate-900">{data.client_name || 'Umum'}</strong></span>
+              <span>Pelanggan: <strong className="text-slate-900">{data.client_name || 'Umum'}</strong></span>
             </div>
 
             <div className="overflow-x-auto">

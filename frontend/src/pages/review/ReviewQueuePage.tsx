@@ -5,6 +5,7 @@ import { reviewApi } from '../../api/review';
 import { documentsApi } from '../../api/documents';
 import { TransactionResponse, DocumentResponse, ReviewFlag } from '../../types/api';
 import { formatIDR, formatDate } from '../../utils/formatters';
+import { formatDocumentType, formatSourceChannel, formatTransactionType } from '../../utils/labels';
 import { Button } from '../../components/ui/Button';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { DataTable, Column } from '../../components/tables/DataTable';
@@ -48,7 +49,7 @@ export const ReviewQueuePage: React.FC = () => {
             {doc.file_name}
           </span>
           <span className="text-[11px] text-slate-400 font-mono">
-            {doc.source_channel} • {doc.document_type}
+            {formatSourceChannel(doc.source_channel)} • {formatDocumentType(doc.document_type)}
           </span>
         </div>
       ),
@@ -140,7 +141,7 @@ export const ReviewQueuePage: React.FC = () => {
         <div>
           <p className="font-medium text-slate-900">{t.description}</p>
           <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
-            <span>{t.transaction_type}</span>
+            <span>{formatTransactionType(t.transaction_type)}</span>
             {t.counterparty_name && <span>• {t.counterparty_name}</span>}
           </div>
         </div>

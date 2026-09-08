@@ -220,7 +220,7 @@ export interface ProjectProfitabilityReportResponse {
   invoiced_amount?: number | string;
   cash_received?: number | string;
   receivable_outstanding?: number | string;
-  retention_receivable?: number | string;
+  retention_withheld?: number | string;
   revenue_recognized: number | string;
   cost_breakdown: ProjectCostCategoryLine[];
   direct_project_cost?: number | string;
@@ -231,12 +231,13 @@ export interface ProjectProfitabilityReportResponse {
   gross_margin?: number | string;
   cash_spent?: number | string;
   project_cash_position?: number | string;
-  project_net_contribution?: number | string;
+  project_net_contribution?: number | string | null;
   project_fee?: number | string;
   bank_charges?: number | string;
-  loan_principal_repayment?: number | string;
-  creditable_pph_withheld?: number | string;
-  final_pph?: number | string;
+  loan_principal_paid?: number | string;
+  pph_withheld?: number | string;
+  pph_final?: number | string;
+  has_net_contribution_data?: boolean;
   help_texts?: Record<string, string>;
   disclaimer?: string;
 }

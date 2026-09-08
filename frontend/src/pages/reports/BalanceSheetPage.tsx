@@ -10,6 +10,9 @@ import { IntegrityAlertBanner } from '../../components/reports/IntegrityAlertBan
 import { formatIDR } from '../../utils/formatters';
 import { ReportHeader } from '../../components/reports/ReportHeader';
 
+const accountLabel = (accountCode: string | undefined, lineName: string) =>
+  accountCode === 'EQ-CY' ? lineName : [accountCode, lineName].filter(Boolean).join(' — ');
+
 export const BalanceSheetPage: React.FC = () => {
   const today = new Date().toISOString().split('T')[0];
   const [asOfDate, setAsOfDate] = useState<string>(today);
@@ -73,7 +76,7 @@ export const BalanceSheetPage: React.FC = () => {
                     <div className="divide-y divide-slate-100 text-xs font-mono mt-2">
                       {data.current_assets.lines.map((l) => (
                         <div key={l.account_code || l.line_name} className="py-2 flex justify-between text-slate-700">
-                          <span className="font-sans text-slate-800 pl-2">{l.account_code} — {l.line_name}</span>
+                          <span className="font-sans text-slate-800 pl-2">{accountLabel(l.account_code, l.line_name)}</span>
                           <span>{formatIDR(l.amount)}</span>
                         </div>
                       ))}
@@ -89,7 +92,7 @@ export const BalanceSheetPage: React.FC = () => {
                     <div className="divide-y divide-slate-100 text-xs font-mono mt-2">
                       {data.fixed_assets.lines.map((l) => (
                         <div key={l.account_code || l.line_name} className="py-2 flex justify-between text-slate-700">
-                          <span className="font-sans text-slate-800 pl-2">{l.account_code} — {l.line_name}</span>
+                          <span className="font-sans text-slate-800 pl-2">{accountLabel(l.account_code, l.line_name)}</span>
                           <span>{formatIDR(l.amount)}</span>
                         </div>
                       ))}
@@ -121,7 +124,7 @@ export const BalanceSheetPage: React.FC = () => {
                     <div className="divide-y divide-slate-100 text-xs font-mono mt-2">
                       {data.current_liabilities.lines.map((l) => (
                         <div key={l.account_code || l.line_name} className="py-2 flex justify-between text-slate-700">
-                          <span className="font-sans text-slate-800 pl-2">{l.account_code} — {l.line_name}</span>
+                          <span className="font-sans text-slate-800 pl-2">{accountLabel(l.account_code, l.line_name)}</span>
                           <span>{formatIDR(l.amount)}</span>
                         </div>
                       ))}
@@ -137,7 +140,7 @@ export const BalanceSheetPage: React.FC = () => {
                     <div className="divide-y divide-slate-100 text-xs font-mono mt-2">
                       {data.equity.lines.map((l) => (
                         <div key={l.account_code || l.line_name} className="py-2 flex justify-between text-slate-700">
-                          <span className="font-sans text-slate-800 pl-2">{l.account_code} — {l.line_name}</span>
+                          <span className="font-sans text-slate-800 pl-2">{accountLabel(l.account_code, l.line_name)}</span>
                           <span>{formatIDR(l.amount)}</span>
                         </div>
                       ))}

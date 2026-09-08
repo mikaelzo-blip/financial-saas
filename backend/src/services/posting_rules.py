@@ -22,6 +22,25 @@ class GeneratedJournalLeg:
 
 
 
+_EXPENSE_CATEGORY_ACCOUNT_MAP: Dict[ExpenseCategory, str] = {
+    ExpenseCategory.SALARY: "6101",
+    ExpenseCategory.FEE: "6102",
+    ExpenseCategory.OFFICE_ADMIN: "6103",
+    ExpenseCategory.TRAVEL_OFFICE: "6104",
+    ExpenseCategory.PERMITS: "6105",
+    ExpenseCategory.PROFESSIONAL_SERVICE: "6106",
+    ExpenseCategory.BANK_CHARGES: "6107",
+    ExpenseCategory.DEPRECIATION: "6108",
+    ExpenseCategory.OTHER_OPERATIONAL: "6199",
+}
+
+
+def _resolve_expense_account(category: Optional[ExpenseCategory]) -> str:
+    if category and category in _EXPENSE_CATEGORY_ACCOUNT_MAP:
+        return _EXPENSE_CATEGORY_ACCOUNT_MAP[category]
+    return "6199"
+
+
 class PostingRuleRegistry:
     """
     Deterministic rule catalog mapping Transaction + Allocations -> Journal Legs.
@@ -37,10 +56,10 @@ class PostingRuleRegistry:
         legs: List[GeneratedJournalLeg] = []
 
         if t_type == TransactionType.DIRECT_PURCHASE:
-            # Debit Project Cost (5101) or Operational Expense (6199) per allocation
+            # Debit Project Cost (5101) or Operational Expense (610x / 6199) per allocation
             if allocations:
                 for alloc in allocations:
-                    dr_code = "5101" if alloc.project_id else "6199"
+                    dr_code = "5101" if alloc.project_id else _resolve_expense_account(alloc.expense_category)
                     legs.append(
                         GeneratedJournalLeg(
                             account_code=dr_code,
@@ -78,10 +97,10 @@ class PostingRuleRegistry:
 
 
         elif t_type in (TransactionType.VENDOR_BILL, TransactionType.SUBCONTRACTOR_BILL):
-            # Debit Project Cost (5101)
+            # Debit Project Cost (5101) or Operational Expense (610x / 6199)
             if allocations:
                 for alloc in allocations:
-                    dr_code = "5101" if alloc.project_id else "6199"
+                    dr_code = "5101" if alloc.project_id else _resolve_expense_account(alloc.expense_category)
                     legs.append(
                         GeneratedJournalLeg(
                             account_code=dr_code,
@@ -168,10 +187,10 @@ class PostingRuleRegistry:
 
 
         elif t_type == TransactionType.SETTLE_VENDOR_ADVANCE:
-            # Debit Project Cost (5101)
+            # Debit Project Cost (5101) or Operational Expense (610x / 6199)
             if allocations:
                 for alloc in allocations:
-                    dr_code = "5101" if alloc.project_id else "6199"
+                    dr_code = "5101" if alloc.project_id else _resolve_expense_account(alloc.expense_category)
                     legs.append(
                         GeneratedJournalLeg(
                             account_code=dr_code,

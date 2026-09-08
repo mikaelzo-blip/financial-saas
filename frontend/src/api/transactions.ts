@@ -4,11 +4,13 @@ import {
   TransactionType,
   WorkflowStatus,
   CostCategory,
+  ExpenseCategory,
 } from '../types/api';
 
 export interface TransactionAllocationInput {
   project_id?: string;
   cost_category?: CostCategory;
+  expense_category?: ExpenseCategory;
   amount: number | string;
   notes?: string;
 }
@@ -26,6 +28,7 @@ export interface TransactionCreateInput {
   document_ids?: string[];
   project_id?: string;
   cost_category?: CostCategory;
+  expense_category?: ExpenseCategory;
   allocations?: TransactionAllocationInput[];
 }
 

@@ -5,6 +5,7 @@ import { ArrowLeft, CheckCircle2, RotateCcw, Lock } from 'lucide-react';
 import { transactionsApi } from '../../api/transactions';
 import { useAuth } from '../../store/AuthContext';
 import { formatIDR, formatDate } from '../../utils/formatters';
+import { formatTransactionType } from '../../utils/labels';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { StatusBadge } from '../../components/ui/StatusBadge';
@@ -89,7 +90,7 @@ export const TransactionDetailPage: React.FC = () => {
               <StatusBadge status={trx.workflow_status} />
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              {trx.transaction_type} • Tanggal: {formatDate(trx.transaction_date)}
+              {formatTransactionType(trx.transaction_type)} • Tanggal: {formatDate(trx.transaction_date)}
             </p>
           </div>
         </div>
@@ -143,7 +144,7 @@ export const TransactionDetailPage: React.FC = () => {
               </dd>
             </div>
             <div className="flex justify-between py-2.5">
-              <dt className="text-slate-500">Pihak Terkait (Counterparty)</dt>
+              <dt className="text-slate-500">Vendor / Pelanggan</dt>
               <dd className="font-semibold text-slate-800">
                 {trx.counterparty_name || '-'}
               </dd>

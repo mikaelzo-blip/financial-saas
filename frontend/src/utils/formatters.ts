@@ -4,19 +4,20 @@
 
 export function formatIDR(amount: number | string | undefined | null): string {
   if (amount === undefined || amount === null || amount === '') {
-    return 'Rp 0,00';
+    return 'Rp 0';
   }
   const numericVal = typeof amount === 'string' ? parseFloat(amount) : amount;
   if (isNaN(numericVal)) {
-    return 'Rp 0,00';
+    return 'Rp 0';
   }
 
+  const fractionDigits = Number.isInteger(numericVal) ? 0 : 2;
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(numericVal);
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(numericVal).replace(/\u00a0/g, ' ');
 }
 
 export function formatCompactIDR(amount: number | string | undefined | null): string {

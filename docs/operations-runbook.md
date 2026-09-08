@@ -19,6 +19,12 @@ Production/staging startup fails unless:
 
 Keep development, staging, and production databases, storage, secrets, domains, and provider accounts separate.
 
+For local Windows development, `Start-Financial-SaaS.ps1` derives an absolute
+document-storage path from the active checkout and uses
+`<repository>\backend\storage`. Relative `STORAGE_DIR` values are resolved from
+the repository root, not the process working directory. Do not use a shared
+drive-root directory across checkouts.
+
 ## Business initialization
 
 Run after migrations against an empty authorized database:

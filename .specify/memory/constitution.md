@@ -1,14 +1,16 @@
 <!--
 Sync Impact Report
-- Version: Uninitialized -> 1.0.0
-- Modified Principles: N/A (Initial ratification)
-- Added Sections:
-  - Core Accounting & Domain Principles (Principles I–XVI)
-  - System Architecture & Integration Invariants (Principles XVII–XXII)
-  - Security, Quality & Governance Invariants (Principles XXIII–XXV)
-  - Governance & Enforcement
-- Removed Sections: Template placeholders
+- Version: 1.0.0 -> 2.0.0
+- Modified Principles:
+  - XIX: Renamed the product-facing role to Hermes Runtime and separated it from Hermes Coder.
+  - XX: Reassigned primary software-development orchestration from AGY to Hermes Coder.
+  - XXV: Applied incremental-delivery obligations to Hermes Coder and all supporting agents.
+- Added Sections: None
+- Removed Sections: None
 - Deferred Items: None
+- Rationale: The owner selected a dedicated Hermes Coder profile as the primary development
+  orchestrator. This is a backward-incompatible governance change, while the product-facing
+  Hermes Runtime remains constrained to validated SaaS APIs and never becomes the accounting engine.
 -->
 
 # Financial SaaS Constitution
@@ -86,11 +88,11 @@ Automation and AI agents MAY extract, match, classify, calculate, and recommend 
 ### XVIII. API Boundary
 The Financial SaaS backend is the sole authoritative system of record. External agents, integrations, and ingest channels (including WhatsApp or AI orchestration tools) MUST interact exclusively through authenticated, validated application APIs. Direct writes to the production database from external agents are strictly prohibited.
 
-### XIX. Hermes Role
-Hermes acts solely as an operational automation and orchestration agent (e.g., WhatsApp intake, document extraction, candidate staging, notification routing). Hermes is NOT the accounting engine, does NOT maintain an independent ledger, and MUST submit candidate records through the SaaS API for validation and posting.
+### XIX. Hermes Runtime Role
+Hermes Runtime is the product-facing operational automation agent (e.g., WhatsApp intake, document extraction, candidate staging, and notification routing). Hermes Runtime is distinct from the development-only Hermes Coder profile. Hermes Runtime is NOT the accounting engine, does NOT maintain an independent ledger, and MUST submit candidate records through authenticated and validated SaaS APIs for validation and posting.
 
 ### XX. Development Responsibility
-Antigravity (AGY) is the primary software development and execution agent. Spec Kit specifications, architectural plans, tasks, and this constitution govern all implementation activities.
+Hermes Coder is the primary software-development orchestrator for this repository. Spec Kit owns the canonical specification, clarification, technical plan, task breakdown, and consistency-analysis artifacts. Hermes Coder coordinates implementation, verification, review, and delivery under this constitution. Codex, AGY, and other agents MAY act as scoped reviewers or repair agents, but MUST NOT override the authoritative artifact order or the deterministic accounting engine.
 
 ### XXI. Transactional Database as System of Record
 The SaaS relational/transactional database is the authoritative system of record. Spreadsheets and Excel files are NOT the primary database; they serve exclusively as formats for import, export, reconciliation, offline analysis, and management reporting.
@@ -112,7 +114,7 @@ All critical financial invariants and rules MUST be guarded by automated tests. 
 - Project cost aggregation and profitability metrics
 
 ### XXV. Incremental Implementation
-System implementation MUST proceed in small, verifiable, dependency-ordered stages governed by Spec Kit workflows (`specify` → `clarify` → `plan` → `tasks` → `implement`). AGY MUST NOT attempt monolithic, unrestricted implementation passes.
+System implementation MUST proceed in small, verifiable, dependency-ordered stages governed by Spec Kit workflows (`specify` → `clarify` → `plan` → `tasks` → `analyze` → `implement`). Hermes Coder and every supporting agent MUST NOT attempt monolithic, unrestricted implementation passes.
 
 ---
 
@@ -125,4 +127,4 @@ System implementation MUST proceed in small, verifiable, dependency-ordered stag
    - **PATCH**: Clarifications, non-semantic wording enhancements, and typographical corrections.
 3. **Compliance Verification**: All Spec Kit plans (`/speckit-plan`), task breakdowns (`/speckit-tasks`), and implementations (`/speckit-implement`) MUST explicitly verify compliance with this constitution before proceeding.
 
-**Version**: 1.0.0 | **Ratified**: 2026-08-29 | **Last Amended**: 2026-08-29
+**Version**: 2.0.0 | **Ratified**: 2026-08-29 | **Last Amended**: 2026-09-08

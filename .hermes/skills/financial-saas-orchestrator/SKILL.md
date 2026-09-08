@@ -5,53 +5,41 @@ description: Procedural Hermes workflow for this tenant-isolated financial SaaS 
 
 # Financial SaaS Orchestrator
 
-1. Read `PROJECT_STATUS.md` first. Then read only the active feature's `spec.md`, clarifications, `plan.md`, `data-model.md`, `contracts/`, and `tasks.md` needed for the current action. Do not reread the entire repository when the status and active artifacts are sufficient.
-2. Resolve requirements in the authority order in `AGENTS.md`, beginning with `.specify/memory/constitution.md` and the product concept. Preserve approved accounting, audit, security, tenancy, and document rules.
-3. Use the Hermes Spec Kit integration and global `speckit-*` skills in this lifecycle: research -> specify -> clarify -> plan -> tasks -> analyze -> implement -> tests -> review.
-4. Work on `hermes/*` branches. Use small checkpoint commits. Never mix setup work with an active business-feature implementation.
-5. Before delivery, run applicable backend/frontend tests, lint, type checks, builds, migration validation, dependency checks, diff checks, and Spec Kit analysis. Never weaken tests or introduce synthetic accounting entries.
-6. Push only after the checkpoint passes, open a PR, and rely on GitHub CI as an independent gate. Squash merge only when tasks are complete, CI and all quality gates pass, the PR is mergeable, and there are zero Critical/High findings or financial/tenant/security violations. Synchronize `main` afterward.
-7. Update `PROJECT_STATUS.md` concisely with main commit, completed/current feature, branch, checkpoint, tests, CI, blockers, and next action. Never record secrets or verbose logs.
-8. The approved runtime is Hermes -> `http://127.0.0.1:20200/v1` -> AutoRouter -> 9Router/providers. Check connectivity only; AutoRouter and 9Router are intentionally manually started, not Windows autorun services.
-9. Stop for production deployment, destructive production database actions, paid services, credential changes, real WhatsApp provisioning, external AI egress of real financial data, or irreversible infrastructure actions. After this skill is merged, the production worktree `C:\Projects\financial-saas-hermes` must be trusted before use.
+1. Read `PROJECT_STATUS.md`, then reconcile it with the actual Git branch, worktree status, and `origin/main` commit. Git wins for operational state. If status is stale, correct it before selecting implementation work.
+2. Resolve requirements exclusively in the authority order defined by `AGENTS.md`. Do not maintain a second precedence list in this skill. Preserve approved accounting, audit, security, tenancy, and document rules.
+3. For a new feature, use the Hermes Spec Kit integration and global `speckit-*` skills in this lifecycle: research -> specify -> clarify -> plan -> tasks -> analyze -> implement -> tests -> review. For a contained bug, reproduce and specify the failing behavior before the smallest tested fix.
+4. Hermes Coder is the single development orchestrator. Spec Kit owns canonical requirements and planning artifacts. Supporting skills provide methods or reviews only; they do not create competing PRDs, plans, task lists, or authority orders.
+5. Work on `hermes/*` branches. Use small checkpoint commits. Never mix profile/setup work with an active business-feature implementation.
+6. Prefer Hermes native planning, TDD, systematic-debugging, review, simplification, Git, and PR skills. Load a specialist only when its distinct capability is relevant. Installed does not mean automatically active.
+7. Before delivery, run applicable backend/frontend tests, lint, type checks, builds, migration validation, dependency checks, diff checks, and Spec Kit analysis. Never weaken tests or introduce synthetic accounting entries.
+8. Push only after the checkpoint passes, open a PR, and rely on GitHub CI as an independent gate. Squash merge only when tasks are complete, CI and all quality gates pass, the PR is mergeable, and there are zero Critical/High findings or financial/tenant/security violations. Synchronize `main` afterward.
+9. Update only `PROJECT_STATUS.md` for current operational state. Keep it concise: baseline commit, active work, branch, checkpoint, verification, blockers, and next action. Never create a parallel current-state file or record secrets and verbose logs.
+10. The approved Hermes Coder model runtime is Hermes -> `http://127.0.0.1:20200/v1` -> AutoRouter -> 9Router/providers. Check connectivity only; AutoRouter and 9Router are intentionally manually started, not Windows autorun services.
+11. Stop for production deployment, destructive production database actions, paid services, credential changes, real WhatsApp provisioning, external AI egress of real financial data, or irreversible infrastructure actions.
 
-## Supporting Engineering Skills Routing Policy (ECC Integration)
+## Supporting Engineering Skills Routing Policy
 
-ECC (affaan-m/ECC) is a supporting engineering layer. It does NOT replace `financial-saas-orchestrator`, Spec Kit, the Constitution, `AGENTS.md`, or repository architecture.
+The Hermes Coder profile follows a minimal, native-first skill stack. Third-party suites such as ECC are not core workflow orchestrators. An individually inspected specialist skill MAY be used when it adds a distinct capability, but it does not replace this skill, Spec Kit, the Constitution, `AGENTS.md`, or repository architecture.
 
 When routing development workflows:
 
 - **NEW FEATURE**:
   Spec Kit (`speckit-specify` -> `speckit-clarify` -> `speckit-plan` -> `speckit-tasks` -> `speckit-analyze`)
-  -> ECC `intent-driven-development` when useful for acceptance criteria
-  -> ECC `tdd-workflow` / `test-driven-development`
+  -> native TDD where practical
   -> implementation
-  -> ECC `verification-loop`
-  -> review
+  -> native verification and review
 - **BUG FIX**:
-  `systematic-debugging` / root-cause analysis
-  -> ECC `tdd-workflow`
+  native `systematic-debugging` / root-cause analysis
+  -> regression test
   -> fix implementation
-  -> ECC `verification-loop`
+  -> verification
 - **SECURITY / FINANCIAL / AUTH / WHATSAPP**:
-  Use best available security/review skills (e.g. `security-review`, `production-audit`)
+  Use an inspected specialist security/review skill when useful
   while strictly enforcing Financial SaaS hard invariants.
 - **RELEASE / PR**:
-  ECC `delivery-gate` / `git-workflow` where useful
-  -> repository tests & safety checks
+  repository tests and safety checks
   -> independent review
   -> PR
   -> GitHub CI
-
-### Conflict Precedence Order
-1. `.specify/memory/constitution.md`
-2. Financial SaaS `AGENTS.md`
-3. `financial-saas-orchestrator`
-4. Active Spec Kit specification (`specs/`)
-5. Approved Financial SaaS architecture
-6. ECC rules/skills
-7. Generic Hermes/native conventions
-
-If an ECC generic rule conflicts with accounting, tenancy, security, human-review, or project requirements, Financial SaaS rules WIN. Never bypass tenant isolation, double-entry equality, the Review Queue hard-stop, human approval, or auditability.
 
 Authoritative details remain in `AGENTS.md`, `.specify/memory/constitution.md`, the product concept, and active feature artifacts; do not duplicate them here.

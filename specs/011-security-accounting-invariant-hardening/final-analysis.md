@@ -115,7 +115,7 @@ No migration was added. Offline Alembic generation validates the complete 21-mig
 
 ## Remaining Risks
 
-- GitHub CI is green on PR #54 for the current head `250cfb4`; merge remains subject to repository review policy.
+- GitHub CI is green on PR #54; merge remains subject to repository review policy.
 - Existing repository deprecation/build warnings remain outside this feature: Python async deprecations, eight frontend lint warnings, Vite config warnings, and the frontend chunk-size warning.
 - The edge-relay package lacks a test script; its standalone repository bridge tests were used instead.
 - The broader audit index contains additional P1/P2 observations outside the requested FIN-P0-001–006 and FIN-P1-101 scope; they are not silently represented as resolved by this feature.

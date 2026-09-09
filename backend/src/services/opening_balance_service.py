@@ -1,7 +1,7 @@
 import uuid
 from decimal import Decimal
 from datetime import date
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 

@@ -30,6 +30,7 @@ class ProcessingPolicyService:
         TransactionType.OWNER_WITHDRAWAL,
         TransactionType.OWNER_CONTRIBUTION,
         TransactionType.REVERSAL,
+        TransactionType.JOURNAL_ADJUSTMENT,
     }
 
     AUTO_SAFE_TYPES: Set[TransactionType] = {
@@ -107,12 +108,19 @@ class ProcessingPolicyService:
             actor_role=actor_role,
         )
 
+        # 1c. VIEWER Guard
+        if actor_role == UserRole.VIEWER:
+            raise AuthorizationException(
+                "Role 'VIEWER' is not authorized to post or approve financial transactions."
+            )
+
         # 2. Sensitive Type Role Guard
         if not bypass_role_check and trx.transaction_type in self.SENSITIVE_TYPES:
-            if actor_role is not None and actor_role not in (UserRole.ADMIN, UserRole.MANAGER):
+            if actor_role is None or actor_role not in (UserRole.ADMIN, UserRole.MANAGER):
+                role_val = actor_role.value if actor_role else "NONE"
                 raise AuthorizationException(
                     f"Transaction type '{trx.transaction_type.value}' requires Manager approval.",
-                    details={"transaction_type": trx.transaction_type.value, "role": actor_role.value}
+                    details={"transaction_type": trx.transaction_type.value, "role": role_val}
                 )
 
         # 3. Mark Approved

@@ -5,11 +5,11 @@ from typing import Dict, Any, List
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.models.enums import TransactionType, WorkflowStatus
+from src.models.enums import TransactionType, WorkflowStatus, UserRole
 from src.models.transaction import Transaction, TransactionAllocation
 from src.models.coa import ChartOfAccount
 from src.services.processing_policy_service import ProcessingPolicyService
-from src.core.exceptions import InvariantViolationException
+from src.core.exceptions import InvariantViolationException, AuthorizationException
 
 
 class OpeningBalanceService:
@@ -27,13 +27,18 @@ class OpeningBalanceService:
         organization_id: uuid.UUID,
         as_of_date: date,
         balance_entries: List[Dict[str, Any]],
-        notes: str = "Opening Balances Migration"
+        notes: str = "Opening Balances Migration",
+        actor_id: Optional[uuid.UUID] = None,
+        actor_role: Optional[UserRole] = None,
     ) -> Transaction:
         """
         Takes a list of {account_code: str, debit: Decimal, credit: Decimal}
         Validates Total Debit == Total Credit.
         Posts through standard Transaction -> AccountingEngine.
         """
+        if actor_role is not None and actor_role != UserRole.ADMIN:
+            raise AuthorizationException("Only ADMIN can establish opening balances.")
+
         total_dr = Decimal("0.00")
         total_cr = Decimal("0.00")
 
@@ -61,16 +66,17 @@ class OpeningBalanceService:
             amount=total_dr,
             description=notes,
             source_channel="MANUAL",
-            workflow_status=WorkflowStatus.STAGED
+            workflow_status=WorkflowStatus.STAGED,
+            created_by=actor_id
         )
         self.session.add(trx)
         await self.session.flush()
 
-        # Add transaction allocations for each account leg
         for entry in balance_entries:
             code = entry["account_code"]
             dr = Decimal(str(entry.get("debit", "0.00")))
             cr = Decimal(str(entry.get("credit", "0.00")))
+
             if dr > Decimal("0.00"):
                 alloc = TransactionAllocation(
                     transaction_id=trx.id,
@@ -91,6 +97,8 @@ class OpeningBalanceService:
         posted_trx, _ = await self.policy_service.authorize_and_post(
             organization_id=organization_id,
             transaction_id=trx.id,
-            bypass_role_check=True
+            actor_id=actor_id,
+            actor_role=actor_role or UserRole.ADMIN,
+            bypass_role_check=False
         )
         return posted_trx

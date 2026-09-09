@@ -55,6 +55,11 @@ class ReversalService:
         """
         r_date = reversal_date or date.today()
 
+        if actor_role is not None and actor_role not in (UserRole.ADMIN, UserRole.MANAGER):
+            raise AuthorizationException(
+                f"Role '{actor_role.value}' is not authorized to reverse transactions. Required: ADMIN or MANAGER."
+            )
+
         await assert_period_allows_posting(self.session, organization_id, r_date, actor_role)
 
         # 1. Fetch original transaction

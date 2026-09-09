@@ -8,9 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.api.deps import get_current_org_id
+from src.api.auth import require_roles
+from src.models.enums import UserRole
+from src.models.user import User
 from src.models.audit import AuditLog
 from src.schemas.transaction import TransactionResponse
 from src.services.reversal_service import ReversalService
+from src.services.transaction_service import TransactionService
 
 router = APIRouter(tags=["Reversals & Audit"])
 
@@ -44,16 +48,19 @@ async def reverse_transaction(
     transaction_id: uuid.UUID,
     data: ReversalRequest,
     org_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db)
 ):
     service = ReversalService(db)
     rev_trx, _ = await service.reverse_transaction(
         organization_id=org_id,
         original_transaction_id=transaction_id,
-        reason=data.reason
+        reason=data.reason,
+        actor_id=current_user.id,
+        actor_role=current_user.role
     )
     await db.commit()
-    return rev_trx
+    return await TransactionService(db).get_transaction(org_id, rev_trx.id)
 
 
 @router.get(

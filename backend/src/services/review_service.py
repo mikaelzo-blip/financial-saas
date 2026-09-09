@@ -103,12 +103,16 @@ class ReviewQueueService:
         transaction_id: uuid.UUID,
         flag_id: uuid.UUID,
         resolved_by: uuid.UUID,
-        resolution_notes: str
+        resolution_notes: str,
+        actor_role: Optional[UserRole] = None
     ) -> TransactionReviewFlag:
         """
         Resolves a specific review flag.
         If all review flags on the transaction are resolved, unblocks the transaction back to STAGED.
         """
+        if actor_role is not None and actor_role not in (UserRole.ADMIN, UserRole.MANAGER):
+            raise AuthorizationException("Only ADMIN or MANAGER can resolve review flags.")
+
         stmt = (
             select(Transaction)
             .options(selectinload(Transaction.review_flags))

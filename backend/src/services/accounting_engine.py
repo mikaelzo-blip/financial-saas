@@ -195,6 +195,9 @@ class AccountingEngine:
         # Mark transaction as POSTED
         old_status = transaction.workflow_status.value
         transaction.workflow_status = WorkflowStatus.POSTED
+        if actor_id:
+            transaction.approved_by = actor_id
+            transaction.approved_at = datetime.now()
         transaction.posted_at = datetime.now()
         await self.session.flush()
 

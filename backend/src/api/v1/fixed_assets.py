@@ -6,7 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.api.deps import get_current_org_id, get_current_user_id
+from src.api.auth import require_roles
 from src.models.enums import AssetStatus, UserRole
+from src.models.user import User
 from src.schemas.fixed_asset import (
     FixedAssetCreate,
     FixedAssetUpdate,
@@ -41,14 +43,14 @@ async def list_assets(
 async def create_asset(
     payload: FixedAssetCreate,
     org_id: uuid.UUID = Depends(get_current_org_id),
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db)
 ):
     service = FixedAssetService(db)
     return await service.create_asset(
         organization_id=org_id,
         data=payload,
-        actor_id=user_id
+        actor_id=current_user.id
     )
 
 
@@ -74,12 +76,13 @@ async def get_asset(
     )
 
 
+@router.put("/{asset_id}", response_model=FixedAssetResponse)
 @router.patch("/{asset_id}", response_model=FixedAssetResponse)
 async def update_asset(
     asset_id: uuid.UUID,
     payload: FixedAssetUpdate,
     org_id: uuid.UUID = Depends(get_current_org_id),
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db)
 ):
     service = FixedAssetService(db)
@@ -87,7 +90,7 @@ async def update_asset(
         organization_id=org_id,
         asset_id=asset_id,
         data=payload,
-        actor_id=user_id
+        actor_id=current_user.id
     )
 
 
@@ -96,7 +99,7 @@ async def depreciate_single_asset(
     asset_id: uuid.UUID,
     payload: DepreciationRunRequest,
     org_id: uuid.UUID = Depends(get_current_org_id),
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db)
 ):
     service = FixedAssetService(db)
@@ -104,8 +107,8 @@ async def depreciate_single_asset(
         organization_id=org_id,
         asset_id=asset_id,
         period_date=payload.period_date,
-        actor_id=user_id,
-        actor_role=UserRole.ADMIN
+        actor_id=current_user.id,
+        actor_role=current_user.role
     )
 
 
@@ -113,15 +116,15 @@ async def depreciate_single_asset(
 async def depreciate_batch(
     payload: DepreciationRunRequest,
     org_id: uuid.UUID = Depends(get_current_org_id),
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db)
 ):
     service = FixedAssetService(db)
     return await service.depreciate_batch(
         organization_id=org_id,
         period_date=payload.period_date,
-        actor_id=user_id,
-        actor_role=UserRole.ADMIN
+        actor_id=current_user.id,
+        actor_role=current_user.role
     )
 
 
@@ -129,7 +132,7 @@ async def depreciate_batch(
 async def dispose_asset(
     asset_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org_id),
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db)
 ):
     service = FixedAssetService(db)
@@ -138,5 +141,5 @@ async def dispose_asset(
         organization_id=org_id,
         asset_id=asset_id,
         disposal_date=date.today(),
-        actor_id=user_id
+        actor_id=current_user.id
     )

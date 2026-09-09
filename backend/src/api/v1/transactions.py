@@ -5,7 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.api.deps import get_current_org_id
-from src.models.enums import TransactionType, WorkflowStatus
+from src.api.auth import require_application_user, require_roles
+from src.models.enums import TransactionType, WorkflowStatus, UserRole
+from src.models.user import User
 from src.schemas.transaction import (
     TransactionCreate,
     TransactionResponse,
@@ -73,11 +75,18 @@ async def get_transaction(
 async def post_transaction(
     transaction_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db)
 ):
     from src.services.processing_policy_service import ProcessingPolicyService
     policy_svc = ProcessingPolicyService(db)
-    await policy_svc.authorize_and_post(org_id, transaction_id, bypass_role_check=True)
+    await policy_svc.authorize_and_post(
+        org_id,
+        transaction_id,
+        actor_id=current_user.id,
+        actor_role=current_user.role,
+        bypass_role_check=False
+    )
     await db.commit()
     service = TransactionService(db)
     return await service.get_transaction(org_id, transaction_id)
@@ -91,11 +100,18 @@ async def post_transaction(
 async def approve_transaction(
     transaction_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db)
 ):
     from src.services.processing_policy_service import ProcessingPolicyService
     policy_svc = ProcessingPolicyService(db)
-    await policy_svc.authorize_and_post(org_id, transaction_id, bypass_role_check=True)
+    await policy_svc.authorize_and_post(
+        org_id,
+        transaction_id,
+        actor_id=current_user.id,
+        actor_role=current_user.role,
+        bypass_role_check=False
+    )
     await db.commit()
     service = TransactionService(db)
     return await service.get_transaction(org_id, transaction_id)
@@ -110,6 +126,7 @@ async def approve_transaction(
 async def establish_opening_balances(
     payload: OpeningBalanceBatchRequest,
     org_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db)
 ):
     service = OpeningBalanceService(db)
@@ -118,7 +135,9 @@ async def establish_opening_balances(
         organization_id=org_id,
         as_of_date=payload.as_of_date,
         balance_entries=raw_entries,
-        notes=payload.notes or "Saldo Awal Pembukuan"
+        notes=payload.notes or "Saldo Awal Pembukuan",
+        actor_id=current_user.id,
+        actor_role=current_user.role
     )
     await db.commit()
     return await TransactionService(db).get_transaction(org_id, posted_trx.id)

@@ -5,9 +5,9 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.accounting_period import AccountingPeriod
-from src.models.enums import AccountingPeriodStatus
+from src.models.enums import AccountingPeriodStatus, UserRole
 from src.schemas.accounting_period import AccountingPeriodCreate, AccountingPeriodUpdate
-from src.core.exceptions import InvariantViolationException, EntityNotFoundException
+from src.core.exceptions import InvariantViolationException, EntityNotFoundException, AuthorizationException
 
 
 class AccountingPeriodService:
@@ -90,3 +90,65 @@ class AccountingPeriodService:
 
         await self.session.flush()
         return period
+
+    async def assert_period_allows_posting(
+        self,
+        organization_id: uuid.UUID,
+        posting_date: date,
+        actor_role: Optional[UserRole] = None,
+    ) -> None:
+        """
+        Hard accounting period posting guard.
+        Enforces:
+        1. If posting_date falls in a CLOSED period -> InvariantViolationException (blocked for all callers/roles).
+        2. If posting_date falls in a SOFT_CLOSED period -> AuthorizationException if actor_role not in (ADMIN, MANAGER).
+        """
+        await assert_period_allows_posting(
+            self.session, organization_id, posting_date, actor_role
+        )
+
+
+async def assert_period_allows_posting(
+    session: AsyncSession,
+    organization_id: uuid.UUID,
+    posting_date: date,
+    actor_role: Optional[UserRole] = None,
+) -> None:
+    """
+    Hard accounting period posting guard.
+    Enforces:
+    1. If posting_date falls in a CLOSED period -> InvariantViolationException (blocked for all callers/roles).
+    2. If posting_date falls in a SOFT_CLOSED period -> AuthorizationException if actor_role not in (ADMIN, MANAGER).
+    """
+    stmt = select(AccountingPeriod).where(
+        and_(
+            AccountingPeriod.organization_id == organization_id,
+            AccountingPeriod.start_date <= posting_date,
+            AccountingPeriod.end_date >= posting_date,
+            AccountingPeriod.status.in_([AccountingPeriodStatus.CLOSED, AccountingPeriodStatus.SOFT_CLOSED])
+        )
+    )
+    period = await session.scalar(stmt)
+    if not period:
+        return
+
+    if period.status == AccountingPeriodStatus.CLOSED:
+        raise InvariantViolationException(
+            f"Cannot post transaction dated {posting_date}. Accounting period '{period.period_name}' is CLOSED.",
+            details={
+                "posting_date": str(posting_date),
+                "period_name": period.period_name,
+                "period_status": period.status.value,
+            }
+        )
+    elif period.status == AccountingPeriodStatus.SOFT_CLOSED:
+        if actor_role not in (UserRole.ADMIN, UserRole.MANAGER):
+            raise AuthorizationException(
+                f"Cannot post transaction dated {posting_date}. Accounting period '{period.period_name}' is SOFT_CLOSED (requires Admin or Manager).",
+                details={
+                    "posting_date": str(posting_date),
+                    "period_name": period.period_name,
+                    "period_status": period.status.value,
+                }
+            )
+

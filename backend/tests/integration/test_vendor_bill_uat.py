@@ -13,7 +13,8 @@ from sqlalchemy.orm import selectinload
 from src.core.exceptions import EntityNotFoundException, InvariantViolationException
 from src.models.coa import ChartOfAccount, PaymentAccount
 from src.models.counterparty import Counterparty
-from src.models.enums import CostCategory, ProjectStatus, TransactionType, WorkflowStatus
+from src.models.enums import CostCategory, ProjectStatus, TransactionType, UserRole, WorkflowStatus
+from src.models.user import User
 from src.models.journal import JournalEntry, JournalLine
 from src.models.organization import Organization
 from src.models.payable import VendorBill, VendorPaymentAllocation
@@ -70,18 +71,26 @@ async def setup_vendor_context(db_session: AsyncSession, org_slug: str):
         revised_contract_value=Decimal("25000000.00"),
     )
     db_session.add(project)
+    user = User(
+        organization_id=org.id,
+        email=f"operator-{org_slug}@example.com",
+        full_name="Vendor Payment Operator",
+        password_hash="test-only",
+        role=UserRole.OPERATOR,
+    )
+    db_session.add(user)
 
     payment_account = await db_session.scalar(
         select(PaymentAccount).where(PaymentAccount.organization_id == org.id).limit(1)
     )
 
     await db_session.commit()
-    return org, vendor, other_vendor, project, payment_account
+    return org, vendor, other_vendor, project, payment_account, user
 
 
 @pytest.mark.asyncio
 async def test_post_vendor_bill_creates_authoritative_ap_and_project_cost(db_session: AsyncSession):
-    org, vendor, _, project, _ = await setup_vendor_context(db_session, "vendor-bill-uat")
+    org, vendor, _, project, _, user = await setup_vendor_context(db_session, "vendor-bill-uat")
     service = TransactionService(db_session)
     transaction = await service.create_transaction(
         org.id,
@@ -144,7 +153,7 @@ async def test_post_vendor_bill_creates_authoritative_ap_and_project_cost(db_ses
 
 @pytest.mark.asyncio
 async def test_vendor_bill_safety_and_reversal(db_session: AsyncSession):
-    org, vendor, _, project, _ = await setup_vendor_context(db_session, "vendor-bill-rev")
+    org, vendor, _, project, _, user = await setup_vendor_context(db_session, "vendor-bill-rev")
     service = TransactionService(db_session)
     transaction = await service.create_transaction(
         org.id,
@@ -186,7 +195,7 @@ async def test_vendor_bill_safety_and_reversal(db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_vendor_bills_list_api_returns_persisted_bills(client: AsyncClient, db_session: AsyncSession):
-    org, vendor, _, project, _ = await setup_vendor_context(db_session, "vendor-bills-api")
+    org, vendor, _, project, _, user = await setup_vendor_context(db_session, "vendor-bills-api")
     service = TransactionService(db_session)
     transaction = await service.create_transaction(
         org.id,
@@ -205,7 +214,7 @@ async def test_vendor_bills_list_api_returns_persisted_bills(client: AsyncClient
     await AccountingEngine(db_session).post_transaction(org.id, transaction.id)
     await db_session.commit()
 
-    headers = {"X-Organization-Id": str(org.id)}
+    headers = {"X-Organization-Id": str(org.id), "X-User-ID": str(user.id)}
     response = await client.get("/api/v1/vendor-bills", headers=headers)
     assert response.status_code == 200
     data = response.json()
@@ -219,7 +228,7 @@ async def test_vendor_bills_list_api_returns_persisted_bills(client: AsyncClient
 
 @pytest.mark.asyncio
 async def test_vendor_payment_api_workflow_and_allocations(client: AsyncClient, db_session: AsyncSession):
-    org, vendor, other_vendor, project, payment_account = await setup_vendor_context(db_session, "vendor-pmt-flow")
+    org, vendor, other_vendor, project, payment_account, user = await setup_vendor_context(db_session, "vendor-pmt-flow")
     service = TransactionService(db_session)
     transaction = await service.create_transaction(
         org.id,
@@ -241,7 +250,7 @@ async def test_vendor_payment_api_workflow_and_allocations(client: AsyncClient, 
     bill = await db_session.scalar(select(VendorBill).where(VendorBill.transaction_id == transaction.id))
     assert bill is not None
 
-    headers = {"X-Organization-Id": str(org.id)}
+    headers = {"X-Organization-Id": str(org.id), "X-User-ID": str(user.id)}
     payload = {
         "bill_id": str(bill.id),
         "payment_account_id": str(payment_account.id),
@@ -268,8 +277,8 @@ async def test_vendor_payment_api_workflow_and_allocations(client: AsyncClient, 
 
 @pytest.mark.asyncio
 async def test_vendor_bill_and_payment_tenant_isolation(db_session: AsyncSession):
-    org_a, vendor_a, _, project_a, payment_account_a = await setup_vendor_context(db_session, "tenant-a")
-    org_b, vendor_b, _, project_b, payment_account_b = await setup_vendor_context(db_session, "tenant-b")
+    org_a, vendor_a, _, project_a, payment_account_a, user_a = await setup_vendor_context(db_session, "tenant-a")
+    org_b, vendor_b, _, project_b, payment_account_b, user_b = await setup_vendor_context(db_session, "tenant-b")
 
     # Org A bill
     service_a = TransactionService(db_session)

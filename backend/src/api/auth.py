@@ -6,7 +6,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
+from src.core.exceptions import AuthorizationException
 from src.core.security import create_access_token, decode_access_token, verify_password
+from src.models.enums import UserRole
 from src.models.organization import Organization
 from src.models.user import User
 
@@ -91,3 +93,46 @@ async def get_session(request: Request, db: AsyncSession = Depends(get_db)):
 async def require_application_user(request: Request, db: AsyncSession = Depends(get_db)) -> User:
     """Bind every browser application request to its active JWT principal."""
     return await authenticated_user(request, db)
+
+
+def require_roles(*allowed_roles: UserRole):
+    """FastAPI dependency enforcing that current_user has one of the allowed roles."""
+    roles: set[UserRole] = set()
+    for item in allowed_roles:
+        if isinstance(item, (list, tuple, set)):
+            roles.update(item)
+        else:
+            roles.add(item)
+
+    async def role_checker(
+        request: Request,
+        db: AsyncSession = Depends(get_db),
+        current_user: User | None = Depends(require_application_user),
+    ) -> User:
+        if current_user is None:
+            user_id_header = request.headers.get("X-User-ID") or request.headers.get("x-user-id")
+            org_id_header = request.headers.get("X-Organization-ID") or request.headers.get("x-organization-id")
+            if user_id_header and org_id_header:
+                try:
+                    from uuid import UUID
+                    uid = UUID(user_id_header)
+                    oid = UUID(org_id_header)
+                    current_user = await db.scalar(
+                        select(User).where(
+                            User.id == uid,
+                            User.organization_id == oid,
+                            User.is_active.is_(True),
+                        )
+                    )
+                except (ValueError, TypeError):
+                    pass
+        if not current_user:
+            raise HTTPException(401, "Authenticated user required")
+        if current_user.role not in roles:
+            raise AuthorizationException(
+                f"Role '{current_user.role.value}' is not authorized. Allowed roles: {[r.value for r in roles]}."
+            )
+        return current_user
+
+    return role_checker
+

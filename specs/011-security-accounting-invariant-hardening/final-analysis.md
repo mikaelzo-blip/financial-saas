@@ -2,7 +2,7 @@
 
 ## Executive Result
 
-Feature 011 implementation is complete on the feature branch. CP1–CP5 and the narrowly scoped post-checkpoint compatibility repairs are committed. The final local verification gates pass, with no Critical or High findings identified in the final review. GitHub CI has not yet run because no pull request has been created; therefore the feature is not yet delivery-complete under repository policy.
+Feature 011 implementation is complete on the feature branch. CP1–CP6 and the narrowly scoped post-checkpoint compatibility repairs are committed. The final local verification gates pass, with no Critical or High findings identified in the final review. PR #54 is open and mergeable; all required GitHub CI checks passed on implementation head `250cfb4`, and this documentation-only reconciliation must pass the same checks on its new head.
 
 ## Implemented Checkpoints
 
@@ -13,7 +13,7 @@ Feature 011 implementation is complete on the feature branch. CP1–CP5 and the 
 | CP3 | `815763c` | Added the non-bypassable accounting-period posting guard. |
 | CP4 | `d4851b4` | Added endpoint RBAC and actor attribution for sensitive financial actions. |
 | CP5 | `336d987` | Corrected fixed-asset depreciation expense mapping to account `6108`. |
-| Corrective follow-up | `5fe83b1`, `4122a18` | Closed direct retention/payment/document actor-propagation gaps and authenticated affected payment fixtures. |
+| Corrective follow-up | `5fe83b1`, `4122a18`, `250cfb4` | Closed direct retention/payment/document actor-propagation gaps, authenticated affected payment fixtures, and repaired the opening-balance typing import caught by CI. |
 
 ## Requirement Traceability
 
@@ -86,7 +86,7 @@ Review scope: `origin/main...HEAD`, including the corrective commits.
 | MEDIUM | 0 | No delivery-blocking finding. |
 | LOW/INFO | 0 | No material finding recorded. |
 
-Checks included bypass-role scans, hardcoded authenticated-ADMIN scans, secret scans, tenant-scope review, actor propagation review, period-guard review, protected-storage review, and independent staged-diff review. The independent review initially identified missing retention actor propagation; that issue was repaired and the focused suite passed.
+Checks included bypass-role scans, hardcoded authenticated-ADMIN scans, secret scans, tenant-scope review, actor propagation review, period-guard review, protected-storage review, and independent staged-diff review. The independent review initially identified missing retention actor propagation; that issue was repaired and the focused suite passed. `require_roles()` cannot use its header fallback to bypass production authentication: `require_application_user` raises `401` when the bearer token is absent/invalid, so the fallback is only reachable under an explicit test or alternate dependency override. In that constrained path it requires both UUID headers and an active user bound to the supplied organization; readiness tests cover unauthenticated `401`, organization mismatch `403`, and valid principal headers.
 
 ## Test and Verification Evidence
 
@@ -115,27 +115,29 @@ No migration was added. Offline Alembic generation validates the complete 21-mig
 
 ## Remaining Risks
 
-- GitHub CI has not yet run; local green status is not a substitute for the required CI gate.
+- GitHub CI is green on PR #54 for the current head `250cfb4`; merge remains subject to repository review policy.
 - Existing repository deprecation/build warnings remain outside this feature: Python async deprecations, eight frontend lint warnings, Vite config warnings, and the frontend chunk-size warning.
 - The edge-relay package lacks a test script; its standalone repository bridge tests were used instead.
 - The broader audit index contains additional P1/P2 observations outside the requested FIN-P0-001–006 and FIN-P1-101 scope; they are not silently represented as resolved by this feature.
 
 ## Deferred Items
 
-- Push the verified feature branch, open a pull request, and wait for GitHub CI.
+- Review and merge PR #54 through the approved GitHub workflow; do not push directly to `main`.
 - Address unrelated edge-relay test-script/configuration work separately.
 - Handle audit findings outside this feature scope through their own Spec Kit feature and policy decisions.
+- No action required for `backend/tests/unit/test_accounting_period_p6.py`: its existing tests already prove CLOSED rejection even with `bypass_role_check=True`, successful OPEN-period posting, balanced debit/credit totals, and opening-balance balance-sheet integrity.
 
 ## Delivery Readiness
 
-**Local PR-ready: YES. Repository delivery-ready: NO until GitHub CI is green.**
+**Local PR-ready: YES. The implementation head passed GitHub CI; this documentation-only reconciliation must pass the required checks on its new head before merge.**
 
-No Critical or High findings remain. The branch is suitable for PR creation after the CP6 documentation commit, but it must not be merged or declared fully complete before GitHub CI passes.
+No Critical or High findings remain. The branch is suitable for review and squash merge after the new-head GitHub checks pass.
 
 ## Exact Git Baseline
 
 - Origin baseline: `62dd6c8` (`origin/main`).
 - Branch: `hermes/011-security-accounting-invariant-hardening`.
-- Feature commits in order: `c5e8950`, `089a379`, `815763c`, `d4851b4`, `336d987`, `5fe83b1`, `4122a18`.
-- CP6 documentation commit: the commit created from this artifact and the reconciled `PROJECT_STATUS.md`.
+- Feature commits in order: `c5e8950`, `089a379`, `815763c`, `d4851b4`, `336d987`, `5fe83b1`, `4122a18`, `250cfb4`.
+- **CP6 documentation commit**: `5682b90`; post-CI status reconciliation is committed separately after CI verification.
+- **Post-CI repair**: `250cfb4` imports the `Optional` typing used by the opening-balance actor seam; local and GitHub backend gates pass.
 - No CP1–CP5 commit was amended or rewritten.

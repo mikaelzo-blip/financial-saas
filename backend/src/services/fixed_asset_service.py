@@ -406,13 +406,14 @@ class FixedAssetService:
         self.session.add(tx)
         await self.session.flush()
 
-        # Post via AccountingEngine -> Dr 6105, Cr 1502
+        # Post via AccountingEngine -> Dr 6108, Cr 1502
         engine = AccountingEngine(self.session)
         journal = await engine.post_transaction(
             organization_id=organization_id,
             transaction_id=tx.id,
             posting_date=period_date,
-            actor_id=actor_id
+            actor_id=actor_id,
+            actor_role=actor_role,
         )
 
         # Update asset accumulated depreciation & status

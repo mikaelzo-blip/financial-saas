@@ -1,17 +1,12 @@
 # Project Status
 
-- **Last reconciled**: 2026-09-08
-- **Current origin/main baseline**: `a367de8` (PR #52 merged)
-- **Current branch**: `hermes/governance-cleanup`
-- **Active work**: Repository governance and disposable-artifact cleanup before creating the isolated Hermes Coder profile.
-- **Active Spec Kit feature**: None. The stale local pointer to completed feature 005 must not be used to select work.
-- **Completed baseline**: Product features 001-010, production-readiness work, document-intelligence UAT, RC1 remediation, PRD UX v3.0 checkpoints, and storage-path remediation are merged through PR #52. Detailed historical evidence remains in `specs/`, Git history, and the retained trackers.
-- **Operating model**: Local-first. Local Baileys intake is supported while the Finance PC services are running; durable PC-off capture remains `DEFERRED_POST_RC1`.
-- **Current verification**: 393 backend tests passed and 3 skipped; 66 frontend tests and 6 Node bridge/contract tests passed; frontend lint completed with pre-existing warnings; typecheck and production build passed; backend dependency and complete offline migration-chain validation passed; diff and repository-safety checks passed.
-- **Protected local data**: Both `backend/storage` and `backend/backend/storage` contain ignored source-document files. Do not delete or merge either tree until database references and SHA-256 hashes are reconciled.
-- **Known accounting follow-up**: `FIXED_ASSET_DEPRECIATION` still posts debit account `6105` although the authoritative concept assigns depreciation to `6108`. The existing `6108` regression test exercises `DIRECT_PURCHASE`, not the fixed-asset depreciation transaction path. Fix in a separate focused feature.
-- **Current cleanup checkpoint**: Governance terminology, authority, routing, state-source normalization, and disposable-artifact cleanup are implemented and verified locally.
-- **Blockers**: None within the cleanup. The Hermes Coder profile must not perform autonomous development until this governance cleanup is reviewed and merged.
-- **Local cleanup checkpoint**: Committed as `chore(governance): prepare repository for Hermes Coder` on `hermes/governance-cleanup`.
-- **Delivery state**: Local commit complete. Push/PR awaits explicit confirmation that the configured `origin` remote is an approved destination.
-- **Next action**: Push `hermes/governance-cleanup`, run PR/CI review, merge the verified cleanup, then create the new Hermes Coder profile.
+- **Last reconciled**: 2026-09-09
+- **Current origin/main baseline**: `62dd6c8` (`origin/main`)
+- **Active branch**: `hermes/011-security-accounting-invariant-hardening`
+- **Feature 011 status**: CP1–CP6 complete; PR #54 is open. The implementation head passed all required GitHub quality gates; this documentation-only reconciliation must pass the same gates on its new head. No uncommitted production application code remains.
+- **Feature commits**: `c5e8950`, `089a379`, `815763c`, `d4851b4`, `336d987`; corrective follow-ups `5fe83b1`, `4122a18`, `250cfb4`; CP6 documentation `5682b90`.
+- **Final verification**: backend `400 passed, 3 skipped`; frontend `66 passed`; Node bridge `6 passed` plus Baileys `9 passed`; frontend lint passed with 0 errors and 8 existing warnings; typecheck, build, migrations, repository safety, and implementation-head GitHub CI passed.
+- **Documentation**: `specs/011-security-accounting-invariant-hardening/final-analysis.md` and the supplied audit document belong to Feature 011.
+- **Protected data**: `backend/storage` and `backend/backend/storage` remain untouched. No `.env`, credentials, temporary logs, caches, or codebase-memory artifacts are part of the feature.
+- **Notes**: `edge-relay/package.json` has no `test` script; standalone Node bridge tests pass. No Feature-011 delivery blocker remains. Merge is governed by repository review policy.
+- **Next action**: Review and merge PR #54 through the approved GitHub workflow; do not push directly to `main`.

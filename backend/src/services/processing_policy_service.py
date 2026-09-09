@@ -30,6 +30,7 @@ class ProcessingPolicyService:
         TransactionType.OWNER_WITHDRAWAL,
         TransactionType.OWNER_CONTRIBUTION,
         TransactionType.REVERSAL,
+        TransactionType.JOURNAL_ADJUSTMENT,
     }
 
     AUTO_SAFE_TYPES: Set[TransactionType] = {
@@ -100,47 +101,26 @@ class ProcessingPolicyService:
                 details={"transaction_id": str(transaction_id), "unresolved_flags": flags_str}
             )
 
-        # 1b. Accounting Period Status Guard (P6.2)
-        from src.models.accounting_period import AccountingPeriod
-        from src.models.enums import AccountingPeriodStatus
-        period_stmt = select(AccountingPeriod).where(
-            and_(
-                AccountingPeriod.organization_id == organization_id,
-                AccountingPeriod.start_date <= trx.transaction_date,
-                AccountingPeriod.end_date >= trx.transaction_date,
-                AccountingPeriod.status.in_([AccountingPeriodStatus.CLOSED, AccountingPeriodStatus.SOFT_CLOSED])
-            )
+        # 1b. Accounting Period Status Guard
+        await self.accounting_engine.assert_period_allows_posting(
+            organization_id=organization_id,
+            posting_date=trx.transaction_date,
+            actor_role=actor_role,
         )
-        closed_period = await self.session.scalar(period_stmt)
-        if closed_period:
-            if closed_period.status == AccountingPeriodStatus.CLOSED:
-                raise InvariantViolationException(
-                    f"Cannot post transaction {trx.transaction_code}. Accounting period '{closed_period.period_name}' is CLOSED.",
-                    details={
-                        "transaction_id": str(transaction_id),
-                        "transaction_date": str(trx.transaction_date),
-                        "period_name": closed_period.period_name,
-                        "period_status": closed_period.status.value
-                    }
-                )
-            elif closed_period.status == AccountingPeriodStatus.SOFT_CLOSED:
-                if actor_role not in (UserRole.ADMIN, UserRole.MANAGER):
-                    raise AuthorizationException(
-                        f"Cannot post transaction {trx.transaction_code}. Accounting period '{closed_period.period_name}' is SOFT_CLOSED (requires Admin or Manager).",
-                        details={
-                            "transaction_id": str(transaction_id),
-                            "transaction_date": str(trx.transaction_date),
-                            "period_name": closed_period.period_name,
-                            "period_status": closed_period.status.value
-                        }
-                    )
+
+        # 1c. VIEWER Guard
+        if actor_role == UserRole.VIEWER:
+            raise AuthorizationException(
+                "Role 'VIEWER' is not authorized to post or approve financial transactions."
+            )
 
         # 2. Sensitive Type Role Guard
         if not bypass_role_check and trx.transaction_type in self.SENSITIVE_TYPES:
-            if actor_role is not None and actor_role not in (UserRole.ADMIN, UserRole.MANAGER):
+            if actor_role is None or actor_role not in (UserRole.ADMIN, UserRole.MANAGER):
+                role_val = actor_role.value if actor_role else "NONE"
                 raise AuthorizationException(
                     f"Transaction type '{trx.transaction_type.value}' requires Manager approval.",
-                    details={"transaction_type": trx.transaction_type.value, "role": actor_role.value}
+                    details={"transaction_type": trx.transaction_type.value, "role": role_val}
                 )
 
         # 3. Mark Approved
@@ -153,7 +133,8 @@ class ProcessingPolicyService:
         je = await self.accounting_engine.post_transaction(
             organization_id=organization_id,
             transaction_id=transaction_id,
-            actor_id=actor_id
+            actor_id=actor_id,
+            actor_role=actor_role,
         )
 
         # 5. Audit Log

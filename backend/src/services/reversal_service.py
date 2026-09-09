@@ -10,10 +10,11 @@ from src.models.transaction import Transaction
 from src.models.journal import JournalEntry, JournalLine
 from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation, CustomerRetentionRelease
 from src.models.payable import VendorBill, VendorPaymentAllocation
-from src.models.enums import TransactionType, WorkflowStatus
+from src.models.enums import TransactionType, WorkflowStatus, UserRole
 from src.services.accounting_engine import AccountingEngine
+from src.services.accounting_period_service import assert_period_allows_posting
 from src.services.audit_service import AuditService
-from src.core.exceptions import EntityNotFoundException, InvariantViolationException
+from src.core.exceptions import EntityNotFoundException, InvariantViolationException, AuthorizationException
 
 
 class ReversalService:
@@ -45,12 +46,22 @@ class ReversalService:
         original_transaction_id: uuid.UUID,
         reason: str,
         actor_id: Optional[uuid.UUID] = None,
+        actor_role: Optional[UserRole] = None,
         reversal_date: Optional[date] = None
     ) -> Tuple[Transaction, JournalEntry]:
         """
         Creates an offsetting reversal transaction and journal entry.
         Guarantees zero net financial impact when aggregated with original entry.
         """
+        r_date = reversal_date or date.today()
+
+        if actor_role is not None and actor_role not in (UserRole.ADMIN, UserRole.MANAGER):
+            raise AuthorizationException(
+                f"Role '{actor_role.value}' is not authorized to reverse transactions. Required: ADMIN or MANAGER."
+            )
+
+        await assert_period_allows_posting(self.session, organization_id, r_date, actor_role)
+
         # 1. Fetch original transaction
         trx_stmt = select(Transaction).where(
             and_(

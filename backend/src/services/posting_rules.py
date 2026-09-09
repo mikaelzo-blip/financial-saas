@@ -463,10 +463,10 @@ class PostingRuleRegistry:
             )
 
         elif t_type == TransactionType.FIXED_ASSET_DEPRECIATION:
-            # Debit Beban Penyusutan Aset Tetap (6105)
+            # Debit Beban Penyusutan Aset Tetap (6108)
             legs.append(
                 GeneratedJournalLeg(
-                    account_code="6105",
+                    account_code="6108",
                     debit_amount=amount,
                     credit_amount=Decimal("0.00"),
                     notes=transaction.description

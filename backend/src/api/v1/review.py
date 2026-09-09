@@ -7,7 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.api.deps import get_current_org_id, get_current_user_id
-from src.models.enums import ReviewFlag
+from src.api.auth import require_roles
+from src.models.enums import ReviewFlag, UserRole
+from src.models.user import User
 from src.schemas.transaction import TransactionResponse
 from src.services.review_service import ReviewQueueService
 
@@ -87,7 +89,7 @@ async def resolve_review_flag(
     flag_id: uuid.UUID,
     data: ResolveReviewFlagRequest,
     org_id: uuid.UUID = Depends(get_current_org_id),
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db)
 ):
     service = ReviewQueueService(db)
@@ -95,8 +97,9 @@ async def resolve_review_flag(
         organization_id=org_id,
         transaction_id=transaction_id,
         flag_id=flag_id,
-        resolved_by=user_id,
-        resolution_notes=data.resolution_notes
+        resolved_by=current_user.id,
+        resolution_notes=data.resolution_notes,
+        actor_role=current_user.role
     )
     await db.commit()
     return resolved

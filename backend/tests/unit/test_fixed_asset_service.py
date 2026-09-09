@@ -4,11 +4,13 @@ from datetime import date
 from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from src.models.organization import Organization
 from src.models.user import User, UserRole
 from src.models.fixed_asset import FixedAsset, FixedAssetDepreciation
 from src.models.transaction import Transaction
+from src.models.journal import JournalEntry, JournalLine
 from src.models.enums import AssetStatus, DepreciationMethod, TransactionType, WorkflowStatus
 from src.schemas.fixed_asset import FixedAssetCreate, FixedAssetUpdate
 from src.services.fixed_asset_service import FixedAssetService
@@ -99,7 +101,7 @@ async def test_fixed_asset_posting_and_ledger_invariants(db_session: AsyncSessio
     Integration test:
     1. Create asset via FixedAssetService
     2. Depreciate asset
-    3. Assert JournalEntry: Dr 6105, Cr 1502, Total Dr == Total Cr
+    3. Assert JournalEntry: Dr 6108, Cr 1502, Total Dr == Total Cr
     4. Assert duplicate depreciation in same month is blocked
     5. Assert balance sheet and P&L reflect depreciation without discrepancy
     """
@@ -154,6 +156,17 @@ async def test_fixed_asset_posting_and_ledger_invariants(db_session: AsyncSessio
     assert dep_res.accumulated_depreciation == Decimal("1000000.00")
     assert dep_res.net_book_value == Decimal("23000000.00")
     assert dep_res.journal_entry_number is not None
+    journal = await db_session.scalar(
+        select(JournalEntry)
+        .options(selectinload(JournalEntry.lines).selectinload(JournalLine.account))
+        .where(JournalEntry.transaction_id == dep_res.transaction_id)
+    )
+    assert journal is not None
+    debit_accounts = {line.account.account_code for line in journal.lines if line.debit_amount > Decimal("0.00")}
+    credit_accounts = {line.account.account_code for line in journal.lines if line.credit_amount > Decimal("0.00")}
+    assert debit_accounts == {"6108"}
+    assert credit_accounts == {"1502"}
+    assert journal.total_debit == journal.total_credit
 
     # 3. Assert duplicate depreciation in same month is blocked
     with pytest.raises(InvariantViolationException) as exc_dup:

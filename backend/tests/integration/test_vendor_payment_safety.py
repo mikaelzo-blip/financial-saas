@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.coa import ChartOfAccount, PaymentAccount
 from src.models.counterparty import Counterparty
-from src.models.enums import AccountType, CostCategory, NormalBalance, TransactionType, WorkflowStatus
+from src.models.enums import AccountType, CostCategory, NormalBalance, TransactionType, UserRole, WorkflowStatus
+from src.models.user import User
 from src.models.journal import JournalEntry
 from src.models.organization import Organization
 from src.models.payable import VendorBill, VendorPaymentAllocation
@@ -98,13 +99,21 @@ async def setup_test_tenant(db_session: AsyncSession, slug_suffix: str):
         revised_contract_value=Decimal("100000000.00"),
     )
     db_session.add(project)
+    operator = User(
+        organization_id=org.id,
+        email=f"operator-{unique_suffix}@example.com",
+        full_name="Vendor Payment Operator",
+        password_hash="test-only",
+        role=UserRole.OPERATOR,
+    )
+    db_session.add(operator)
     await db_session.flush()
-    return org, vendor, project, pmt_acc
+    return org, vendor, project, pmt_acc, operator
 
 
 @pytest.mark.asyncio
 async def test_vendor_payment_full_workflow_safety(client: AsyncClient, db_session: AsyncSession):
-    org, vendor, project, pmt_acc = await setup_test_tenant(db_session, "vpay-safety")
+    org, vendor, project, pmt_acc, operator = await setup_test_tenant(db_session, "vpay-safety")
 
     # 1. Post Vendor Bill of Rp12,000,000
     trx_svc = TransactionService(db_session)
@@ -130,7 +139,7 @@ async def test_vendor_payment_full_workflow_safety(client: AsyncClient, db_sessi
     assert bill.status == "UNPAID"
     assert bill.calculate_outstanding_amount() == Decimal("12000000.00")
 
-    headers = {"X-Organization-Id": str(org.id)}
+    headers = {"X-Organization-Id": str(org.id), "X-User-ID": str(operator.id)}
 
     # 2. Overpayment greater than outstanding AP is rejected via API
     overpay_payload = {
@@ -196,8 +205,8 @@ async def test_vendor_payment_full_workflow_safety(client: AsyncClient, db_sessi
 
 @pytest.mark.asyncio
 async def test_vendor_payment_cross_tenant_and_invalid_account(client: AsyncClient, db_session: AsyncSession):
-    org_a, vendor_a, project_a, pmt_acc_a = await setup_test_tenant(db_session, "tenant-a-safety")
-    org_b, vendor_b, project_b, pmt_acc_b = await setup_test_tenant(db_session, "tenant-b-safety")
+    org_a, vendor_a, project_a, pmt_acc_a, operator_a = await setup_test_tenant(db_session, "tenant-a-safety")
+    org_b, vendor_b, project_b, pmt_acc_b, operator_b = await setup_test_tenant(db_session, "tenant-b-safety")
 
     # Org A bill
     trx_svc = TransactionService(db_session)
@@ -221,7 +230,7 @@ async def test_vendor_payment_cross_tenant_and_invalid_account(client: AsyncClie
     bill_a = await db_session.scalar(select(VendorBill).where(VendorBill.transaction_id == bill_trx.id))
 
     # Cross tenant: Org B tries to pay Org A's bill with Org B's account
-    headers_b = {"X-Organization-Id": str(org_b.id)}
+    headers_b = {"X-Organization-Id": str(org_b.id), "X-User-ID": str(operator_b.id)}
     payload_cross = {
         "bill_id": str(bill_a.id),
         "payment_account_id": str(pmt_acc_b.id),
@@ -234,7 +243,7 @@ async def test_vendor_payment_cross_tenant_and_invalid_account(client: AsyncClie
     assert resp.status_code == 404
 
     # Org A tries to pay with Org B's payment account
-    headers_a = {"X-Organization-Id": str(org_a.id)}
+    headers_a = {"X-Organization-Id": str(org_a.id), "X-User-ID": str(operator_a.id)}
     payload_invalid_acc = {
         "bill_id": str(bill_a.id),
         "payment_account_id": str(pmt_acc_b.id),
@@ -249,7 +258,7 @@ async def test_vendor_payment_cross_tenant_and_invalid_account(client: AsyncClie
 
 @pytest.mark.asyncio
 async def test_vendor_allocation_rejects_wrong_vendor_payment(db_session: AsyncSession):
-    org, vendor_a, project, payment_account = await setup_test_tenant(db_session, "vendor-match")
+    org, vendor_a, project, payment_account, operator = await setup_test_tenant(db_session, "vendor-match")
     vendor_b = Counterparty(organization_id=org.id, name="PT Vendor Kedua", is_vendor=True, is_customer=False)
     db_session.add(vendor_b); await db_session.flush()
     bill_transaction = await TransactionService(db_session).create_transaction(org.id, TransactionCreate(

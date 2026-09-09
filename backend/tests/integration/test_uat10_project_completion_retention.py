@@ -19,7 +19,9 @@ from src.models.coa import ChartOfAccount, PaymentAccount
 from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation, CustomerRetentionRelease
 from src.models.payable import VendorBill
 from src.models.transaction import Transaction
-from src.core.exceptions import InvariantViolationException, EntityNotFoundException
+from src.models.user import User
+from src.models.enums import UserRole
+from src.core.exceptions import AuthorizationException, InvariantViolationException, EntityNotFoundException
 from src.schemas.transaction import TransactionCreate
 from src.schemas.project import ProjectStatusUpdate
 from src.services.accounting_engine import AccountingEngine
@@ -88,10 +90,19 @@ async def setup_uat10_context(session: AsyncSession, prefix: str = "uat10"):
         project_status=ProjectStatus.ACTIVE,
     )
     session.add(project)
+    user = User(
+        organization_id=org.id,
+        email=f"operator-{prefix}-{unique_suffix}@example.com",
+        full_name="UAT Operator",
+        password_hash="test-only",
+        role=UserRole.OPERATOR,
+        is_active=True,
+    )
+    session.add(user)
     await session.flush()
     await session.commit()
 
-    return org, customer, vendor, project, pay_acc
+    return org, customer, vendor, project, pay_acc, user
 
 
 @pytest.mark.asyncio
@@ -110,7 +121,7 @@ async def test_full_project_lifecycle_retention_and_settlement(db_session: Async
     10. Financial Closure (CLOSED): All settled, project transitions to CLOSED
     11. Final financial reporting & accounting invariants verified
     """
-    org, customer, vendor, project, pay_acc = await setup_uat10_context(db_session, "lifecycle")
+    org, customer, vendor, project, pay_acc, user = await setup_uat10_context(db_session, "lifecycle")
     engine = AccountingEngine(db_session)
     trx_service = TransactionService(db_session)
     proj_service = ProjectService(db_session)
@@ -271,6 +282,8 @@ async def test_full_project_lifecycle_retention_and_settlement(db_session: Async
         release_amount=Decimal("10000000.00"),
         release_date=date(2026, 10, 1),
         notes="BAST-2 final handover and retention release",
+        actor_id=user.id,
+        actor_role=user.role,
     )
     assert release_res.release_amount == Decimal("10000000.00")
 
@@ -368,7 +381,7 @@ async def test_closure_guards_block_unsettled_conditions(db_session: AsyncSessio
     - AP is outstanding
     - Pending review / draft transactions exist
     """
-    org, customer, vendor, project, pay_acc = await setup_uat10_context(db_session, "guards")
+    org, customer, vendor, project, pay_acc, user = await setup_uat10_context(db_session, "guards")
     trx_service = TransactionService(db_session)
     engine = AccountingEngine(db_session)
     proj_service = ProjectService(db_session)
@@ -449,7 +462,7 @@ async def test_retention_release_reversal_safety(db_session: AsyncSession):
     Test Phase I: Reversal of retention release safely reverts subledger
     and re-establishes retention receivable balance.
     """
-    org, customer, vendor, project, pay_acc = await setup_uat10_context(db_session, "revrel")
+    org, customer, vendor, project, pay_acc, user = await setup_uat10_context(db_session, "revrel")
     engine = AccountingEngine(db_session)
     trx_service = TransactionService(db_session)
     ar_service = CustomerARService(db_session)
@@ -481,6 +494,8 @@ async def test_retention_release_reversal_safety(db_session: AsyncSession):
         release_amount=Decimal("2500000.00"),
         release_date=date(2026, 10, 1),
         notes="Release before reversal",
+        actor_id=user.id,
+        actor_role=user.role,
     )
     assert rel_res.release_amount == Decimal("2500000.00")
 
@@ -516,8 +531,8 @@ async def test_tenant_isolation_retention_and_closure(db_session: AsyncSession):
     - Cannot release retention on another tenant's invoice
     - Cannot close another tenant's project
     """
-    org1, cust1, vend1, prj1, pay1 = await setup_uat10_context(db_session, "tenant1")
-    org2, cust2, vend2, prj2, pay2 = await setup_uat10_context(db_session, "tenant2")
+    org1, cust1, vend1, prj1, pay1, user1 = await setup_uat10_context(db_session, "tenant1")
+    org2, cust2, vend2, prj2, pay2, user2 = await setup_uat10_context(db_session, "tenant2")
 
     engine = AccountingEngine(db_session)
     trx_service = TransactionService(db_session)
@@ -550,6 +565,8 @@ async def test_tenant_isolation_retention_and_closure(db_session: AsyncSession):
             invoice_id=inv1.id,
             release_amount=Decimal("500000.00"),
             release_date=date(2026, 10, 1),
+            actor_id=user2.id,
+            actor_role=user2.role,
         )
 
     # Org 2 attempts to close Org 1's project -> MUST FAIL

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.transaction import Transaction
 from src.models.journal import JournalEntry, JournalLine
 from src.models.coa import ChartOfAccount
-from src.models.enums import TransactionType, WorkflowStatus
+from src.models.enums import TransactionType, WorkflowStatus, UserRole
 from src.models.payable import VendorBill
 from src.services.audit_service import AuditService
 from src.services.payable_service import VendorAPService
@@ -41,12 +41,22 @@ class AccountingEngine:
         next_seq = count + 1
         return f"{prefix}{next_seq:06d}"
 
+    async def assert_period_allows_posting(
+        self,
+        organization_id: uuid.UUID,
+        posting_date: date,
+        actor_role: Optional[UserRole] = None,
+    ) -> None:
+        from src.services.accounting_period_service import assert_period_allows_posting
+        await assert_period_allows_posting(self.session, organization_id, posting_date, actor_role)
+
     async def post_transaction(
         self,
         organization_id: uuid.UUID,
         transaction_id: uuid.UUID,
         posting_date: Optional[date] = None,
-        actor_id: Optional[uuid.UUID] = None
+        actor_id: Optional[uuid.UUID] = None,
+        actor_role: Optional[UserRole] = None,
     ) -> JournalEntry:
         """
         Posts a candidate financial transaction into immutable double-entry journal.
@@ -78,6 +88,9 @@ class AccountingEngine:
                 f"Cannot post transaction in '{transaction.workflow_status.value}' state. Resolve review flags first.",
                 details={"transaction_id": str(transaction_id), "status": transaction.workflow_status.value}
             )
+
+        p_date = posting_date or transaction.transaction_date
+        await self.assert_period_allows_posting(organization_id, p_date, actor_role)
 
         # Generate double-entry legs from rules
         legs = PostingRuleRegistry.generate_journal_legs(transaction)
@@ -182,6 +195,9 @@ class AccountingEngine:
         # Mark transaction as POSTED
         old_status = transaction.workflow_status.value
         transaction.workflow_status = WorkflowStatus.POSTED
+        if actor_id:
+            transaction.approved_by = actor_id
+            transaction.approved_at = datetime.now()
         transaction.posted_at = datetime.now()
         await self.session.flush()
 

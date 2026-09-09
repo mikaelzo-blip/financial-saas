@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.exceptions import EntityNotFoundException, InvariantViolationException
 from src.models.coa import PaymentAccount
 from src.models.counterparty import Counterparty
-from src.models.enums import ProjectStatus, TransactionType, WorkflowStatus
+from src.models.enums import ProjectStatus, TransactionType, UserRole, WorkflowStatus
+from src.models.user import User
 from src.models.journal import JournalLine
 from src.models.organization import Organization
 from src.models.project import Project
@@ -68,24 +69,36 @@ async def setup_customer_payment_context(session: AsyncSession, slug: str):
         project_status=ProjectStatus.ACTIVE,
     )
     session.add(project)
+    user = User(
+        organization_id=organization.id,
+        email=f"operator-{slug}@example.com",
+        full_name="Payment Operator",
+        password_hash="test-only",
+        role=UserRole.OPERATOR,
+    )
+    session.add(user)
     await session.commit()
     payment_account = await session.scalar(select(PaymentAccount).where(
         PaymentAccount.organization_id == organization.id,
         PaymentAccount.name == "Bank Mandiri",
     ))
-    return organization, customer, other_customer, project, payment_account
+    return organization, customer, other_customer, project, payment_account, user
+
+
+def operator_headers(organization_id, user_id):
+    return {"X-Organization-ID": str(organization_id), "X-User-ID": str(user_id)}
 
 
 @pytest.mark.asyncio
 async def test_customer_payment_api_posts_and_fully_allocates_without_revenue_recognition(client, db_session: AsyncSession):
-    organization, customer, _, project, payment_account = await setup_customer_payment_context(db_session, "customer-payment-api")
+    organization, customer, _, project, payment_account, user = await setup_customer_payment_context(db_session, "customer-payment-api")
     invoice = await create_customer_invoice(
         db_session, organization.id, customer.id, project.id, "INV-PAYMENT-001", Decimal("25000000.00")
     )
 
     response = await client.post(
         "/api/v1/customer-payments",
-        headers={"X-Organization-ID": str(organization.id)},
+        headers=operator_headers(organization.id, user.id),
         json={
             "invoice_id": str(invoice.id),
             "payment_account_id": str(payment_account.id),
@@ -131,7 +144,7 @@ async def test_customer_payment_api_posts_and_fully_allocates_without_revenue_re
 
 @pytest.mark.asyncio
 async def test_customer_payment_allocation_rejects_customer_and_tenant_mismatches(db_session: AsyncSession):
-    organization, customer, other_customer, project, payment_account = await setup_customer_payment_context(db_session, "customer-payment-safety")
+    organization, customer, other_customer, project, payment_account, user = await setup_customer_payment_context(db_session, "customer-payment-safety")
     invoice = await create_customer_invoice(
         db_session, organization.id, customer.id, project.id, "INV-SAFETY-001", Decimal("100.00")
     )
@@ -156,7 +169,7 @@ async def test_customer_payment_allocation_rejects_customer_and_tenant_mismatche
             organization.id, payment.id, [(invoice.id, Decimal("100.00"))]
         )
 
-    other_org, other_customer_tenant, _, other_project, _ = await setup_customer_payment_context(db_session, "customer-payment-other-tenant")
+    other_org, other_customer_tenant, _, other_project, _, other_user = await setup_customer_payment_context(db_session, "customer-payment-other-tenant")
     other_invoice = await create_customer_invoice(
         db_session, other_org.id, other_customer_tenant.id, other_project.id, "INV-OTHER-TENANT", Decimal("100.00")
     )
@@ -168,7 +181,7 @@ async def test_customer_payment_allocation_rejects_customer_and_tenant_mismatche
 
 @pytest.mark.asyncio
 async def test_customer_payment_allocation_rejects_overpayment_and_duplicate_replay(db_session: AsyncSession):
-    organization, customer, _, project, payment_account = await setup_customer_payment_context(db_session, "customer-payment-limits")
+    organization, customer, _, project, payment_account, user = await setup_customer_payment_context(db_session, "customer-payment-limits")
     invoice = await create_customer_invoice(
         db_session, organization.id, customer.id, project.id, "INV-LIMITS-001", Decimal("100.00")
     )

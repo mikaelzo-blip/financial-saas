@@ -7,6 +7,7 @@ from sqlalchemy import and_, select
 
 from src.core.database import get_db
 from src.api.deps import get_current_org_id, get_current_user_id
+from src.api.auth import require_roles
 from src.models.enums import DocumentType, DocumentProcessingStatus, CandidateStatus, ProjectStatus, TransactionType
 from src.models.document import DocumentCorrection
 from src.models.project import Project
@@ -195,10 +196,11 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
 
 @router.post("/{document_id}/approve", response_model=TransactionResponse, status_code=status.HTTP_201_CREATED)
 async def approve_document_candidate(document_id: uuid.UUID, org_id: uuid.UUID = Depends(get_current_org_id),
-                                     user_id: uuid.UUID = Depends(get_current_user_id),
+                                     current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
                                      db: AsyncSession = Depends(get_db)):
     document = await DocumentService(db).get_document(org_id, document_id, for_update=True)
-    await require_reviewer(db, org_id, user_id)
+    user_id = current_user.id
+    reviewer = await require_reviewer(db, org_id, user_id)
     if document.review_flags or document.processing_status != DocumentProcessingStatus.READY_FOR_APPROVAL:
         raise HTTPException(status_code=409, detail="Document has unresolved review requirements")
     candidate = TransactionCandidate.model_validate(document.candidate_transaction)
@@ -217,7 +219,12 @@ async def approve_document_candidate(document_id: uuid.UUID, org_id: uuid.UUID =
         description=candidate.description or f"Document {document.document_code}", document_ids=[document.id],
         project_id=candidate.project_id, cost_category=candidate.cost_category,
         expense_category=candidate.expense_category), created_by=user_id)
-    journal = await AccountingEngine(db).post_transaction(org_id, transaction.id, actor_id=user_id)
+    journal = await AccountingEngine(db).post_transaction(
+        org_id,
+        transaction.id,
+        actor_id=user_id,
+        actor_role=reviewer.role,
+    )
     if candidate.proposed_transaction_type == TransactionType.CUSTOMER_PAYMENT:
         from src.services.receivable_service import CustomerARService
         await CustomerARService(db).allocate_customer_payment(

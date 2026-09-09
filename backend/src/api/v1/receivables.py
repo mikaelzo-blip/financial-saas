@@ -9,10 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.api.deps import get_current_org_id
+from src.api.auth import require_roles
 from src.core.database import get_db
 from src.core.exceptions import InvariantViolationException
-from src.models.enums import TransactionType, WorkflowStatus
+from src.models.enums import TransactionType, UserRole, WorkflowStatus
 from src.models.receivable import CustomerInvoice
+from src.models.user import User
 from src.schemas.transaction import TransactionCreate
 from src.services.accounting_engine import AccountingEngine
 from src.services.receivable_service import CustomerARService
@@ -140,10 +142,13 @@ class RetentionReleaseResponse(BaseModel):
 async def release_customer_retention(
     data: RetentionReleaseCreate,
     organization_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db),
 ):
     ar_service = CustomerARService(db)
     release = await ar_service.release_customer_retention(
+        actor_id=current_user.id,
+        actor_role=current_user.role,
         organization_id=organization_id,
         invoice_id=data.invoice_id,
         release_amount=data.release_amount,
@@ -164,6 +169,7 @@ async def release_customer_retention(
 async def record_customer_payment(
     data: CustomerPaymentCreate,
     organization_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db),
 ):
     ar_service = CustomerARService(db)
@@ -189,12 +195,18 @@ async def record_customer_payment(
             description=data.description,
             source_channel="WEB",
         ),
+        created_by=current_user.id,
     )
     if payment.workflow_status == WorkflowStatus.REVIEW_REQUIRED:
         raise InvariantViolationException(
             "Possible duplicate customer payment is routed to review and will not be posted automatically."
         )
-    journal = await AccountingEngine(db).post_transaction(organization_id, payment.id)
+    journal = await AccountingEngine(db).post_transaction(
+        organization_id,
+        payment.id,
+        actor_id=current_user.id,
+        actor_role=current_user.role,
+    )
     allocations = await ar_service.allocate_customer_payment(
         organization_id, payment.id, [(invoice.id, data.amount)]
     )

@@ -14,6 +14,8 @@ from src.models.organization import Organization
 from src.models.payable import VendorBill
 from src.models.project import Project
 from src.models.receivable import CustomerInvoice
+from src.models.user import User
+from src.models.enums import UserRole
 from src.schemas.transaction import TransactionCreate
 from src.services.accounting_engine import AccountingEngine
 from src.services.payable_service import VendorAPService
@@ -109,13 +111,22 @@ async def setup_payment_mm_test_tenant(session: AsyncSession, slug: str):
         project_status=ProjectStatus.ACTIVE,
     )
     session.add(project)
+    user = User(
+        organization_id=org.id,
+        email=f"operator-{slug}@example.com",
+        full_name="Payment Operator",
+        password_hash="test-only",
+        role=UserRole.OPERATOR,
+        is_active=True,
+    )
+    session.add(user)
     await session.commit()
-    return org, customer, vendor, project, payment_account
+    return org, customer, vendor, project, payment_account, user
 
 
 @pytest.mark.asyncio
 async def test_customer_payment_creates_and_synchronizes_money_movement(client, db_session: AsyncSession):
-    org, customer, _, project, payment_account = await setup_payment_mm_test_tenant(db_session, "test-cp-mm-sync")
+    org, customer, _, project, payment_account, user = await setup_payment_mm_test_tenant(db_session, "test-cp-mm-sync")
 
     # 1. Issue customer invoice
     inv_trx = await TransactionService(db_session).create_transaction(
@@ -139,7 +150,7 @@ async def test_customer_payment_creates_and_synchronizes_money_movement(client, 
     # 2. Record customer payment via API
     resp = await client.post(
         "/api/v1/customer-payments",
-        headers={"X-Organization-ID": str(org.id)},
+        headers={"X-Organization-ID": str(org.id), "X-User-ID": str(user.id)},
         json={
             "invoice_id": str(invoice.id),
             "payment_account_id": str(payment_account.id),
@@ -201,7 +212,7 @@ async def test_customer_payment_creates_and_synchronizes_money_movement(client, 
 
 @pytest.mark.asyncio
 async def test_vendor_payment_creates_and_synchronizes_money_movement(client, db_session: AsyncSession):
-    org, _, vendor, project, payment_account = await setup_payment_mm_test_tenant(db_session, "test-vp-mm-sync")
+    org, _, vendor, project, payment_account, user = await setup_payment_mm_test_tenant(db_session, "test-vp-mm-sync")
 
     # 1. Post Vendor Bill
     bill_trx = await TransactionService(db_session).create_transaction(
@@ -226,7 +237,7 @@ async def test_vendor_payment_creates_and_synchronizes_money_movement(client, db
     # 2. Record vendor payment via API
     resp = await client.post(
         "/api/v1/vendor-payments",
-        headers={"X-Organization-ID": str(org.id)},
+        headers={"X-Organization-ID": str(org.id), "X-User-ID": str(user.id)},
         json={
             "bill_id": str(bill.id),
             "payment_account_id": str(payment_account.id),

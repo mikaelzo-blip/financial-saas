@@ -10,10 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.api.deps import get_current_org_id
+from src.api.auth import require_roles
 from src.core.database import get_db
 from src.core.exceptions import EntityNotFoundException, InvariantViolationException
-from src.models.enums import TransactionType, WorkflowStatus
+from src.models.enums import TransactionType, UserRole, WorkflowStatus
 from src.models.payable import VendorBill
+from src.models.user import User
 from src.schemas.transaction import TransactionCreate
 from src.services.accounting_engine import AccountingEngine
 from src.services.payable_service import VendorAPService
@@ -116,6 +118,7 @@ async def list_vendor_bills(
 async def record_vendor_payment(
     data: VendorPaymentCreate,
     organization_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db),
 ):
     ap_service = VendorAPService(db)
@@ -144,12 +147,18 @@ async def record_vendor_payment(
             description=data.description or f"Pembayaran tagihan {bill.bill_code}",
             source_channel="WEB",
         ),
+        created_by=current_user.id,
     )
     if payment.workflow_status == WorkflowStatus.REVIEW_REQUIRED:
         raise InvariantViolationException(
             "Possible duplicate vendor payment is routed to review and will not be posted automatically."
         )
-    journal = await AccountingEngine(db).post_transaction(organization_id, payment.id)
+    journal = await AccountingEngine(db).post_transaction(
+        organization_id,
+        payment.id,
+        actor_id=current_user.id,
+        actor_role=current_user.role,
+    )
     allocations = await ap_service.allocate_vendor_payment(
         organization_id, payment.id, [(bill.id, data.amount)]
     )

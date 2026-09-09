@@ -8,11 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation, CustomerRetentionRelease
 from src.models.transaction import Transaction
-from src.models.enums import TransactionType, WorkflowStatus
+from src.models.enums import TransactionType, UserRole, WorkflowStatus
 from src.models.organization import Organization
 from src.models.counterparty import Counterparty
 from src.models.project import Project
-from src.core.exceptions import EntityNotFoundException, InvariantViolationException
+from src.core.exceptions import AuthorizationException, EntityNotFoundException, InvariantViolationException
 
 
 class CustomerARService:
@@ -213,12 +213,16 @@ class CustomerARService:
         invoice_id: uuid.UUID,
         release_amount: Decimal,
         release_date: date,
-        notes: Optional[str] = None
+        notes: Optional[str] = None,
+        actor_id: Optional[uuid.UUID] = None,
+        actor_role: Optional[UserRole] = None,
     ) -> CustomerRetentionRelease:
         """
         Records release of withheld customer retention, creating a RETENTION_RELEASE transaction and posting it.
         Dr 1201 (Piutang Usaha) / Cr 1202 (Piutang Retensi).
         """
+        if actor_id is None or actor_role not in (UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR):
+            raise AuthorizationException("Retention release requires an authenticated application actor.")
         if release_amount <= Decimal("0.00"):
             raise InvariantViolationException("Retention release amount must be greater than zero.")
 
@@ -259,10 +263,16 @@ class CustomerARService:
                 counterparty_id=invoice.customer_id,
                 reference_no=release_code,
                 description=f"Pelepasan Retensi: {invoice.invoice_code} ({notes or 'Selesai Pemeliharaan / BAST Retensi'})"
-            )
+            ),
+            created_by=actor_id,
         )
         engine = AccountingEngine(self.session)
-        await engine.post_transaction(organization_id, trx.id)
+        await engine.post_transaction(
+            organization_id,
+            trx.id,
+            actor_id=actor_id,
+            actor_role=actor_role,
+        )
 
         await self.session.flush()
         return release

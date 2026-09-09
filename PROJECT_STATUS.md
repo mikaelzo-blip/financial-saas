@@ -1,8 +1,8 @@
 # Project Status
 
 - **Last reconciled**: 2026-09-09
-- **Current origin/main baseline**: `ec08387` (`fix(security): harden financial authorization and accounting invariants (#54)`)
-- **Active branch**: `hermes/post-011-project-status-reconciliation`
+- **Current origin/main baseline**: `73bc066` (`docs(governance): reconcile post-011 project status (#55)`)
+- **Active branch**: `main`
 - **Active implementation feature**: None
 - **Feature 011 status**: COMPLETE and merged through PR #54 using squash merge. No uncommitted production application code remains.
 - **Feature 011 merge**: PR #54, squash commit `ec083874b73574abcd3a999536a3c175c7fd11d1`; implementation head was `799474c335f5864415e1807e21c61ccbfb8bf66c`.

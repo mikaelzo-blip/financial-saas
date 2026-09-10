@@ -10,7 +10,7 @@ from sqlalchemy.sql import func
 from src.core.database import Base, TimestampMixin
 
 
-class WhatsAppSenderMapping(Base, TimestampMixin):
+class WhatsAppSenderMapping(Base):
     __tablename__ = "whatsapp_sender_mappings"
     __table_args__ = (Index("idx_wa_sender_org", "organization_id", "is_active"),)
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -20,6 +20,17 @@ class WhatsAppSenderMapping(Base, TimestampMixin):
     display_name: Mapped[str] = mapped_column(String(128), nullable=False)
     role_in_org: Mapped[str] = mapped_column(String(32), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
 
 
 class WhatsAppMessageLog(Base):

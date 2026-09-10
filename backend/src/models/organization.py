@@ -1,6 +1,6 @@
 import uuid
 from typing import List, TYPE_CHECKING
-from sqlalchemy import String, Integer
+from sqlalchemy import String, Integer, Index, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base, TimestampMixin
@@ -15,6 +15,10 @@ if TYPE_CHECKING:
 class Organization(Base, TimestampMixin):
     """Represents a contractor company organization (tenant boundary)."""
     __tablename__ = "organizations"
+    __table_args__ = (
+        UniqueConstraint("slug", name="uq_organizations_slug"),
+        Index("ix_organizations_slug", "slug", unique=True),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         primary_key=True,
@@ -22,9 +26,7 @@ class Organization(Base, TimestampMixin):
     )
     slug: Mapped[str] = mapped_column(
         String(50),
-        unique=True,
-        nullable=False,
-        index=True
+        nullable=False
     )
     legal_name: Mapped[str] = mapped_column(
         String(255),

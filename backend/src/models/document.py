@@ -7,7 +7,8 @@ from sqlalchemy import (
     ForeignKey,
     UniqueConstraint,
     JSON, Integer, Text,
-    Enum as SAEnum
+    Enum as SAEnum,
+    DateTime
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -99,8 +100,9 @@ class Document(Base):
     review_flags: Mapped[List[str]] = mapped_column(JSON, nullable=False, default=list)
     failure_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     failure_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         server_default=func.now(),
         nullable=False
     )
@@ -130,6 +132,7 @@ class ProjectDocumentLink(Base):
         primary_key=True
     )
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         server_default=func.now(),
         nullable=False
     )
@@ -149,6 +152,7 @@ class TransactionDocumentLink(Base):
     )
 
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         server_default=func.now(),
         nullable=False
     )
@@ -166,4 +170,4 @@ class DocumentCorrection(Base):
     new_value: Mapped[Any] = mapped_column(JSON, nullable=True)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     corrected_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
-    corrected_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
+    corrected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

@@ -33,8 +33,7 @@ class BackgroundJob(Base):
     )
     organization_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=True,
-        index=True
+        nullable=True
     )
     job_type: Mapped[str] = mapped_column(
         String(100),

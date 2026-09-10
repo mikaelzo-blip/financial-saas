@@ -36,8 +36,7 @@ class FixedAsset(Base):
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
+        nullable=False
     )
     asset_code: Mapped[str] = mapped_column(
         String(50),
@@ -176,13 +175,11 @@ class FixedAssetDepreciation(Base):
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
+        nullable=False
     )
     asset_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("fixed_assets.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
+        nullable=False
     )
     period_date: Mapped[date] = mapped_column(
         Date,

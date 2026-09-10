@@ -1,6 +1,6 @@
 from typing import AsyncGenerator
 from datetime import datetime
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, DateTime
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -26,10 +26,12 @@ class Base(DeclarativeBase):
 class TimestampMixin:
     """Standard timestamp mixin for models."""
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         server_default=func.now(),
         nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False

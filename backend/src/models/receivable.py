@@ -187,13 +187,11 @@ class CustomerPaymentAllocation(Base):
     )
     invoice_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("customer_invoices.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
+        nullable=False
     )
     payment_transaction_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("transactions.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True
+        nullable=False
     )
     allocated_amount: Mapped[Decimal] = mapped_column(
         Numeric(18, 2),
@@ -223,6 +221,8 @@ class CustomerRetentionRelease(Base):
         UniqueConstraint("organization_id", "release_code", name="uq_customer_retention_releases_org_code"),
         CheckConstraint("release_amount > 0", name="ck_crr_amount_positive"),
         Index("ix_customer_retention_releases_org_inv", "organization_id", "invoice_id"),
+        Index("ix_customer_retention_releases_invoice_id", "invoice_id"),
+        Index("ix_customer_retention_releases_organization_id", "organization_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -231,18 +231,15 @@ class CustomerRetentionRelease(Base):
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
+        nullable=False
     )
     invoice_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("customer_invoices.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
+        nullable=False
     )
     release_code: Mapped[str] = mapped_column(
         String(50),
-        nullable=False,
-        index=True
+        nullable=False
     )
     release_date: Mapped[date] = mapped_column(
         Date,

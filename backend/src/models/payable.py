@@ -126,13 +126,11 @@ class VendorPaymentAllocation(Base):
     )
     bill_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("vendor_bills.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
+        nullable=False
     )
     payment_transaction_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("transactions.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True
+        nullable=False
     )
     allocated_amount: Mapped[Decimal] = mapped_column(
         Numeric(18, 2),
@@ -176,8 +174,7 @@ class VendorAdvance(Base, TimestampMixin):
     )
     advance_code: Mapped[str] = mapped_column(
         String(50),
-        nullable=False,
-        index=True
+        nullable=False
     )
     vendor_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("counterparties.id", ondelete="RESTRICT"),

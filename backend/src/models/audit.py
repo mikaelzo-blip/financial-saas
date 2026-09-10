@@ -1,7 +1,7 @@
 import uuid
 from typing import Any, Dict, Optional, TYPE_CHECKING
 from datetime import datetime
-from sqlalchemy import String, Text, ForeignKey, JSON, Index
+from sqlalchemy import String, Text, ForeignKey, JSON, Index, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -60,6 +60,7 @@ class AuditLog(Base):
         nullable=True
     )
     timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
         index=True

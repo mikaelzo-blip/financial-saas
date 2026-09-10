@@ -38,10 +38,12 @@ class JournalEntry(Base):
     __tablename__ = "journal_entries"
     __table_args__ = (
         UniqueConstraint("organization_id", "entry_number", name="uq_je_org_entry_number"),
+        UniqueConstraint("transaction_id", name="uq_je_transaction_id"),
         CheckConstraint("total_debit > 0", name="ck_je_total_debit_positive"),
         CheckConstraint("total_credit > 0", name="ck_je_total_credit_positive"),
         CheckConstraint("total_debit = total_credit", name="ck_je_balanced"),
         Index("ix_je_org_posting_date", "organization_id", "posting_date"),
+        Index("ix_journal_entries_transaction_id", "transaction_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -60,9 +62,7 @@ class JournalEntry(Base):
     )
     transaction_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("transactions.id", ondelete="RESTRICT"),
-        nullable=False,
-        unique=True,
-        index=True
+        nullable=False
     )
     posting_date: Mapped[date] = mapped_column(
         Date,

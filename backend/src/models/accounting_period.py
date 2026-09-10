@@ -24,6 +24,7 @@ class AccountingPeriod(Base):
     __tablename__ = "accounting_periods"
     __table_args__ = (
         UniqueConstraint("organization_id", "period_name", name="uq_period_org_name"),
+        Index("ix_accounting_periods_org", "organization_id"),
         Index("ix_period_org_dates", "organization_id", "start_date", "end_date"),
     )
 
@@ -33,8 +34,7 @@ class AccountingPeriod(Base):
     )
     organization_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
+        nullable=False
     )
     period_name: Mapped[str] = mapped_column(
         String(50),

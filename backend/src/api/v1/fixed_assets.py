@@ -19,6 +19,7 @@ from src.schemas.fixed_asset import (
     CapitalizationGuidanceResponse
 )
 from src.services.fixed_asset_service import FixedAssetService
+from src.services.transaction_retry import run_in_clean_transaction
 
 
 router = APIRouter(prefix="/fixed-assets", tags=["Fixed Assets / Aset Tetap"])
@@ -102,14 +103,16 @@ async def depreciate_single_asset(
     current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db)
 ):
-    service = FixedAssetService(db)
-    return await service.depreciate_asset(
-        organization_id=org_id,
-        asset_id=asset_id,
-        period_date=payload.period_date,
-        actor_id=current_user.id,
-        actor_role=current_user.role
-    )
+    async def depreciate(session: AsyncSession):
+        return await FixedAssetService(session).depreciate_asset(
+            organization_id=org_id,
+            asset_id=asset_id,
+            period_date=payload.period_date,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+        )
+
+    return await run_in_clean_transaction(db, depreciate)
 
 
 @router.post("/depreciate-batch", response_model=BatchDepreciationResponse)
@@ -119,13 +122,15 @@ async def depreciate_batch(
     current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db)
 ):
-    service = FixedAssetService(db)
-    return await service.depreciate_batch(
-        organization_id=org_id,
-        period_date=payload.period_date,
-        actor_id=current_user.id,
-        actor_role=current_user.role
-    )
+    async def depreciate(session: AsyncSession):
+        return await FixedAssetService(session).depreciate_batch(
+            organization_id=org_id,
+            period_date=payload.period_date,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+        )
+
+    return await run_in_clean_transaction(db, depreciate)
 
 
 @router.post("/{asset_id}/dispose", response_model=FixedAssetResponse)

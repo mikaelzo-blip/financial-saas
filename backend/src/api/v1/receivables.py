@@ -18,6 +18,7 @@ from src.models.user import User
 from src.schemas.transaction import TransactionCreate
 from src.services.accounting_engine import AccountingEngine
 from src.services.receivable_service import CustomerARService
+from src.services.transaction_retry import run_in_clean_transaction
 from src.services.transaction_service import TransactionService
 
 
@@ -145,16 +146,18 @@ async def release_customer_retention(
     current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db),
 ):
-    ar_service = CustomerARService(db)
-    release = await ar_service.release_customer_retention(
-        actor_id=current_user.id,
-        actor_role=current_user.role,
-        organization_id=organization_id,
-        invoice_id=data.invoice_id,
-        release_amount=data.release_amount,
-        release_date=data.release_date,
-        notes=data.notes,
-    )
+    async def release_retention(session: AsyncSession):
+        return await CustomerARService(session).release_customer_retention(
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            organization_id=organization_id,
+            invoice_id=data.invoice_id,
+            release_amount=data.release_amount,
+            release_date=data.release_date,
+            notes=data.notes,
+        )
+
+    release = await run_in_clean_transaction(db, release_retention)
     return RetentionReleaseResponse(
         id=release.id,
         invoice_id=release.invoice_id,
@@ -183,42 +186,48 @@ async def record_customer_payment(
         raise InvariantViolationException(
             f"Customer payment amount ({data.amount}) exceeds outstanding balance ({outstanding}) on {invoice.invoice_code}."
         )
-    payment = await TransactionService(db).create_transaction(
-        organization_id,
-        TransactionCreate(
-            transaction_type=TransactionType.CUSTOMER_PAYMENT,
-            transaction_date=data.payment_date,
-            amount=data.amount,
-            counterparty_id=invoice.customer_id,
-            payment_account_id=data.payment_account_id,
-            reference_no=data.reference_no,
-            description=data.description,
-            source_channel="WEB",
-        ),
-        created_by=current_user.id,
-    )
-    if payment.workflow_status == WorkflowStatus.REVIEW_REQUIRED:
-        raise InvariantViolationException(
-            "Possible duplicate customer payment is routed to review and will not be posted automatically."
+    invoice_id = invoice.id
+    invoice_customer_id = invoice.customer_id
+
+    async def record_payment(session: AsyncSession):
+        payment = await TransactionService(session).create_transaction(
+            organization_id,
+            TransactionCreate(
+                transaction_type=TransactionType.CUSTOMER_PAYMENT,
+                transaction_date=data.payment_date,
+                amount=data.amount,
+                counterparty_id=invoice_customer_id,
+                payment_account_id=data.payment_account_id,
+                reference_no=data.reference_no,
+                description=data.description,
+                source_channel="WEB",
+            ),
+            created_by=current_user.id,
         )
-    journal = await AccountingEngine(db).post_transaction(
-        organization_id,
-        payment.id,
-        actor_id=current_user.id,
-        actor_role=current_user.role,
-    )
-    allocations = await ar_service.allocate_customer_payment(
-        organization_id, payment.id, [(invoice.id, data.amount)]
-    )
-    from src.services.money_movement_service import MoneyMovementService
-    await MoneyMovementService(db).synchronize_payment_money_movement(organization_id, payment.id)
-    refreshed_invoice = await ar_service.get_invoice(organization_id, invoice.id)
-    return CustomerPaymentResponse(
-        payment_transaction_id=payment.id,
-        allocation_id=allocations[0].id,
-        journal_entry_id=journal.id,
-        invoice_id=invoice.id,
-        amount=data.amount,
-        invoice_status=refreshed_invoice.status,
-        outstanding_amount=refreshed_invoice.calculate_outstanding_amount(),
-    )
+        if payment.workflow_status == WorkflowStatus.REVIEW_REQUIRED:
+            raise InvariantViolationException(
+                "Possible duplicate customer payment is routed to review and will not be posted automatically."
+            )
+        journal = await AccountingEngine(session).post_transaction(
+            organization_id,
+            payment.id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+        )
+        allocations = await CustomerARService(session).allocate_customer_payment(
+            organization_id, payment.id, [(invoice_id, data.amount)]
+        )
+        from src.services.money_movement_service import MoneyMovementService
+        await MoneyMovementService(session).synchronize_payment_money_movement(organization_id, payment.id)
+        refreshed_invoice = await CustomerARService(session).get_invoice(organization_id, invoice_id)
+        return CustomerPaymentResponse(
+            payment_transaction_id=payment.id,
+            allocation_id=allocations[0].id,
+            journal_entry_id=journal.id,
+            invoice_id=invoice_id,
+            amount=data.amount,
+            invoice_status=refreshed_invoice.status,
+            outstanding_amount=refreshed_invoice.calculate_outstanding_amount(),
+        )
+
+    return await run_in_clean_transaction(db, record_payment)

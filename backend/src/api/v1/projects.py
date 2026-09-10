@@ -15,6 +15,7 @@ from src.schemas.project import (
     ProjectBudgetResponse,
 )
 from src.services.project_service import ProjectService
+from src.services.transaction_retry import run_in_clean_transaction
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -31,9 +32,10 @@ async def create_project(
     db: AsyncSession = Depends(get_db)
 ):
     """Creates a new project master record for the tenant organization."""
-    service = ProjectService(db)
-    project = await service.create_project(org_id, data)
-    return project
+    async def create(session: AsyncSession):
+        return await ProjectService(session).create_project(org_id, data)
+
+    return await run_in_clean_transaction(db, create)
 
 
 @router.get(

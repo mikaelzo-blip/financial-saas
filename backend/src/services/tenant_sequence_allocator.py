@@ -12,6 +12,7 @@ YEAR_SCOPED_NAMESPACES = frozenset(
     {"TRX", "JE", "PRJ", "DOC", "INV", "BIL", "ADV", "REL", "MM"}
 )
 SUPPORTED_NAMESPACES = YEAR_SCOPED_NAMESPACES | {"SET"}
+GENERATED_CODE_NAMESPACES_SESSION_KEY = "f012_generated_code_namespaces"
 
 
 class SequenceAllocationError(ValueError):
@@ -23,6 +24,10 @@ class InvalidSequenceOrganizationError(SequenceAllocationError):
 
 
 class InvalidSequenceScopeError(SequenceAllocationError):
+    pass
+
+
+class SequenceCollisionError(SequenceAllocationError):
     pass
 
 
@@ -79,4 +84,10 @@ async def allocate_next(
         )
         .returning(TenantSequence.current_value)
     )
-    return int((await session.execute(statement)).scalar_one())
+    value = int((await session.execute(statement)).scalar_one())
+    generated_namespaces = session.info.setdefault(
+        GENERATED_CODE_NAMESPACES_SESSION_KEY,
+        set(),
+    )
+    generated_namespaces.add(namespace)
+    return value

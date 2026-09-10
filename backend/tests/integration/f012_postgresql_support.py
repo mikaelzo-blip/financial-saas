@@ -98,9 +98,58 @@ async def test_organizations(
         yield organization_ids
     finally:
         async with pg_session_factory() as session, session.begin():
+            parameters = {"org_a": organization_ids[0], "org_b": organization_ids[1]}
+            organization_filter = "organization_id IN (:org_a, :org_b)"
+            await session.execute(
+                text(
+                    "DELETE FROM settlement_allocations WHERE settlement_id IN "
+                    "(SELECT id FROM settlements WHERE " + organization_filter + ")"
+                ),
+                parameters,
+            )
+            await session.execute(
+                text("DELETE FROM settlements WHERE " + organization_filter),
+                parameters,
+            )
+            await session.execute(
+                text("DELETE FROM money_movements WHERE " + organization_filter),
+                parameters,
+            )
+            await session.execute(
+                text(
+                    "DELETE FROM journal_lines WHERE journal_entry_id IN "
+                    "(SELECT id FROM journal_entries WHERE " + organization_filter + ")"
+                ),
+                parameters,
+            )
+            await session.execute(
+                text("DELETE FROM journal_entries WHERE " + organization_filter),
+                parameters,
+            )
+            await session.execute(
+                text(
+                    "DELETE FROM transaction_allocations WHERE transaction_id IN "
+                    "(SELECT id FROM transactions WHERE " + organization_filter + ")"
+                ),
+                parameters,
+            )
+            await session.execute(
+                text("DELETE FROM transactions WHERE " + organization_filter),
+                parameters,
+            )
+            await session.execute(
+                text("DELETE FROM payment_accounts WHERE " + organization_filter),
+                parameters,
+            )
+            await session.execute(
+                text(
+                    "DELETE FROM chart_of_accounts WHERE " + organization_filter
+                ),
+                parameters,
+            )
             await session.execute(
                 text("DELETE FROM organizations WHERE id IN (:org_a, :org_b)"),
-                {"org_a": organization_ids[0], "org_b": organization_ids[1]},
+                parameters,
             )
 
 

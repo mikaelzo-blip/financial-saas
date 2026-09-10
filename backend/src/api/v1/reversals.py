@@ -52,14 +52,17 @@ async def reverse_transaction(
     current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db)
 ):
+    actor_id = current_user.id
+    actor_role = current_user.role
+
     async def reverse(session: AsyncSession):
         service = ReversalService(session)
         rev_trx, _ = await service.reverse_transaction(
             organization_id=org_id,
             original_transaction_id=transaction_id,
             reason=data.reason,
-            actor_id=current_user.id,
-            actor_role=current_user.role
+            actor_id=actor_id,
+            actor_role=actor_role
         )
         return rev_trx.id
 

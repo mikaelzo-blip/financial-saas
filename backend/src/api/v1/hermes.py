@@ -18,6 +18,7 @@ from src.schemas.document import DocumentResponse
 from src.services.audit_service import AuditService
 from src.services.document_service import DocumentService
 from src.services.documents.pipeline import process_document_background
+from src.services.transaction_retry import run_in_clean_transaction
 from src.api.whatsapp_auth import whatsapp_machine_organization
 
 router = APIRouter(prefix="/hermes", tags=["Hermes"])
@@ -90,6 +91,7 @@ async def upload_document(
             raise HTTPException(403, "Sender unavailable")
     elif source_channel != "API" or source_metadata != "{}":
         raise HTTPException(422, "Unsupported source metadata")
+    sender_user_id = sender.user_id if sender else None
     key_hash = idempotency_hash(idempotency_key)
     existing = await db.scalar(select(HermesSubmission).where(and_(
         HermesSubmission.organization_id == organization_id,
@@ -103,46 +105,49 @@ async def upload_document(
         response.headers["X-Hermes-Correlation-ID"] = str(existing.id)
         return await DocumentService(db).get_document(organization_id, existing.document_id)
 
-    submission = HermesSubmission(
-        organization_id=organization_id,
-        operation=DOCUMENT_INTAKE_OPERATION,
-        idempotency_key_hash=key_hash,
-        outcome_status="RECEIVED",
-    )
-    db.add(submission)
-    await db.flush()
+    async def ingest(session: AsyncSession) -> tuple[DocumentResponse, uuid.UUID, bool]:
+        submission = HermesSubmission(
+            organization_id=organization_id,
+            operation=DOCUMENT_INTAKE_OPERATION,
+            idempotency_key_hash=key_hash,
+            outcome_status="RECEIVED",
+        )
+        session.add(submission)
+        await session.flush()
 
-    service = DocumentService(db)
-    from src.services.document_service import compute_sha256
-    duplicate = await service.get_document_by_hash(organization_id, compute_sha256(file.file)) if sender else None
-    document = duplicate or await service.ingest_document(
-        organization_id=organization_id,
-        file_obj=file.file,
-        file_name=file.filename or "unknown_file",
-        mime_type=file.content_type or "application/octet-stream",
-        document_type=document_type,
-        source_channel=source_channel,
-        source_metadata={**metadata, "hermes_submission_id": str(submission.id)},
-        created_by=sender.user_id if sender else None,
-    )
-    submission.document_id = document.id
-    submission.outcome_status = "ACCEPTED"
-    await AuditService(db).log_event(
-        organization_id, "HermesSubmission", submission.id, "HERMES_DOCUMENT_SUBMITTED",
-        new_values={
-            "document_id": str(document.id),
-            "operation": DOCUMENT_INTAKE_OPERATION,
-            "idempotency_key_fingerprint": key_hash[:12],
-            "outcome_status": submission.outcome_status,
-        },
-    )
+        service = DocumentService(session)
+        from src.services.document_service import compute_sha256
+        duplicate = await service.get_document_by_hash(organization_id, compute_sha256(file.file)) if sender else None
+        document = duplicate or await service.ingest_document(
+            organization_id=organization_id,
+            file_obj=file.file,
+            file_name=file.filename or "unknown_file",
+            mime_type=file.content_type or "application/octet-stream",
+            document_type=document_type,
+            source_channel=source_channel,
+            source_metadata={**metadata, "hermes_submission_id": str(submission.id)},
+            created_by=sender_user_id,
+        )
+        submission.document_id = document.id
+        submission.outcome_status = "ACCEPTED"
+        await AuditService(session).log_event(
+            organization_id, "HermesSubmission", submission.id, "HERMES_DOCUMENT_SUBMITTED",
+            new_values={
+                "document_id": str(document.id),
+                "operation": DOCUMENT_INTAKE_OPERATION,
+                "idempotency_key_fingerprint": key_hash[:12],
+                "outcome_status": submission.outcome_status,
+            },
+        )
+        if process and not duplicate:
+            document.processing_status = DocumentProcessingStatus.EXTRACTING
+            await session.flush()
+        return document, submission.id, duplicate is not None
+
+    document, submission_id, duplicate = await run_in_clean_transaction(db, ingest)
     if duplicate:
         response.headers["X-Document-Duplicate"] = "true"
     if process and not duplicate:
-        document.processing_status = DocumentProcessingStatus.EXTRACTING
-        await db.flush()
         background_tasks.add_task(process_document_background, document.id)
-    response.headers["X-Hermes-Correlation-ID"] = str(submission.id)
-    if sender:
-        await db.commit()
+    response.headers["X-Hermes-Correlation-ID"] = str(submission_id)
     return document

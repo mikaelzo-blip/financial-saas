@@ -66,22 +66,26 @@ async def upload_document(
     process: bool = Form(True),
     org_id: uuid.UUID = Depends(get_current_org_id),
     user_id: uuid.UUID = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    service = DocumentService(db)
-    document = await service.ingest_document(
-        organization_id=org_id,
-        file_obj=file.file,
-        file_name=file.filename or "unknown_file",
-        mime_type=file.content_type or "application/octet-stream",
-        document_type=document_type,
-        source_channel=source_channel,
-        project_id=project_id,
-        created_by=user_id
-    )
+    async def ingest(session: AsyncSession):
+        document = await DocumentService(session).ingest_document(
+            organization_id=org_id,
+            file_obj=file.file,
+            file_name=file.filename or "unknown_file",
+            mime_type=file.content_type or "application/octet-stream",
+            document_type=document_type,
+            source_channel=source_channel,
+            project_id=project_id,
+            created_by=user_id,
+        )
+        if process:
+            document.processing_status = DocumentProcessingStatus.EXTRACTING
+            await session.flush()
+        return document
+
+    document = await run_in_clean_transaction(db, ingest)
     if process:
-        document.processing_status = DocumentProcessingStatus.EXTRACTING
-        await db.flush()
         background_tasks.add_task(process_document_background, document.id)
     return document
 

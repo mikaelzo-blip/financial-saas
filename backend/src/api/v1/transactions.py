@@ -81,14 +81,16 @@ async def post_transaction(
     current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db)
 ):
+    actor_id = current_user.id
+    actor_role = current_user.role
     from src.services.processing_policy_service import ProcessingPolicyService
 
     async def post(session: AsyncSession) -> uuid.UUID:
         transaction, _ = await ProcessingPolicyService(session).authorize_and_post(
             org_id,
             transaction_id,
-            actor_id=current_user.id,
-            actor_role=current_user.role,
+            actor_id=actor_id,
+            actor_role=actor_role,
             bypass_role_check=False,
         )
         return transaction.id
@@ -108,14 +110,16 @@ async def approve_transaction(
     current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db)
 ):
+    actor_id = current_user.id
+    actor_role = current_user.role
     from src.services.processing_policy_service import ProcessingPolicyService
 
     async def approve(session: AsyncSession) -> uuid.UUID:
         transaction, _ = await ProcessingPolicyService(session).authorize_and_post(
             org_id,
             transaction_id,
-            actor_id=current_user.id,
-            actor_role=current_user.role,
+            actor_id=actor_id,
+            actor_role=actor_role,
             bypass_role_check=False,
         )
         return transaction.id
@@ -137,6 +141,8 @@ async def establish_opening_balances(
     db: AsyncSession = Depends(get_db)
 ):
     raw_entries = [e.model_dump() for e in payload.entries]
+    actor_id = current_user.id
+    actor_role = current_user.role
 
     async def establish(session: AsyncSession) -> uuid.UUID:
         posted_trx = await OpeningBalanceService(session).post_opening_balances(
@@ -144,8 +150,8 @@ async def establish_opening_balances(
             as_of_date=payload.as_of_date,
             balance_entries=raw_entries,
             notes=payload.notes or "Saldo Awal Pembukuan",
-            actor_id=current_user.id,
-            actor_role=current_user.role,
+            actor_id=actor_id,
+            actor_role=actor_role,
         )
         return posted_trx.id
 

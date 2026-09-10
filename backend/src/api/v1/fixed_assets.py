@@ -103,13 +103,16 @@ async def depreciate_single_asset(
     current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db)
 ):
+    actor_id = current_user.id
+    actor_role = current_user.role
+
     async def depreciate(session: AsyncSession):
         return await FixedAssetService(session).depreciate_asset(
             organization_id=org_id,
             asset_id=asset_id,
             period_date=payload.period_date,
-            actor_id=current_user.id,
-            actor_role=current_user.role,
+            actor_id=actor_id,
+            actor_role=actor_role,
         )
 
     return await run_in_clean_transaction(db, depreciate)
@@ -122,12 +125,15 @@ async def depreciate_batch(
     current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db)
 ):
+    actor_id = current_user.id
+    actor_role = current_user.role
+
     async def depreciate(session: AsyncSession):
         return await FixedAssetService(session).depreciate_batch(
             organization_id=org_id,
             period_date=payload.period_date,
-            actor_id=current_user.id,
-            actor_role=current_user.role,
+            actor_id=actor_id,
+            actor_role=actor_role,
         )
 
     return await run_in_clean_transaction(db, depreciate)

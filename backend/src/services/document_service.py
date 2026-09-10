@@ -151,40 +151,49 @@ class DocumentService:
             if not project:
                 raise ValueError("Project is not available in this organization")
 
-        # Save to storage
-        storage_path = self.storage.save_file(organization_id, file_obj, file_name)
+        storage_path: Optional[str] = None
+        try:
+            # Save to storage
+            storage_path = self.storage.save_file(organization_id, file_obj, file_name)
 
-        # Generate code
-        doc_code = await self.generate_document_code(organization_id)
+            # Generate code
+            doc_code = await self.generate_document_code(organization_id)
 
-        document = Document(
-            organization_id=organization_id,
-            document_code=doc_code,
-            document_type=document_type,
-            file_name=file_name,
-            mime_type=mime_type,
-            file_size_bytes=file_size,
-            file_hash=file_hash,
-            storage_path=storage_path,
-            source_channel=source_channel,
-            source_metadata=source_metadata or {},
-            created_by=created_by,
-            processing_status=DocumentProcessingStatus.HASHED,
-        )
-        self.session.add(document)
-        await self.session.flush()
-        await AuditService(self.session).log_event(
-            organization_id, "Document", document.id, "DOCUMENT_RECEIVED", created_by,
-            new_values={"source_channel": source_channel, "file_hash": file_hash,
-                        "mime_type": mime_type, "file_size_bytes": file_size},
-        )
-
-        # Link to the already validated tenant-scoped project if provided.
-        if project:
-            self.session.add(ProjectDocumentLink(project_id=project.id, document_id=document.id))
+            document = Document(
+                organization_id=organization_id,
+                document_code=doc_code,
+                document_type=document_type,
+                file_name=file_name,
+                mime_type=mime_type,
+                file_size_bytes=file_size,
+                file_hash=file_hash,
+                storage_path=storage_path,
+                source_channel=source_channel,
+                source_metadata=source_metadata or {},
+                created_by=created_by,
+                processing_status=DocumentProcessingStatus.HASHED,
+            )
+            self.session.add(document)
             await self.session.flush()
+            await AuditService(self.session).log_event(
+                organization_id, "Document", document.id, "DOCUMENT_RECEIVED", created_by,
+                new_values={"source_channel": source_channel, "file_hash": file_hash,
+                            "mime_type": mime_type, "file_size_bytes": file_size},
+            )
 
-        return document
+            # Link to the already validated tenant-scoped project if provided.
+            if project:
+                self.session.add(ProjectDocumentLink(project_id=project.id, document_id=document.id))
+                await self.session.flush()
+
+            return document
+        except Exception:
+            if storage_path is not None:
+                try:
+                    self.storage.delete_file(storage_path)
+                except OSError:
+                    pass
+            raise
 
     async def list_documents(
         self,

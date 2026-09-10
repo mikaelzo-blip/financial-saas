@@ -49,3 +49,10 @@ class StorageService:
         if root != resolved and root not in resolved.parents:
             raise ValueError("Document storage path escapes configured storage root")
         return resolved
+
+    def delete_file(self, storage_path: str) -> None:
+        path = self.get_file_path(storage_path)
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass

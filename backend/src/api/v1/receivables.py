@@ -146,10 +146,13 @@ async def release_customer_retention(
     current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db),
 ):
+    actor_id = current_user.id
+    actor_role = current_user.role
+
     async def release_retention(session: AsyncSession):
         return await CustomerARService(session).release_customer_retention(
-            actor_id=current_user.id,
-            actor_role=current_user.role,
+            actor_id=actor_id,
+            actor_role=actor_role,
             organization_id=organization_id,
             invoice_id=data.invoice_id,
             release_amount=data.release_amount,
@@ -188,6 +191,8 @@ async def record_customer_payment(
         )
     invoice_id = invoice.id
     invoice_customer_id = invoice.customer_id
+    actor_id = current_user.id
+    actor_role = current_user.role
 
     async def record_payment(session: AsyncSession):
         payment = await TransactionService(session).create_transaction(
@@ -202,7 +207,7 @@ async def record_customer_payment(
                 description=data.description,
                 source_channel="WEB",
             ),
-            created_by=current_user.id,
+            created_by=actor_id,
         )
         if payment.workflow_status == WorkflowStatus.REVIEW_REQUIRED:
             raise InvariantViolationException(
@@ -211,8 +216,8 @@ async def record_customer_payment(
         journal = await AccountingEngine(session).post_transaction(
             organization_id,
             payment.id,
-            actor_id=current_user.id,
-            actor_role=current_user.role,
+            actor_id=actor_id,
+            actor_role=actor_role,
         )
         allocations = await CustomerARService(session).allocate_customer_payment(
             organization_id, payment.id, [(invoice_id, data.amount)]

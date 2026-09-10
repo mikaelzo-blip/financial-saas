@@ -139,6 +139,8 @@ async def record_vendor_payment(
     bill_vendor_id = bill.vendor_id
     bill_project_id = bill.project_id
     bill_code = bill.bill_code
+    actor_id = current_user.id
+    actor_role = current_user.role
 
     async def record_payment(session: AsyncSession):
         payment = await TransactionService(session).create_transaction(
@@ -154,7 +156,7 @@ async def record_vendor_payment(
                 description=data.description or f"Pembayaran tagihan {bill_code}",
                 source_channel="WEB",
             ),
-            created_by=current_user.id,
+            created_by=actor_id,
         )
         if payment.workflow_status == WorkflowStatus.REVIEW_REQUIRED:
             raise InvariantViolationException(
@@ -163,8 +165,8 @@ async def record_vendor_payment(
         journal = await AccountingEngine(session).post_transaction(
             organization_id,
             payment.id,
-            actor_id=current_user.id,
-            actor_role=current_user.role,
+            actor_id=actor_id,
+            actor_role=actor_role,
         )
         allocations = await VendorAPService(session).allocate_vendor_payment(
             organization_id, payment.id, [(bill_id, data.amount)]
@@ -176,7 +178,7 @@ async def record_vendor_payment(
             payment_transaction_id=payment.id,
             allocation_id=allocations[0].id,
             journal_entry_id=journal.id,
-            bill_id=bill.id,
+            bill_id=bill_id,
             amount=data.amount,
             bill_status=refreshed_bill.status,
             outstanding_amount=refreshed_bill.calculate_outstanding_amount(),

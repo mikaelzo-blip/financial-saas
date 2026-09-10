@@ -10,14 +10,14 @@
 
 ## Evidence Boundary
 
-This research was performed against commit `538817cc87165835a962c2032c65589fdcbfe09f` on the Feature 012 branch, with no source or migration changes. The audit used direct source/model/migration inspection and attempted PostgreSQL availability checks. No live PostgreSQL instance was reachable: port 5432 was closed, no native PostgreSQL service or process was present, Docker Desktop was stopped, and `psql`/`pg_isready` were unavailable.
+This research was originally prepared against commit `538817cc87165835a962c2032c65589fdcbfe09f` on the Feature 012 branch. It has been reconciled after the branch was refreshed onto current `origin/main` at `1d502016c1133a09de8eedd1e4bf0858c501bd98`, including the merged Alembic metadata-baseline prerequisite. The PostgreSQL evidence was executed against a disposable PostgreSQL 16 database with no production data, and no production source, migration, or tracked test implementation was added in this preparation phase.
 
 Therefore:
 
-- FIN-P1-104 is a **confirmed schema/generation mismatch** from static evidence and can be demonstrated without concurrency.
-- FIN-P1-103 is a **confirmed static race risk**, not a reproduced PostgreSQL failure.
+- FIN-P1-104 remains a **confirmed schema/generation mismatch**, reproduced against PostgreSQL.
+- FIN-P1-103 is a **reproduced PostgreSQL race and collision defect**, not merely a static risk.
 - SQLite tests are not accepted as evidence for PostgreSQL row-locking or MVCC behavior.
-- No production fix, migration, or temporary reproduction test was committed in this phase.
+- The merged baseline prerequisite is present and `uv run alembic check` is clean; Feature 012 production implementation remains unstarted.
 
 ## 1. Generator Inventory and Findings
 
@@ -72,10 +72,10 @@ Reversal generation is especially important because it independently counts the 
 
 ### Reproduction result
 
-The intended reproduction is N concurrent PostgreSQL transactions creating records in one tenant/year, with separate sessions and a barrier before allocation. It was not executed because PostgreSQL was unavailable. The result is therefore:
+The reproduction used N concurrent PostgreSQL transactions creating records in one tenant/year, with separate sessions and a barrier before allocation. The unmodified generators reproduced duplicate candidates and create-path uniqueness collisions. The result is therefore:
 
 - **Static risk: CONFIRMED**
-- **PostgreSQL reproduced defect: NOT REPRODUCED / ENVIRONMENT BLOCKED**
+- **PostgreSQL reproduced defect: VERIFIED**
 - **SQLite equivalence: REJECTED**
 
 ## 4. FIN-P1-104 Analysis
@@ -99,11 +99,11 @@ This is a semantic mismatch, not merely a timing issue. The preferred correction
 | E. Unique constraint plus bounded retry | Provides a safety net and can recover races when constraints exist | Only as correct as the constraint scope | Failed attempts must roll back cleanly; retry needs a fresh transaction/session state | Composite constraints still required for FIN-P1-104; no allocator migration if accepting gaps | Useful defense-in-depth, but does not guarantee success for unconstrained tables or eliminate repeated race failures |
 | F. Existing repository-native mechanism | No existing authoritative allocator was found; current mechanisms are COUNT/max scans | N/A | N/A | N/A | Rejected as unavailable |
 
-### Provisional recommendation
+### Validated recommendation
 
-Use a tenant/year counter table with an atomic row-locked allocation in the same database transaction as the business record, retaining the current prefixes and padding. Add bounded collision retry only as defense-in-depth around authoritative unique constraints. This recommendation is provisional until the PostgreSQL reproduction and migration dry-run are executed. Do not substitute an in-process Python lock.
+Use a tenant/year counter table with an atomic row-locked allocation in the same database transaction as the business record, retaining the current prefixes and padding. Add bounded collision retry only as defense-in-depth around authoritative unique constraints. PostgreSQL reproduction and migration dry-run evidence validate the design. Do not substitute an in-process Python lock.
 
-The allocator must support namespaces whose format is not year-scoped, such as settlement codes, by using an explicit nullable or sentinel year policy defined in the implementation contract; the chosen representation must be consistent and tested. No new business policy should be inferred from the absence of a year in `SET-######`.
+The allocator supports namespaces whose format is not year-scoped, such as settlement codes, with the explicit non-null `scope_key="GLOBAL"` policy defined in the implementation contract. No new business policy is inferred from the absence of a year in `SET-######`.
 
 ## 6. Historical Data and Migration Safety
 
@@ -121,9 +121,10 @@ Confirmed now:
 - Global uniqueness remains correct for organization slugs and WhatsApp sender phone mappings.
 - `DocumentSession.session_code` is not included in the migration scope solely because it is globally unique; its entropy concern needs a separate decision if it becomes operationally material.
 
-Open implementation gates:
+Implementation checkpoints that remain:
 
-- Provision a real PostgreSQL service/container and execute same-tenant, cross-tenant, rollback, and posting-integrity reproductions.
-- Verify migration constraint names and run duplicate preflight queries against a non-production database.
-- Confirm the counter-table year representation for non-year-coded namespaces.
-- Decide whether caller-supplied `asset_code` and depreciation transaction-code length validation are part of this feature or a separately approved follow-up; they are directly related but not required to prove FIN-P1-104.
+- Add tracked PostgreSQL regression tests for same-tenant concurrency and cross-tenant constraint behavior.
+- Implement and test the database-backed allocator and all affected generator call sites.
+- Add and validate the one forward migration after `021_fixed_asset_enhancements`.
+- Implement bounded retry with a clean transaction/session boundary and verify posting integrity.
+- Caller-supplied `asset_code` and depreciation transaction-code length validation remain separately approved follow-up observations; they are directly related but not required to prove FIN-P1-104.

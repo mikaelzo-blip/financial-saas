@@ -10,7 +10,7 @@ Proposed table: `tenant_sequences`.
 | `organization_id` | UUID | not null, FK to `organizations.id`, restrict/cascade per existing tenant model policy | Tenant owner of the sequence. |
 | `namespace` | String(32) | not null | Stable internal namespace such as `TRX`, `JE`, `PRJ`, `DOC`, `INV`, `BIL`, `ADV`, `REL`, `MM`, or `SET`. |
 | `scope_key` | String(32) | not null | Calendar year string (e.g. `'2026'`) for year-coded namespaces; explicit `'GLOBAL'` sentinel for tenant-global non-year namespaces (`SET`). Strictly non-null; PostgreSQL NULL semantics are prohibited. |
-| `next_value` | Integer / BIGINT | not null, positive, default 1 | Next number to reserve; exact type must cover the largest existing padding range. |
+| `current_value` | Integer / BIGINT | not null, non-negative, default 0 | Last allocated number for the scope; allocation increments it atomically and returns the new value. The exact type must cover the largest existing padding range. |
 | `created_at` | timezone datetime | not null | Audit metadata. |
 | `updated_at` | timezone datetime | not null | Audit metadata. |
 
@@ -23,8 +23,8 @@ The allocator receives `(organization_id, namespace, scope_key)` where `scope_ke
 
 1. Validate organization and namespace input.
 2. Lock the existing scope row with `SELECT ... FOR UPDATE`.
-3. If the row does not exist, insert it using an insert-on-conflict/bootstrap loop that handles concurrent first allocation without duplicate scope rows.
-4. Increment `next_value` atomically and return the prior value.
+3. If the row does not exist, insert it with `current_value=0` using an insert-on-conflict/bootstrap loop that handles concurrent first allocation without duplicate scope rows.
+4. Increment `current_value` atomically and return the new value.
 5. Render the existing format in the service boundary (`SET-000001`, `TRX-2026-000001`, etc.).
 6. Let the business record and any journal/posting work commit in the same transaction.
 
@@ -50,7 +50,7 @@ Transaction code, journal entry number, project code, document code, invoice cod
 
 ## 3. Alembic Migration Strategy
 
-Proposed revision: one new revision after `021_fixed_asset_enhancements`, with the actual revision identifier selected by repository convention during implementation.
+Required revision: one new forward Alembic revision after the current head `021_fixed_asset_enhancements`, with the actual revision identifier selected by repository convention during implementation.
 
 ### Upgrade preflight
 

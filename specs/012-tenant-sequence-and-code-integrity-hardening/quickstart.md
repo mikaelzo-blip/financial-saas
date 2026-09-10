@@ -14,7 +14,7 @@ uv run alembic current
 uv run pytest tests/integration/test_live_postgresql_schema.py -rs
 ```
 
-The integration test must connect to a real PostgreSQL database and verify the current migration head (`021_fixed_asset_enhancements`). The evidence gate reached that head from a fresh database. `alembic check` nevertheless reports pre-existing model/schema drift, which must be reconciled before Feature 012 implementation.
+The integration test must connect to a real PostgreSQL database and verify the current migration head (`021_fixed_asset_enhancements`). The refreshed Feature 012 branch reaches that head, and the merged metadata prerequisite makes `uv run alembic check` clean. Feature 012 implementation may proceed from this baseline after the tracked PostgreSQL regression-test checkpoint is added.
 
 ## 2. Concurrency reproduction
 

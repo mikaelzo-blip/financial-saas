@@ -5,6 +5,8 @@
 **Plan**: `specs/012-tenant-sequence-and-code-integrity-hardening/plan.md`  
 **Tasks**: `specs/012-tenant-sequence-and-code-integrity-hardening/tasks.md`  
 **Analysis date**: 2026-09-10
+**Reconciled baseline**: `origin/main` / `1d502016c1133a09de8eedd1e4bf0858c501bd98`
+**Feature evidence checkpoint**: `01e2e3dd73259fa8d41f33adaaccc9bf80abf586` (rebased preservation of analysis checkpoint `b3773485d0a332bf332d28b49e589a77aeb3adfd`)
 
 ## 1. Requirement Traceability Matrix
 
@@ -14,19 +16,19 @@
 | FR-002 atomic year-coded namespaces | Architecture; CP2/CP3 | T006-T019 | COVERED |
 | FR-003 atomic non-year SET namespace | Data model scope policy | T017 | COVERED, policy resolved |
 | FR-004 shared TRX normal/reversal namespace | CP3 | T013-T014, T018 | COVERED |
-| FR-005 preserve formats/API/history | Global constraints; CP3/CP5 | T014, T016, T029, T034 | COVERED |
+| FR-005 preserve formats/API/history | Global constraints; CP3/CP6 | T014, T016, T029, T034 | COVERED |
 | FR-006 tenant isolation | Constitution check; counter schema | T012, T018, T019, T025, T028 | COVERED |
 | FR-007 three composite uniqueness changes only | CP4; migration strategy | T020-T025 | COVERED |
 | FR-008 same-tenant duplicate rejection | CP4 | T020, T025 | COVERED |
 | FR-009 same transaction/no partial records | Counter allocation; rollback strategy | T010-T012, T018, T028 | COVERED |
 | FR-010 bounded clean retry/no duplicate posting | Contract; CP5 | T011, T026-T028 | COVERED, production implementation pending |
 | FR-011 accounting and immutability invariants | Constitution check | T028, T034 | COVERED |
-| FR-012 PostgreSQL-specific verification | Evidence boundary; CP0/CP5 | T002-T005, T019, T025, T031-T032 | EVIDENCE COMPLETE; baseline drift blocks implementation |
+| FR-012 PostgreSQL-specific verification | Evidence boundary; CP1/CP6 | T002-T005, T019, T025, T031-T032 | EVIDENCE COMPLETE; tracked regression coverage pending |
 | FR-013 preflight/fail-closed/non-destructive migration | Data model migration strategy | T021-T025 | COVERED; preflight simulation passed |
 | FR-014 intentional global identifiers | Research inventory | T030, T033 | COVERED |
 | FR-015 protected storage untouched | Global constraints | T034 | COVERED |
 | FR-016 classify excluded/related identifiers | Research and scope gate | T029-T030, T033 | COVERED |
-| FR-017 complete regression/concurrency matrix | CP5 | T003-T005, T019, T024-T030, T031-T032 | COVERED by plan; tracked tests pending |
+| FR-017 complete regression/concurrency matrix | CP1/CP6 | T003-T005, T019, T024-T030, T031-T032 | COVERED by plan; tracked tests pending |
 
 **Traceability result: 17/17 requirements covered (100%).**
 
@@ -38,13 +40,14 @@
 
 - Fresh database: Alembic upgrade from scratch completed through `021_fixed_asset_enhancements`.
 - Existing disposable database: `alembic current` and `alembic heads` both report `021_fixed_asset_enhancements (head)`.
+- Current branch contains the merged metadata reconciliation; authoritative model registration is complete and `uv run alembic check` reports `No new upgrade operations detected.`
 - Live schema constraints verified:
   - `uq_money_movements_movement_code` — global `UNIQUE (movement_code)`.
   - `uq_settlements_settlement_code` — global `UNIQUE (settlement_code)`.
   - `uq_fixed_assets_asset_code` — global `UNIQUE (asset_code)`.
   - `uq_document_sessions_session_code` — global `UNIQUE (session_code)`.
 - `tenant_sequences` is not part of the current baseline; it was created only by a throwaway harness and removed afterward.
-- **Schema drift**: **YES, pre-existing/unrelated to Feature 012**. A fresh-chain `uv run alembic check` reports numerous model/schema differences, including existing tables/indexes absent from the model metadata and existing model indexes/constraint representation differences. This is a baseline blocker and must be reconciled before production implementation.
+- **Schema drift**: **NO** on the refreshed branch baseline. The merged metadata reconciliation is present, and `uv run alembic check` completed with `No new upgrade operations detected.`
 
 ## 3. FIN-P1-103 — Concurrency Evidence
 
@@ -148,16 +151,16 @@ One Alembic revision is required, after `021_fixed_asset_enhancements`.
 | Live constraint verification | PASS | Expected names and definitions verified. |
 | Duplicate preflight | PASS | Zero existing tenant/code duplicate tuples. |
 | Alembic head | PASS | Fresh and existing disposable databases reached `021_fixed_asset_enhancements`. |
-| Alembic drift check | FAIL / baseline blocker | Fresh-chain `alembic check` reported substantial pre-existing model/schema drift. |
+| Alembic drift check | PASS | Refreshed current-main baseline reports `No new upgrade operations detected.` |
 | Tracked evidence tests | PENDING | Throwaway scripts are ignored; no tracked integration tests were added. |
 | Production implementation | NOT STARTED | No production source, model, migration, or tracked test changes. |
 
 **Requirement coverage: 100% (17/17).**
 
-**Critical/High consistency result**: Feature-specific evidence is complete, but implementation readiness is **NO** because baseline Alembic drift must be reconciled and the clean retry boundary remains unimplemented.
+**Critical/High consistency result**: No Feature 012 Critical/High consistency issue is identified. Baseline drift is resolved. Tracked PostgreSQL tests and production clean-retry behavior remain implementation work.
 
 **Constitution violations**: 0 identified.
 
-**Spec Kit consistency result**: **NO — blocked by baseline drift and incomplete implementation-gate status**. The policy and feature evidence are consistent; the repository baseline is not clean enough to authorize implementation.
+**Spec Kit consistency result**: **YES for implementation authorization**. The policy, evidence, current baseline, counter design, migration parent, and checkpoint tasks are consistent. Tracked regression tests and clean-retry behavior are pending implementation, not unresolved design ambiguity.
 
-**Exact next action**: Reconcile the pre-existing SQLAlchemy/Alembic model-schema drift in a separately scoped baseline task, then add tracked PostgreSQL evidence tests and implement Feature 012 only after the baseline `alembic check` is clean and the retry transaction boundary is specified/tested. Do not modify production code in the current checkpoint.
+**Exact next action**: Begin CP1 by adding the tracked PostgreSQL evidence/regression tests for FIN-P1-103 and FIN-P1-104. Do not begin CP1 in this reconciliation turn.

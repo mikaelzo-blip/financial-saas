@@ -1,14 +1,14 @@
 # Project Status
 
-- **Last reconciled**: 2026-09-09
-- **Current origin/main baseline**: `origin/main` (exact commit verified from Git)
-- **Active branch**: `main`
-- **Active implementation feature**: None
+- **Last reconciled**: 2026-09-10
+- **Current origin/main baseline**: `1d502016c1133a09de8eedd1e4bf0858c501bd98` (exact commit verified from Git)
+- **Active branch**: `hermes/012-tenant-sequence-and-code-integrity-hardening`
+- **Active implementation feature**: Feature 012, tenant sequence and code integrity hardening
+- **Feature 012 checkpoint**: Reconciled after local-only rebase onto current `origin/main`; preserved evidence checkpoint rebased as `01e2e3dd73259fa8d41f33adaaccc9bf80abf586` from `b3773485d0a332bf332d28b49e589a77aeb3adfd`.
+- **Feature 012 baseline**: Alembic head `021_fixed_asset_enhancements`; merged metadata registration prerequisite present; `uv run alembic check` reports `No new upgrade operations detected.`
+- **Feature 012 evidence**: FIN-P1-103 PostgreSQL race/collision and FIN-P1-104 tenant/global constraint mismatch remain verified from disposable PostgreSQL evidence. Counter design, tenant/year/SET scope, rollback, isolation, and restart behavior remain validated.
+- **Feature 012 implementation state**: No production implementation, migration, or tracked Feature 012 tests have been added. CP1 tracked PostgreSQL regression tests are next.
+- **Feature 012 blockers**: None for design authorization. Tracked PostgreSQL tests and clean transaction retry behavior are implementation checkpoints, not blockers.
 - **Feature 011 status**: COMPLETE and merged through PR #54 using squash merge. No uncommitted production application code remains.
-- **Feature 011 merge**: PR #54, squash commit `ec083874b73574abcd3a999536a3c175c7fd11d1`; implementation head was `799474c335f5864415e1807e21c61ccbfb8bf66c`.
-- **Feature 011 evidence**: Spec Kit coverage `12/12 (100%)`; Critical findings `0`; High findings `0`; Medium findings `0`. Backend `400 passed, 3 skipped`; frontend `66 passed`; Node bridge `6 passed` plus Baileys `9 passed`; lint `0 errors` with 8 pre-existing warnings; typecheck, production build, Alembic offline chain, repository safety, and GitHub CI passed.
-- **Documentation**: `specs/011-security-accounting-invariant-hardening/final-analysis.md` and the supplied audit document preserve the final traceability, invariant, security, and out-of-scope audit evidence.
-- **Protected data**: `backend/storage` and `backend/backend/storage` remain untouched. No `.env`, credentials, temporary logs, caches, or codebase-memory artifacts are part of Feature 011.
-- **Remaining notes**: `edge-relay/package.json` has no `test` script; standalone Node bridge tests pass. Broader P1/P2 audit observations remain deferred to their own approved scope and are not marked resolved here.
-- **Blockers**: None for Feature 011.
-- **Next action**: Select the next approved remediation item or feature through the required Spec Kit workflow. Do not start it automatically.
+- **Protected data**: `backend/storage` and `backend/backend/storage` remain untouched. No `.env`, credentials, temporary logs, caches, or codebase-memory artifacts are part of Feature 012.
+- **Next action**: Begin CP1 by adding tracked PostgreSQL evidence/regression tests. Do not begin CP1 in the current reconciliation turn.

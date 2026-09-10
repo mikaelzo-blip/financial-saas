@@ -18,19 +18,20 @@
 - Do not use an in-process Python lock as the authoritative allocator.
 - Preserve tenant isolation, deterministic accounting, balanced journals, immutable posted history, and reversal correction flow.
 - Leave `backend/storage` and `backend/backend/storage` untouched.
-- Do not modify production code until PostgreSQL reproduction and the migration safety gate pass.
+- Do not modify production code until the PostgreSQL evidence, migration safety, and current Alembic baseline gates pass. Those prerequisite gates are now verified; implementation begins at CP1 with tracked regression tests.
 
 ---
 
 ## Evidence and Scope Gate
 
-The audit against commit `538817cc87165835a962c2032c65589fdcbfe09f` identified:
+The audit was originally performed against commit `538817cc87165835a962c2032c65589fdcbfe09f` and is preserved in the Feature 012 evidence commit. After refresh onto current `origin/main` commit `1d502016c1133a09de8eedd1e4bf0858c501bd98`:
 
-- Static race risks in normal and reversal transaction, journal, project, document, invoice, bill, advance, retention-release, and money-movement/settlement generators.
-- Confirmed tenant/global uniqueness mismatches in `movement_code`, `settlement_code`, and `asset_code`.
-- Disposable PostgreSQL 16 is available locally in Docker; the unmodified generators reproduced FIN-P1-103, and the counter design passed independent N=50 and failure/recovery probes.
-- The Alembic chain was applied from scratch and reached `021_fixed_asset_enhancements`; however, `alembic check` reports pre-existing model/schema drift unrelated to Feature 012. This is a baseline blocker, so production implementation remains prohibited until the drift is reconciled.
-- `DocumentSession.session_code` and UUID-derived technical identifiers are recorded but excluded from this migration scope.
+- Reproduced PostgreSQL race risks remain confirmed in normal and reversal transaction, journal, project, document, invoice, bill, advance, retention-release, and money-movement/settlement generators.
+- Confirmed tenant/global uniqueness mismatches remain limited to `movement_code`, `settlement_code`, and `asset_code`.
+- Disposable PostgreSQL 16 evidence remains valid; the unmodified generators reproduced FIN-P1-103, and the counter design passed independent N=50 and failure/recovery probes.
+- The Alembic chain reaches `021_fixed_asset_enhancements`, and the merged metadata prerequisite makes `uv run alembic check` clean. The baseline drift blocker is resolved.
+- `DocumentSession.session_code` and UUID-derived technical identifiers remain recorded but excluded from this migration scope.
+- Tracked PostgreSQL regression tests and production clean-transaction retry behavior are not yet implemented; they are explicit implementation checkpoints, not design blockers.
 
 ### Evidence gate record
 
@@ -40,8 +41,8 @@ The audit against commit `538817cc87165835a962c2032c65589fdcbfe09f` identified:
 - FIN-P1-103: reproduced with 50 concurrent candidate allocations and 50 concurrent transaction creates; normal/reversal shared `TRX` collision observed.
 - Counter harness: atomic `INSERT ... ON CONFLICT ... RETURNING` passed 50 concurrent first-row allocations, tenant/year/SET scope isolation, rollback, failed-transaction recovery, and new-engine continuation.
 - Migration preflight: zero current duplicate tenant/code tuples; transactional simulation proved cross-tenant same-code success and same-tenant rejection, with downgrade blocked once cross-tenant duplicates exist.
-- Baseline blocker: fresh-chain `uv run alembic check` reports substantial pre-existing model/schema drift unrelated to this feature. Do not treat this as Feature 012 drift or proceed to implementation until reconciled.
-- Retry blocker: the poisoned-session probe verified that PostgreSQL aborts the transaction after a unique violation and that rollback recovers the session; production retry logic is not implemented and must establish a fresh transaction/session boundary.
+- Baseline verification: current merged metadata registration is complete, `021_fixed_asset_enhancements` is the current migration head, and `uv run alembic check` reports `No new upgrade operations detected.`
+- Retry implementation checkpoint: the poisoned-session probe verified that PostgreSQL aborts the transaction after a unique violation and that rollback recovers the session; production retry logic is not implemented and must establish a fresh transaction/session boundary.
 
 ## Proposed File Structure
 
@@ -62,7 +63,7 @@ The audit against commit `538817cc87165835a962c2032c65589fdcbfe09f` identified:
 - Add the tenant-sequence model under `backend/src/models/` and register it in `backend/src/models/__init__.py` if required by repository conventions.
 - Modify the inventoried generator call sites in `transaction_service.py`, `reversal_service.py`, `accounting_engine.py`, `project_service.py`, `document_service.py`, `payable_service.py`, `receivable_service.py`, and `money_movement_service.py`.
 - Modify `money_movement.py` and `fixed_asset.py` model constraints.
-- Add one Alembic revision after `021_fixed_asset_enhancements` only after live schema and constraint names are verified.
+- Add exactly one forward Alembic revision after current head `021_fixed_asset_enhancements` only after live schema and constraint names are verified.
 - Add focused unit and PostgreSQL integration tests under `backend/tests/unit/` and `backend/tests/integration/`.
 
 ## Constitution Check
@@ -81,33 +82,37 @@ The audit against commit `538817cc87165835a962c2032c65589fdcbfe09f` identified:
 | Financial invariants | EVIDENCE PASS / IMPLEMENTATION PENDING | Throwaway rollback probes showed no committed counter allocation after rollback; financial posting code remains unchanged. |
 | Protected storage | PASS | Protected storage paths are excluded and must not be accessed. |
 
-**Gate status:** PostgreSQL concurrency, constraint, preflight, first-row, rollback, and counter-design evidence is available. Implementation readiness remains **BLOCKED** by pre-existing Alembic model/schema drift and by the unimplemented poisoned-session retry contract.
+**Gate status:** PostgreSQL concurrency, constraint, preflight, first-row, rollback, counter-design, and current Alembic-baseline evidence is available. The prerequisite baseline is clean. Tracked PostgreSQL regression tests and the production poisoned-session retry contract remain implementation work.
 
 ## Implementation Checkpoints
 
-### CP0 — PostgreSQL evidence and baseline
+### CP1 — Tracked PostgreSQL regression/evidence tests
 
-Provision or connect to a disposable non-production PostgreSQL database using an external secret mechanism; do not commit credentials. Verify Alembic head is `021_fixed_asset_enhancements`, run the existing integration baseline, and execute the unmodified race/mismatch reproductions. Record exact results. If PostgreSQL is unavailable, stop.
+Add and run the unmodified PostgreSQL reproduction tests for same-tenant allocation races and cross-tenant movement/settlement/asset constraint mismatches. Preserve the observed current failures as evidence, with no production implementation changes in this checkpoint. Add the internal contract from `contracts/sequence-generator-interface.md` to the test boundary.
 
-### CP1 — Failing tests and allocator contract
+### CP2 — Tenant sequence model and allocator
 
-Add tests first for same-tenant concurrent allocation, empty-scope bootstrap, rollback, shared TRX namespace, bounded collision behavior, and cross-tenant isolation. Run them red against the current implementation. Add the internal contract from `contracts/sequence-generator-interface.md`.
+Implement the counter table and allocator with a non-null `current_value` and unique scope key `(organization_id, namespace, scope_key)` where `scope_key` is strictly non-null (`YYYY` for year-scoped namespaces, `"GLOBAL"` for tenant-global non-year `SET`), and atomic row lock/update inside the caller’s transaction. Keep sequence gaps on rollback acceptable; never reuse an issued committed code.
 
-### CP2 — Counter schema and allocator
+### CP3 — Migrate all affected generators
 
-Implement the counter table and allocator with a unique scope key `(organization_id, namespace, scope_key)` where `scope_key` is strictly non-null (`YYYY` for year-scoped namespaces, `"GLOBAL"` for tenant-global non-year `SET`), and atomic row lock/update inside the caller’s transaction. Keep sequence gaps on rollback acceptable; never reuse an issued committed code.
+Update each inventoried generator to use one allocator namespace while preserving its exact prefix, year, and padding. Ensure reversal and normal transaction paths share `TRX`. Settlement generator `_generate_settlement_code` uses the `"GLOBAL"` scope key and preserves `SET-######`.
 
-### CP3 — Generator migration
+### CP4 — Feature 012 Alembic migration
 
-Update each inventoried generator to use one allocator namespace while preserving its exact prefix, year, and padding. Ensure reversal and normal transaction paths share `TRX`. Add bounded retry only where a fresh transaction can be safely established; do not catch and continue inside a poisoned transaction. Settlement generator `_generate_settlement_code` uses the `"GLOBAL"` scope key and preserves `SET-######`.
+After preflight duplicate checks and live constraint-name verification, add exactly one forward Alembic revision after `021_fixed_asset_enhancements`. It creates `tenant_sequences` and changes only the three confirmed mismatches to `(organization_id, code)` constraints. Update SQLAlchemy models to match. Verify upgrade and downgrade on a disposable PostgreSQL database; fail closed if expected constraints are absent or duplicate tuples exist.
 
-### CP4 — Composite uniqueness migration
+### CP5 — Clean transaction retry and rollback handling
 
-After preflight duplicate checks and live constraint-name verification, add a single Alembic revision that changes only the three confirmed mismatches to `(organization_id, code)` constraints. Update SQLAlchemy models to match. Verify upgrade and downgrade on a disposable PostgreSQL database; fail closed if expected constraints are absent or duplicate tuples exist.
+Implement bounded collision retry only at a transaction boundary that can discard the failed session state and request a fresh authoritative allocation. Never catch and continue on a poisoned transaction. Add exhausted-retry and no-partial-state coverage.
 
-### CP5 — End-to-end and invariant verification
+### CP6 — End-to-end and invariant verification
 
-Run N=50 same-tenant creates per representative generator, cross-tenant identical-code scenarios, same-tenant duplicates, rollback, retries, year rollover, no-duplicate-posting, tenant ownership, format compatibility, Alembic chain, lint, type checks, dependency checks, and full tests. Review all direct callers before delivery. Caller-supplied `asset_code` validation and fixed-asset depreciation transaction-code length validation are recorded as deferred follow-up observations and kept out of scope.
+Run N=50 same-tenant creates per representative generator, cross-tenant identical-code scenarios, same-tenant duplicates, rollback, retries, year rollover, no-duplicate-posting, tenant ownership, format compatibility, migration chain, lint, type checks, dependency checks, and full tests. Review all direct callers before delivery. Caller-supplied `asset_code` validation and fixed-asset depreciation transaction-code length validation are recorded as deferred follow-up observations and kept out of scope.
+
+### CP7 — Full verification, review, and delivery evidence
+
+Complete requirement traceability, repository safety review, independent code review, and all applicable local and CI gates before delivery. Do not push or merge an implementation checkpoint without passing its required verification.
 
 ## Rollback Strategy
 

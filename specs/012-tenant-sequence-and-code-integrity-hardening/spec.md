@@ -2,7 +2,7 @@
 
 **Feature Branch**: `012-tenant-sequence-and-code-integrity-hardening`  
 **Created**: 2026-09-10  
-**Status**: SPECIFIED, CLARIFIED & EVIDENCE-GATED; IMPLEMENTATION BLOCKED BY BASELINE DRIFT  
+**Status**: SPECIFIED, CLARIFIED, EVIDENCE-GATED & IMPLEMENTATION-READY
 **Input**: FIN-P1-103, FIN-P1-104, and independently verified current-main identifier audit
 
 ## Clarifications
@@ -16,7 +16,7 @@
 - **Q5: Must generated formats change?** → **Decision**: No. Preserve `TRX-YYYY-######`, `JE-YYYY-######`, `PRJ-YYYY-###`, `DOC-YYYY-######`, `INV-YYYY-######`, `BIL-YYYY-######`, `ADV-YYYY-######`, `REL-YYYY-######`, `MM-YYYY-######`, and `SET-######` unless a new approved policy makes the current format impossible to preserve.
 - **Q6: Is a process-local Python lock acceptable?** → **Decision**: No. Authoritative allocation must be database-backed and transactionally safe across processes and workers.
 - **Q7: Is `DocumentSession.session_code` a confirmed Feature 012 mismatch?** → **Decision**: No. Its generation and global constraint are aligned. Its truncated random entropy is recorded as a static related concern but is not migrated under this feature without separate scope approval.
-- **Q8: What happens when PostgreSQL cannot be used for the required reproduction?** → **Decision**: The feature remains blocked and no claim of reproduced PostgreSQL failure may be made. In this evidence gate, disposable PostgreSQL was available and the race was reproduced; implementation is still blocked by baseline schema/model drift and the unimplemented clean-retry contract.
+- **Q8: What happens when PostgreSQL cannot be used for the required reproduction?** → **Decision**: The feature remains blocked and no claim of reproduced PostgreSQL failure may be made. In this evidence gate, disposable PostgreSQL was available and the race was reproduced. The Alembic baseline prerequisite is now resolved; tracked PostgreSQL tests and clean-retry behavior remain implementation checkpoints, not design blockers.
 - **Q9: What is the exact counter scope and schema representation for SET settlement codes?** → **Decision**: SET settlement codes are TENANT-GLOBAL and DO NOT reset by year. Each organization has its own monotonically allocated SET namespace (`SET-000001`, `SET-000002`, ...). PostgreSQL NULL semantics MUST NOT be used to represent this scope. The counter design uses an explicit non-null `scope_key` representation: `organization_id`, `namespace`, `scope_key`, where year-scoped namespaces use an explicit year value (e.g. `'2026'`) and non-year tenant-global namespaces use the explicit non-null value `'GLOBAL'`. The visible `SET-######` format remains unchanged.
 - **Q10: Are caller-supplied asset_code validation and fixed-asset depreciation transaction-code length validation in scope for Feature 012?** → **Decision**: No. They are confirmed OUT OF SCOPE for Feature 012 unless proven to block sequence/constraint remediation itself. They are recorded as deferred follow-up observations.
 

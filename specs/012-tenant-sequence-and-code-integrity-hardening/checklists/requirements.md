@@ -28,6 +28,6 @@
 
 ## Notes
 
-- PostgreSQL-specific concurrency reproduction is environment-blocked at specification time because no local PostgreSQL service/container is reachable.
-- The implementation gate must provision or otherwise access a real non-production PostgreSQL database before claiming reproduced concurrency results.
-- The provisional allocator recommendation is a tenant/year counter table with transactional row locking, with bounded retry as defense-in-depth; it remains subject to implementation-stage verification.
+- PostgreSQL-specific concurrency reproduction was environment-blocked at the original specification checkpoint, but the later disposable PostgreSQL evidence gate reproduced the defect and validated the counter design.
+- The merged Alembic metadata prerequisite is now present; the refreshed baseline reaches `021_fixed_asset_enhancements` and `uv run alembic check` is clean.
+- The validated allocator recommendation is a tenant/year counter table with transactional row locking, explicit `scope_key="GLOBAL"` for tenant-global SET codes, and bounded retry as defense-in-depth. Tracked regression tests and production implementation remain pending.

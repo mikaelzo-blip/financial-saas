@@ -94,13 +94,13 @@ Add and run the unmodified PostgreSQL reproduction tests for same-tenant allocat
 
 Implement the counter table and allocator with a non-null `current_value` and unique scope key `(organization_id, namespace, scope_key)` where `scope_key` is strictly non-null (`YYYY` for year-scoped namespaces, `"GLOBAL"` for tenant-global non-year `SET`), and atomic row lock/update inside the caller’s transaction. Keep sequence gaps on rollback acceptable; never reuse an issued committed code.
 
-### CP3 — Migrate all affected generators
-
-Update each inventoried generator to use one allocator namespace while preserving its exact prefix, year, and padding. Ensure reversal and normal transaction paths share `TRX`. Settlement generator `_generate_settlement_code` uses the `"GLOBAL"` scope key and preserves `SET-######`.
-
-### CP4 — Feature 012 Alembic migration
+### CP3 — Feature 012 Alembic migration
 
 After preflight duplicate checks and live constraint-name verification, add exactly one forward Alembic revision after `021_fixed_asset_enhancements`. It creates `tenant_sequences` and changes only the three confirmed mismatches to `(organization_id, code)` constraints. Update SQLAlchemy models to match. Verify upgrade and downgrade on a disposable PostgreSQL database; fail closed if expected constraints are absent or duplicate tuples exist.
+
+### CP4 — Migrate all affected generators
+
+Update each inventoried generator to use one allocator namespace while preserving its exact prefix, year, and padding. Ensure reversal and normal transaction paths share `TRX`. Settlement generator `_generate_settlement_code` uses the `"GLOBAL"` scope key and preserves `SET-######`.
 
 ### CP5 — Clean transaction retry and rollback handling
 

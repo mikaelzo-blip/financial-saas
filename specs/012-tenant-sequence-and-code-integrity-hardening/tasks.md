@@ -24,7 +24,16 @@
 - [ ] T011 Add bounded exhausted-range and collision errors using existing exception conventions; ensure a failed SQL transaction is not reused after a uniqueness error.
 - [ ] T012 Run allocator unit tests and a focused PostgreSQL allocator test; verify tenant isolation, empty-scope concurrency, rollback, and no duplicate committed values.
 
-## Phase 3: User Story 1 — Race-Proof Core Generators (P1)
+## Phase 3: User Story 2 — Tenant-Scoped Composite Uniqueness (P1)
+
+- [x] T020 Write failing model/migration tests proving that same-tenant duplicate movement, settlement, and asset codes are rejected while cross-tenant identical codes are accepted after migration.
+- [x] T021 Add exactly one new Alembic revision after current head `021_fixed_asset_enhancements` that creates `tenant_sequences`, preflights duplicate `(organization_id, code)` tuples, and verifies expected live global constraint names before DDL.
+- [x] T022 In the migration, create `tenant_sequences` and its non-null unique `(organization_id, namespace, scope_key)` constraint, then create composite constraints before dropping global constraints for `money_movements.movement_code`, `settlements.settlement_code`, and `fixed_assets.asset_code`; do not modify data.
+- [x] T023 Update `backend/src/models/money_movement.py` and `backend/src/models/fixed_asset.py` to remove column-level global uniqueness and declare matching `UniqueConstraint` definitions.
+- [x] T024 Add migration tests for upgrade, downgrade, offline SQL generation, missing-constraint fail-closed behavior, duplicate-preflight fail-closed behavior, and historical-value preservation.
+- [x] T025 Run the migration on a disposable PostgreSQL database, verify actual constraint names through PostgreSQL metadata, and execute the cross-tenant/same-tenant constraint matrix.
+
+## Phase 4: User Story 1 — Race-Proof Core Generators (P1)
 
 - [ ] T013 Write failing tests for `TransactionService.generate_transaction_code` and `ReversalService.generate_reversal_code` sharing one tenant/year `TRX` allocation namespace, including concurrent normal/reversal creation.
 - [ ] T014 Replace the independent COUNT+1 implementations in `backend/src/services/transaction_service.py` and `backend/src/services/reversal_service.py` with the shared allocator while preserving `TRX-YYYY-######`.
@@ -33,15 +42,6 @@
 - [ ] T017 Add settlement allocation tests for the approved non-year `SET-######` scope (`scope_key="GLOBAL"`) and update `_generate_settlement_code` without inventing a new external format.
 - [ ] T018 Verify all direct callers of the modified generators, including HTTP, background worker, WhatsApp/Baileys intake, asynchronous document processing, payment, retention, fixed-asset, and reversal paths; ensure the same `AsyncSession` transaction carries allocation and record creation.
 - [ ] T019 Add PostgreSQL N=50 concurrency tests for representative and highest-risk generators, asserting unique committed codes, no partial records, correct organization ownership, and no unhandled collision.
-
-## Phase 4: User Story 2 — Tenant-Scoped Composite Uniqueness (P1)
-
-- [ ] T020 Write failing model/migration tests proving that same-tenant duplicate movement, settlement, and asset codes are rejected while cross-tenant identical codes are accepted after migration.
-- [ ] T021 Add exactly one new Alembic revision after current head `021_fixed_asset_enhancements` that creates `tenant_sequences`, preflights duplicate `(organization_id, code)` tuples, and verifies expected live global constraint names before DDL.
-- [ ] T022 In the migration, create `tenant_sequences` and its non-null unique `(organization_id, namespace, scope_key)` constraint, then create composite constraints before dropping global constraints for `money_movements.movement_code`, `settlements.settlement_code`, and `fixed_assets.asset_code`; do not modify data.
-- [ ] T023 Update `backend/src/models/money_movement.py` and `backend/src/models/fixed_asset.py` to remove column-level global uniqueness and declare matching `UniqueConstraint` definitions.
-- [ ] T024 Add migration tests for upgrade, downgrade, offline SQL generation, missing-constraint fail-closed behavior, duplicate-preflight fail-closed behavior, and historical-value preservation.
-- [ ] T025 Run the migration on a disposable PostgreSQL database, verify actual constraint names through PostgreSQL metadata, and execute the cross-tenant/same-tenant constraint matrix.
 
 ## Phase 5: User Story 3 — Retry, Rollback, and Financial Safety (P2)
 
@@ -84,8 +84,8 @@ T028/T030 -> T031/T032/T033/T034/T035/T036
 
 1. Establish real PostgreSQL evidence and capture the current behavior.
 2. Implement and verify one allocator vertical slice with tests first.
-3. Migrate the shared TRX path, then remaining year-coded generators.
-4. Apply and verify the three composite uniqueness changes.
+3. Apply and verify the three composite uniqueness changes and create the allocator foundation migration.
+4. Migrate the shared TRX path, then remaining year-coded generators.
 5. Add bounded retry and financial invariant regression tests.
 6. Run all gates, perform independent review, and stop if any required evidence is unavailable.
 

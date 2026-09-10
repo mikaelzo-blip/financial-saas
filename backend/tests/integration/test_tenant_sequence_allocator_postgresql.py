@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 from uuid import UUID
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -24,13 +24,9 @@ CONCURRENCY = 50
 
 @pytest.fixture
 async def tenant_sequence_schema(pg_engine: AsyncEngine) -> AsyncIterator[None]:
+    yield
     async with pg_engine.begin() as connection:
-        await connection.run_sync(TenantSequence.__table__.create, checkfirst=True)
-    try:
-        yield
-    finally:
-        async with pg_engine.begin() as connection:
-            await connection.run_sync(TenantSequence.__table__.drop, checkfirst=True)
+        await connection.execute(text("DELETE FROM tenant_sequences"))
 
 
 async def allocate_committed(

@@ -26,6 +26,11 @@ class FixedAsset(Base):
     """
     __tablename__ = "fixed_assets"
     __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "asset_code",
+            name="uq_fixed_assets_org_code",
+        ),
         Index("ix_fixed_assets_org", "organization_id"),
         Index("ix_fixed_assets_category", "organization_id", "asset_category"),
     )
@@ -40,8 +45,7 @@ class FixedAsset(Base):
     )
     asset_code: Mapped[str] = mapped_column(
         String(50),
-        nullable=False,
-        unique=True
+        nullable=False
     )
     asset_name: Mapped[str] = mapped_column(
         String(255),

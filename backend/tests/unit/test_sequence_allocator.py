@@ -3,6 +3,9 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import CheckConstraint, UniqueConstraint
 
+from src.models.fixed_asset import FixedAsset
+from src.models.money_movement import MoneyMovement, Settlement
+
 from src.core.database import Base
 from src.models import TenantSequence
 from src.services.tenant_sequence_allocator import (
@@ -59,6 +62,26 @@ def test_tenant_sequence_model_is_registered_with_required_constraints() -> None
     organization_fk = next(iter(table.c.organization_id.foreign_keys))
     assert organization_fk.target_fullname == "organizations.id"
     assert organization_fk.ondelete == "CASCADE"
+
+
+def test_tenant_owned_business_codes_use_composite_model_constraints() -> None:
+    expected = {
+        MoneyMovement.__table__: ("uq_money_movements_org_code", "movement_code"),
+        Settlement.__table__: ("uq_settlements_org_code", "settlement_code"),
+        FixedAsset.__table__: ("uq_fixed_assets_org_code", "asset_code"),
+    }
+
+    for table, (constraint_name, code_column) in expected.items():
+        unique_constraints = {
+            constraint.name: tuple(column.name for column in constraint.columns)
+            for constraint in table.constraints
+            if isinstance(constraint, UniqueConstraint)
+        }
+        assert unique_constraints[constraint_name] == (
+            "organization_id",
+            code_column,
+        )
+        assert table.c[code_column].unique is not True
 
 
 @pytest.mark.parametrize(

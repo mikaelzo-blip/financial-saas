@@ -29,13 +29,13 @@ def test_base_metadata_contains_all_migration_tables():
 
 
 def test_no_unapproved_orphan_tables_in_base_metadata():
-    """Allow only the Feature-012 model intentionally pending its CP4 migration."""
+    """Verify every registered production table is migration-backed."""
     migration_tables = get_migration_tables()
     metadata_tables = set(Base.metadata.tables.keys())
 
     extra_tables = metadata_tables - migration_tables
-    assert extra_tables == {"tenant_sequences"}, (
-        "Base.metadata drift must be limited to the approved Feature-012 table: "
+    assert not extra_tables, (
+        "Base.metadata contains tables absent from the Alembic chain: "
         f"{sorted(extra_tables)}"
     )
 

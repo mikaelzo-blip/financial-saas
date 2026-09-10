@@ -25,6 +25,7 @@ from src.schemas.money_movement import (
     SettlementCreate,
     SettlementAllocationCreate,
 )
+from src.services.tenant_sequence_allocator import allocate_next
 from src.core.exceptions import InvariantViolationException, EntityNotFoundException
 
 
@@ -227,27 +228,13 @@ class MoneyMovementService:
         return [created_source, created_dest]
 
     async def _generate_movement_code(self, organization_id: uuid.UUID, movement_date: date) -> str:
-        year = movement_date.year
-        prefix = f"MM-{year}-"
-        count_stmt = select(func.count(MoneyMovement.id)).where(
-            and_(
-                MoneyMovement.organization_id == organization_id,
-                MoneyMovement.movement_code.like(f"{prefix}%")
-            )
-        )
-        count = await self.session.scalar(count_stmt) or 0
-        return f"{prefix}{count + 1:06d}"
+        year = str(movement_date.year)
+        seq = await allocate_next(self.session, organization_id, "MM", year)
+        return f"MM-{year}-{seq:06d}"
 
     async def _generate_settlement_code(self, organization_id: uuid.UUID) -> str:
-        prefix = "SET-"
-        count_stmt = select(func.count(Settlement.id)).where(
-            and_(
-                Settlement.organization_id == organization_id,
-                Settlement.settlement_code.like(f"{prefix}%")
-            )
-        )
-        count = await self.session.scalar(count_stmt) or 0
-        return f"{prefix}{count + 1:06d}"
+        seq = await allocate_next(self.session, organization_id, "SET", "GLOBAL")
+        return f"SET-{seq:06d}"
 
     async def create_money_movement(
         self,

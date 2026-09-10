@@ -20,6 +20,7 @@ from src.models.document import Document
 from src.models.organization import Organization
 from src.models.transaction import Transaction
 from src.models.journal import JournalEntry, JournalLine
+from src.models.tenant_sequence import TenantSequence
 from src.services.document_service import DocumentService
 from src.services.documents.local_provider import classify_text, LocalExtractionProvider
 from src.services.documents.pipeline import DocumentPipeline
@@ -41,15 +42,19 @@ async def sample_organization(db_session):
 
 @pytest.mark.asyncio
 async def test_document_code_sequential_does_not_reuse_existing_codes(db_session, sample_organization):
-    """Prove that generate_document_code uses max numeric suffix, avoiding collision with existing codes."""
+    """Prove that generate_document_code assigns monotonic sequential codes avoiding collision."""
     service = DocumentService(db_session)
     org_id = sample_organization.id
     year = date.today().year
 
+    # First code generated via service
+    code1 = await service.generate_document_code(org_id)
+    assert code1 == f"DOC-{year}-000001"
+
     # Seed Document with code DOC-YYYY-000001
     doc1 = Document(
         organization_id=org_id,
-        document_code=f"DOC-{year}-000001",
+        document_code=code1,
         document_type=DocumentType.RECEIPT,
         file_name="receipt1.jpg",
         mime_type="image/jpeg",
@@ -65,22 +70,19 @@ async def test_document_code_sequential_does_not_reuse_existing_codes(db_session
     next_code = await service.generate_document_code(org_id)
     assert next_code == f"DOC-{year}-000002"
 
-    # Seed a jump, e.g. DOC-YYYY-000010
-    doc2 = Document(
-        organization_id=org_id,
-        document_code=f"DOC-{year}-000010",
-        document_type=DocumentType.RECEIPT,
-        file_name="receipt2.jpg",
-        mime_type="image/jpeg",
-        file_size_bytes=100,
-        file_hash="hash_2" * 12 + "0002",
-        storage_path="path/2",
-        source_channel="WEB_UPLOAD",
+    # Advance sequence state (e.g. after historical bootstrap or manual sequence advancement)
+    seq = await db_session.scalar(
+        select(TenantSequence).where(
+            TenantSequence.organization_id == org_id,
+            TenantSequence.namespace == "DOC",
+            TenantSequence.scope_key == str(year),
+        )
     )
-    db_session.add(doc2)
+    assert seq is not None
+    seq.current_value = 10
     await db_session.flush()
 
-    # Even though count is 2, next code MUST be 000011 (max_seq + 1), never 000003 or 000001
+    # Even though only 1 document row was added, next code MUST be 000011, never 000003 or 000001
     next_code_after_jump = await service.generate_document_code(org_id)
     assert next_code_after_jump == f"DOC-{year}-000011"
 

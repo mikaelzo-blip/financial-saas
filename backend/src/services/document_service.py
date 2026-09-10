@@ -12,6 +12,7 @@ from src.models.project import Project
 from src.models.enums import DocumentType, DocumentProcessingStatus
 from src.services.storage_service import StorageService
 from src.services.audit_service import AuditService
+from src.services.tenant_sequence_allocator import allocate_next
 from src.core.exceptions import EntityNotFoundException, DuplicateEntityException
 from src.core.config import settings
 
@@ -51,23 +52,9 @@ class DocumentService:
 
     async def generate_document_code(self, organization_id: uuid.UUID) -> str:
         """Generates sequential document code in format DOC-YYYY-###### (e.g. DOC-2026-000001)."""
-        year = date.today().year
-        prefix = f"DOC-{year}-"
-
-        stmt = select(Document.document_code).where(
-            and_(
-                Document.organization_id == organization_id,
-                Document.document_code.like(f"{prefix}%")
-            )
-        )
-        codes = (await self.session.execute(stmt)).scalars().all()
-        max_seq = 0
-        for code in codes:
-            suffix = code[len(prefix):]
-            if suffix.isdigit():
-                max_seq = max(max_seq, int(suffix))
-        next_seq = max_seq + 1
-        return f"{prefix}{next_seq:06d}"
+        year = str(date.today().year)
+        seq = await allocate_next(self.session, organization_id, "DOC", year)
+        return f"DOC-{year}-{seq:06d}"
 
     async def get_document_by_hash(
         self,

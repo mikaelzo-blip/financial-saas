@@ -41,7 +41,9 @@ async def allocate_concurrently(
     async def worker() -> str:
         async with session_factory() as session:
             await barrier.wait()
-            return await allocator(session)
+            code = await allocator(session)
+            await session.commit()
+            return code
 
     tasks = [asyncio.create_task(worker()) for _ in range(count)]
     await barrier.wait()
@@ -215,16 +217,20 @@ async def test_normal_and_reversal_paths_share_transaction_namespace(
     async def normal() -> str:
         async with pg_session_factory() as session:
             await barrier.wait()
-            return await TransactionService(session).generate_transaction_code(
+            code = await TransactionService(session).generate_transaction_code(
                 organization_id, BUSINESS_DATE
             )
+            await session.commit()
+            return code
 
     async def reversal() -> str:
         async with pg_session_factory() as session:
             await barrier.wait()
-            return await ReversalService(session).generate_reversal_code(
+            code = await ReversalService(session).generate_reversal_code(
                 organization_id, BUSINESS_DATE
             )
+            await session.commit()
+            return code
 
     normal_task = asyncio.create_task(normal())
     reversal_task = asyncio.create_task(reversal())

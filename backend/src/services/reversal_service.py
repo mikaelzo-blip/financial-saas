@@ -14,6 +14,7 @@ from src.models.enums import TransactionType, WorkflowStatus, UserRole
 from src.services.accounting_engine import AccountingEngine
 from src.services.accounting_period_service import assert_period_allows_posting
 from src.services.audit_service import AuditService
+from src.services.tenant_sequence_allocator import allocate_next
 from src.core.exceptions import EntityNotFoundException, InvariantViolationException, AuthorizationException
 
 
@@ -28,17 +29,9 @@ class ReversalService:
         self.audit = AuditService(session)
 
     async def generate_reversal_code(self, organization_id: uuid.UUID, rev_date: Optional[date] = None) -> str:
-        year = (rev_date or date.today()).year
-        prefix = f"TRX-{year}-"
-        stmt = select(func.count()).select_from(Transaction).where(
-            and_(
-                Transaction.organization_id == organization_id,
-                Transaction.transaction_code.like(f"{prefix}%")
-            )
-        )
-        count = await self.session.scalar(stmt) or 0
-        next_seq = count + 1
-        return f"{prefix}{next_seq:06d}"
+        year = str((rev_date or date.today()).year)
+        seq = await allocate_next(self.session, organization_id, "TRX", year)
+        return f"TRX-{year}-{seq:06d}"
 
     async def reverse_transaction(
         self,

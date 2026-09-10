@@ -12,6 +12,7 @@ from src.models.enums import TransactionType, UserRole, WorkflowStatus
 from src.models.organization import Organization
 from src.models.counterparty import Counterparty
 from src.models.project import Project
+from src.services.tenant_sequence_allocator import allocate_next
 from src.core.exceptions import AuthorizationException, EntityNotFoundException, InvariantViolationException
 
 
@@ -23,18 +24,9 @@ class CustomerARService:
         self.session = session
 
     async def generate_invoice_code(self, organization_id: uuid.UUID, invoice_date: Optional[date] = None) -> str:
-        year = (invoice_date or date.today()).year
-        prefix = f"INV-{year}-"
-
-        stmt = select(func.count()).select_from(CustomerInvoice).where(
-            and_(
-                CustomerInvoice.organization_id == organization_id,
-                CustomerInvoice.invoice_code.like(f"{prefix}%")
-            )
-        )
-        count = await self.session.scalar(stmt) or 0
-        next_seq = count + 1
-        return f"{prefix}{next_seq:06d}"
+        year = str((invoice_date or date.today()).year)
+        seq = await allocate_next(self.session, organization_id, "INV", year)
+        return f"INV-{year}-{seq:06d}"
 
     async def calculate_effective_due_date(
         self,
@@ -195,17 +187,9 @@ class CustomerARService:
         return created_allocations
 
     async def generate_retention_release_code(self, organization_id: uuid.UUID, release_date: Optional[date] = None) -> str:
-        year = (release_date or date.today()).year
-        prefix = f"REL-{year}-"
-        stmt = select(func.count()).select_from(CustomerRetentionRelease).where(
-            and_(
-                CustomerRetentionRelease.organization_id == organization_id,
-                CustomerRetentionRelease.release_code.like(f"{prefix}%")
-            )
-        )
-        count = await self.session.scalar(stmt) or 0
-        next_seq = count + 1
-        return f"{prefix}{next_seq:06d}"
+        year = str((release_date or date.today()).year)
+        seq = await allocate_next(self.session, organization_id, "REL", year)
+        return f"REL-{year}-{seq:06d}"
 
     async def release_customer_retention(
         self,

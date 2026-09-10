@@ -23,6 +23,7 @@ from src.schemas.transaction import (
     TransactionAllocationInput,
 )
 from src.services.duplicate_service import DuplicateDetectionService
+from src.services.tenant_sequence_allocator import allocate_next
 from src.core.exceptions import EntityNotFoundException, InvariantViolationException
 
 
@@ -60,18 +61,9 @@ class TransactionService:
         trx_date: Optional[date] = None
     ) -> str:
         """Generates sequential transaction code in format TRX-YYYY-###### (e.g. TRX-2026-000001)."""
-        year = (trx_date or date.today()).year
-        prefix = f"TRX-{year}-"
-
-        stmt = select(func.count()).select_from(Transaction).where(
-            and_(
-                Transaction.organization_id == organization_id,
-                Transaction.transaction_code.like(f"{prefix}%")
-            )
-        )
-        count = await self.session.scalar(stmt) or 0
-        next_seq = count + 1
-        return f"{prefix}{next_seq:06d}"
+        year = str((trx_date or date.today()).year)
+        seq = await allocate_next(self.session, organization_id, "TRX", year)
+        return f"TRX-{year}-{seq:06d}"
 
     async def get_transaction(
         self,

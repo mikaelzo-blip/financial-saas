@@ -57,3 +57,6 @@ include = ["src*"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "postgresql: requires a disposable PostgreSQL integration database",
+]

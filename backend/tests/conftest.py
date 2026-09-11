@@ -1,4 +1,7 @@
-pytest_plugins = ["tests.integration.f012_postgresql_support"]
+pytest_plugins = [
+    "tests.integration.f012_postgresql_support",
+    "tests.integration.fin001_postgresql_support",
+]
 
 from typing import AsyncGenerator
 

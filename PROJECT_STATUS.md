@@ -1,15 +1,17 @@
 # Project Status
 
-- **Last reconciled**: 2026-09-11
-- **Current origin/main baseline**: `8cf7d223e2b36a02728cbe2fae703826cf6d18af` (Feature 012 squash merge, exact commit verified from Git)
-- **Active branch**: `main`
-- **Active implementation feature**: None; Feature 012 is closed.
+- **Last reconciled**: 2026-09-12
+- **Current origin/main baseline**: `dd42bad8e8d44fe1bab726cc530fa12d7d9ad642` (Feature 012 post-merge status reconciliation; Git verified)
+- **Active branch**: `hermes/fin-001-ar-ap-concurrency`
+- **Active feature**: FIN-001 — AR/AP concurrent payment over-allocation remediation. CP1 (reproduction/characterization), CP2 (source/payment locks & canonical ordering), CP3 (clean retry, SQLSTATE classification, exhaustion handling), and CP4 (PostgreSQL 16 CI service, full verification, 100% traceability) are COMPLETE and verified against PostgreSQL 16.
+- **FIN-001 CP1 evidence**: PostgreSQL 16 strict expected RED tests reproduced two independent `60.00` AR and AP allocations committing against one `100.00` source (`120.00` committed). Real endpoint characterizations proved Feature-012 sequence serialization.
+- **FIN-001 CP2 evidence**: Implemented authoritative parent payment/source locks, canonical UUID source-lock ordering, and fresh post-lock SQL aggregate validation. All 11 PostgreSQL integration tests in `test_fin001_ar_ap_concurrency_postgresql.py` pass green.
+- **FIN-001 CP3 evidence**: Implemented `run_in_clean_transaction` with explicit SQLSTATE classification (`40001`, `40P01`, and approved `55P03`), exponential jittered backoff, clean rollback, session expunge, and bounded exhaustion raising `TransactionContentionError` (HTTP 409). 15 PostgreSQL integration scenarios and 7 unit tests pass green.
+- **FIN-001 CP4 evidence**: Dedicated `postgres:16` GitHub Actions service container configured in `.github/workflows/quality-gates.yml` with fail-closed prerequisites, online Alembic migration check, single-head check (`023_historical_seq_bootstrap`), zero-drift verification (`alembic check`), and mandatory execution of all 33 FIN-001 PostgreSQL tests. Local backend passed 553 tests (2 pre-existing skips explained); frontend test (66/66), lint (oxlint 0 errors), typecheck (tsc -b clean), and build passed. 100% requirement traceability (14/14) confirmed.
 - **Feature 012 status**: COMPLETE and merged through PR #59 using squash merge; CP1-CP7 implementation, regression evidence, independent review, and delivery gates are verified.
-- **Feature 012 migration state**: Alembic current and sole head are `023_historical_seq_bootstrap`; `alembic check` reports `No new upgrade operations detected.`
-- **Feature 012 PostgreSQL evidence**: Disposable PostgreSQL 16 matrix passes 88 tests with zero failures and zero skips; the complete backend suite passes 522 tests with zero failures and zero skips when `FEATURE_012_TEST_DATABASE_URL` is explicitly configured.
-- **Feature 012 implementation state**: Database-backed tenant sequence allocation, historical bootstrap, all approved generator migrations, bounded clean-transaction retry, rollback safety, tenant/year/SET isolation, and at-most-once regression coverage are implemented and verified.
-- **Feature 012 final-gate corrections**: The live-schema baseline test now asserts the current `023_historical_seq_bootstrap` head. The online-only historical bootstrap migration is explicitly skipped in Alembic offline SQL generation; online PostgreSQL execution remains authoritative for historical validation and seeding.
-- **Feature 012 scope result**: Accounting mappings, tax/capitalization/depreciation policy, visible business-code formats, historical business records, unrelated API contracts, frontend behavior, and protected storage remain unchanged.
+- **Feature 012 migration state**: Alembic current and sole head are `023_historical_seq_bootstrap`; Feature 012 final evidence recorded `alembic check` clean.
+- **Feature 012 PostgreSQL evidence**: Disposable PostgreSQL 16 matrix passed 88 tests with zero failures/skips; full backend suite passed 553 tests with zero failures/skips when `FIN_001_TEST_DATABASE_URL` was explicitly configured.
+- **Feature 012 scope result**: Accounting mappings, tax/capitalization/depreciation policy, visible business-code formats, historical business records, unrelated API contracts, frontend behavior, and protected storage remained unchanged.
 - **Feature 011 status**: COMPLETE and merged through PR #54 using squash merge.
-- **Protected data**: `backend/storage` and `backend/backend/storage` remain untouched. No `.env`, credentials, temporary logs, caches, or codebase-memory artifacts are part of Feature 012.
-- **Next action**: Select the next approved remediation or feature through the repository governance / Spec Kit workflow. Do not start Feature 013 automatically.
+- **Protected data**: `backend/storage` and `backend/backend/storage` remain untouched. No `.env`, credentials, temporary logs, caches, or codebase-memory artifacts are tracked.
+- **Next action**: Commit CP4, push `hermes/fin-001-ar-ap-concurrency`, create PR against `main`, and monitor remote GitHub CI.

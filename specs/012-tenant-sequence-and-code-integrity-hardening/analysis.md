@@ -1,166 +1,78 @@
-# Pre-Implementation Consistency Analysis: Feature 012
+# Feature 012 Final Consistency Analysis
 
-**Feature**: `012-tenant-sequence-and-code-integrity-hardening`  
-**Spec**: `specs/012-tenant-sequence-and-code-integrity-hardening/spec.md`  
-**Plan**: `specs/012-tenant-sequence-and-code-integrity-hardening/plan.md`  
-**Tasks**: `specs/012-tenant-sequence-and-code-integrity-hardening/tasks.md`  
-**Analysis date**: 2026-09-10
-**Reconciled baseline**: `origin/main` / `1d502016c1133a09de8eedd1e4bf0858c501bd98`
-**Feature evidence checkpoint**: `01e2e3dd73259fa8d41f33adaaccc9bf80abf586` (rebased preservation of analysis checkpoint `b3773485d0a332bf332d28b49e589a77aeb3adfd`)
+**Feature**: `012-tenant-sequence-and-code-integrity-hardening`
+**Final checkpoint**: CP7
+**Base main**: `1d502016c1133a09de8eedd1e4bf0858c501bd98`
+**Feature implementation head before CP7 corrections**: `a148de03e9e9ca981b9031d8b8ab6f31858ab7a2`
+**Final verification date**: 2026-09-11
 
-## 1. Requirement Traceability Matrix
+## Final evidence boundary
 
-| Requirement | Plan coverage | Task coverage | Result |
-|---|---|---|---|
-| FR-001 inventory and route every internal generator | Evidence and scope; CP3 | T033, T034 | COVERED |
-| FR-002 atomic year-coded namespaces | Architecture; CP2/CP3 | T006-T019 | COVERED |
-| FR-003 atomic non-year SET namespace | Data model scope policy | T017 | COVERED, policy resolved |
-| FR-004 shared TRX normal/reversal namespace | CP3 | T013-T014, T018 | COVERED |
-| FR-005 preserve formats/API/history | Global constraints; CP3/CP6 | T014, T016, T029, T034 | COVERED |
-| FR-006 tenant isolation | Constitution check; counter schema | T012, T018, T019, T025, T028 | COVERED |
-| FR-007 three composite uniqueness changes only | CP4; migration strategy | T020-T025 | COVERED |
-| FR-008 same-tenant duplicate rejection | CP4 | T020, T025 | COVERED |
-| FR-009 same transaction/no partial records | Counter allocation; rollback strategy | T010-T012, T018, T028 | COVERED |
-| FR-010 bounded clean retry/no duplicate posting | Contract; CP5 | T011, T026-T028 | COVERED, production implementation pending |
-| FR-011 accounting and immutability invariants | Constitution check | T028, T034 | COVERED |
-| FR-012 PostgreSQL-specific verification | Evidence boundary; CP1/CP6 | T002-T005, T019, T025, T031-T032 | EVIDENCE COMPLETE; tracked regression coverage pending |
-| FR-013 preflight/fail-closed/non-destructive migration | Data model migration strategy | T021-T025 | COVERED; preflight simulation passed |
-| FR-014 intentional global identifiers | Research inventory | T030, T033 | COVERED |
-| FR-015 protected storage untouched | Global constraints | T034 | COVERED |
-| FR-016 classify excluded/related identifiers | Research and scope gate | T029-T030, T033 | COVERED |
-| FR-017 complete regression/concurrency matrix | CP1/CP6 | T003-T005, T019, T024-T030, T031-T032 | COVERED by plan; tracked tests pending |
+All PostgreSQL evidence used here ran against disposable Docker container `pg_disposable_f012`, image `postgres:16`, local host port `127.0.0.1:54329`, database identity `feature012_disposable`, user `f012_test`, with credentials held only in process environment. No production database, production credentials, protected storage, or production financial data was used.
 
-**Traceability result: 17/17 requirements covered (100%).**
+The verified Alembic revision is `023_historical_seq_bootstrap`. It is the sole head. `alembic check` reports `No new upgrade operations detected.` The historical bootstrap is intentionally online-only because its fail-closed parser must inspect historical PostgreSQL rows; offline SQL generation emits the schema migration chain without attempting data inspection or seeding.
 
-## 2. PostgreSQL Evidence Boundary
+## Requirement traceability matrix
 
-**Method**: Disposable Docker container `pg_disposable_f012`, image `postgres:16`, local-only `127.0.0.1:54329`. Disposable database and credentials were used; no production data or credentials were used. Credentials remain in an ignored environment file and are not recorded here.
+| Requirement | Production implementation | Migration / schema | Authoritative test(s) | Status |
+|---|---|---|---|---|
+| FR-001 inventory and route every internal generator | `backend/src/services/tenant_sequence_allocator.py`; migrated generators in `transaction_service.py`, `reversal_service.py`, `accounting_engine.py`, `project_service.py`, `document_service.py`, `payable_service.py`, `receivable_service.py`, `money_movement_service.py` | `022_tenant_sequence_and_scoped_uniqueness.py` creates allocator table | `test_migrated_generators_postgresql.py`; `test_feature_012_cp6_postgresql.py` | TRACEABLE |
+| FR-002 atomic year-scoped namespaces | `tenant_sequence_allocator.allocate_next()` and all nine year namespace call sites | `tenant_sequences` unique `(organization_id, namespace, scope_key)` | `test_tenant_sequence_allocator_postgresql.py`; `test_tenant_sequence_postgresql.py`; CP6 namespace concurrency tests | TRACEABLE |
+| FR-003 atomic non-year SET namespace | `MoneyMovementService._generate_settlement_code()` uses `scope_key="GLOBAL"` | Non-null `scope_key` in `tenant_sequences`; schema foundation in revision 022 | allocator SET isolation/concurrency tests; CP6 SET concurrency test | TRACEABLE |
+| FR-004 shared normal/reversal TRX namespace | `TransactionService.generate_transaction_code()` and `ReversalService.generate_reversal_code()` both allocate `TRX` | allocator scope key is shared by namespace/year | `test_tenant_sequence_postgresql.py::test_normal_and_reversal_paths_share_transaction_namespace`; CP6 mixed normal/reversal test | TRACEABLE |
+| FR-005 preserve formats, API compatibility, history | Existing prefixes/padding retained at generator call sites; no historical-row updates | 022/023 migrations perform no business-code rewrites | `test_migrated_generators_postgresql.py`; historical bootstrap continuity tests | TRACEABLE |
+| FR-006 tenant isolation | Organization ID is validated and part of every allocator key; service reads retain organization predicates; retry closures capture tenant-safe scalars | FK and composite uniqueness include `organization_id` | allocator tenant isolation; generator tenant isolation; constraint cross-tenant tests; full backend suite | TRACEABLE |
+| FR-007 change only three confirmed global mismatches | Model constraints changed only for movement, settlement, and asset codes | `022_tenant_sequence_and_scoped_uniqueness.py` replaces exactly the three approved constraints | `test_tenant_code_constraints_postgresql.py`; `test_tenant_code_migration_postgresql.py` | TRACEABLE |
+| FR-008 same-tenant duplicate rejection | Database remains the defense-in-depth authority | Composite unique constraints in revision 022 | movement, settlement, and asset same-tenant rejection tests | TRACEABLE |
+| FR-009 one transaction/no partial records | Allocator does not commit; API write paths use `run_in_clean_transaction`; document storage is deleted on persistence failure | Counter and business writes share caller transaction | rollback tests in allocator, tenant sequence, CP6, and transaction recovery suites; document file safety regression | TRACEABLE |
+| FR-010 bounded clean retry/no duplicate posting | `backend/src/services/transaction_retry.py`, hard bound of three, classified generated-code constraints only | N/A | `test_transaction_recovery_postgresql.py`; CP6 at-most-once posting/reversal tests | TRACEABLE |
+| FR-011 accounting, immutability, reversal, audit invariants | Retry wrappers preserve existing posting services and actor propagation; no debit/credit rules changed | N/A | CP6 financial graph retry test; posting/reversal tests; complete backend suite | TRACEABLE |
+| FR-012 PostgreSQL-specific verification | PostgreSQL support fixture requires explicit `FEATURE_012_TEST_DATABASE_URL` and rejects non-disposable targets | Alembic chain verified from base through 023 | 88-test Feature-012 PostgreSQL matrix; 522-test full backend run; live schema test | TRACEABLE |
+| FR-013 preflight, fail-closed, non-destructive migration | Historical parser raises `HistoricalSequenceBootstrapError` for unresolved managed identifiers | Revision 022 preflights constraints/duplicates; revision 023 parses and seeds monotonically online | migration constraint tests; historical malformed-history, continuity, and monotonic-merge tests | TRACEABLE |
+| FR-014 intentional global identifiers remain global | No changes to organization slug, sender phone, or document-session global semantics | No migration for these identifiers | `test_tenant_code_constraints_postgresql.py::test_document_session_code_remains_globally_unique`; full backend suite | TRACEABLE |
+| FR-015 protected storage untouched | Feature diff excludes `backend/storage` and `backend/backend/storage` | N/A | repository safety check; git diff path review | TRACEABLE |
+| FR-016 classify excluded/related identifiers | Historical migration explicitly recognizes approved out-of-scope prefixes; unrelated caller-supplied and UUID-derived identifiers were not migrated | No schema change for excluded identifiers | historical out-of-scope classification unit tests; global-identifier regression tests | TRACEABLE |
+| FR-017 complete regression and concurrency matrix | Allocator, retry boundary, generator migration, and storage cleanup implementations | Alembic current/head/check and migration tests | 88-test Feature-012 PostgreSQL matrix; 522-test full backend suite; frontend gates | TRACEABLE |
 
-### Baseline
+**TOTAL REQUIREMENTS: 17**
+**TRACEABLE: 17**
+**UNTRACEABLE: 0**
+**COVERAGE: 100%**
 
-- Fresh database: Alembic upgrade from scratch completed through `021_fixed_asset_enhancements`.
-- Existing disposable database: `alembic current` and `alembic heads` both report `021_fixed_asset_enhancements (head)`.
-- Current branch contains the merged metadata reconciliation; authoritative model registration is complete and `uv run alembic check` reports `No new upgrade operations detected.`
-- Live schema constraints verified:
-  - `uq_money_movements_movement_code` — global `UNIQUE (movement_code)`.
-  - `uq_settlements_settlement_code` — global `UNIQUE (settlement_code)`.
-  - `uq_fixed_assets_asset_code` — global `UNIQUE (asset_code)`.
-  - `uq_document_sessions_session_code` — global `UNIQUE (session_code)`.
-- `tenant_sequences` is not part of the current baseline; it was created only by a throwaway harness and removed afterward.
-- **Schema drift**: **NO** on the refreshed branch baseline. The merged metadata reconciliation is present, and `uv run alembic check` completed with `No new upgrade operations detected.`
+## CP1–CP6 invariant verification
 
-## 3. FIN-P1-103 — Concurrency Evidence
+- **CP1 — PostgreSQL reproduction/regression evidence: VERIFIED.** Tracked PostgreSQL regression suites execute against the disposable database; the final matrix has no skips.
+- **CP2 — Database-backed TenantSequence allocator: VERIFIED.** PostgreSQL row-conflict allocation, tenant/year/namespace isolation, rollback, and engine persistence tests pass.
+- **CP3 — Alembic foundation and historical bootstrap: VERIFIED.** Revisions 022 and 023 apply from the base chain; historical values are parsed, merged monotonically, and malformed managed history fails closed.
+- **CP4 — Approved generators migrated: VERIFIED.** TRX, JE, PRJ, DOC, INV, BIL, ADV, REL, MM, and SET are covered by migrated-generator and CP6 PostgreSQL tests with existing formats.
+- **CP5 — Clean retry and rollback recovery: VERIFIED.** Retry is bounded to three attempts, rolls back before retry, classifies only generated-code constraints, and leaves failed financial graphs uncommitted.
+- **CP6 — End-to-end invariants: VERIFIED.** Concurrency, tenant/year/SET isolation, shared TRX, at-most-once effects, historical continuity, rollback integrity, and orphan prevention pass in PostgreSQL.
 
-| Generator | Current algorithm | Namespace | PostgreSQL concurrency result | Duplicate candidate | DB behavior | Partial write | Rollback | Retry | Classification |
-|---|---|---|---|---|---|---|---|---|---|
-| `TransactionService.generate_transaction_code` | Tenant/year `COUNT(*) + 1` | `TRX` + year | N=50 returned 1 unique value | 49 collisions; all `TRX-2026-000001` | Candidate-only calls do not write; create path produced 1 success/49 `UniqueViolationError` on `uq_transactions_org_code` | Create path left 1 committed row, no failed partial rows | Explicit rollback cleared failed inserts | Not implemented in current code; fresh retry boundary required | REPRODUCED DEFECT |
-| `ReversalService.generate_reversal_code` | Independent tenant/year `COUNT(*) + 1` | Shared `TRX` + year | Concurrent normal/reversal calls returned same `TRX-2026-000002` | 1 shared collision | Would be rejected by transaction-code uniqueness if both persisted | No rows in candidate-only probe | No business write in candidate-only probe | Not implemented | REPRODUCED DEFECT |
-| `AccountingEngine.generate_entry_number` | Tenant/year `COUNT(*) + 1` | `JE` + year | N=50 returned 1 unique value | 49 collisions; all `JE-2026-000001` | Candidate-only probe; persistence path remains unsafe | No rows in candidate-only probe | Not applicable to candidate-only probe | Not implemented | REPRODUCED DEFECT |
-| `ProjectService.generate_project_code` | Tenant/year `COUNT(*) + 1` | `PRJ` + year | N=20 returned 1 unique value | 19 collisions | Candidate-only probe | No rows in candidate-only probe | Not applicable | Not implemented | REPRODUCED DEFECT |
-| `DocumentService.generate_document_code` | Tenant/year max suffix + 1 | `DOC` + year | N=20 returned 1 unique value | 19 collisions | Candidate-only probe | No rows in candidate-only probe | Not applicable | Not implemented | REPRODUCED DEFECT |
-| `VendorAPService.generate_bill_code` | Tenant/year `COUNT(*) + 1` | `BIL` + year | N=20 returned 1 unique value | 19 collisions | Candidate-only probe | No rows in candidate-only probe | Not applicable | Not implemented | REPRODUCED DEFECT |
-| `VendorAPService.generate_advance_code` | Tenant/year `COUNT(*) + 1` | `ADV` + year | N=20 returned 1 unique value | 19 collisions | Candidate-only probe | No rows in candidate-only probe | Not applicable | Not implemented | REPRODUCED DEFECT |
-| `CustomerARService.generate_invoice_code` | Tenant/year `COUNT(*) + 1` | `INV` + year | N=20 returned 1 unique value | 19 collisions | Candidate-only probe | No rows in candidate-only probe | Not applicable | Not implemented | REPRODUCED DEFECT |
-| `CustomerARService.generate_retention_release_code` | Tenant/year `COUNT(*) + 1` | `REL` + year | N=20 returned 1 unique value | 19 collisions | Candidate-only probe | No rows in candidate-only probe | Not applicable | Not implemented | REPRODUCED DEFECT |
-| `MoneyMovementService._generate_movement_code` | Tenant/year `COUNT(*) + 1` | `MM` + year | N=20 returned 1 unique value | 19 collisions | Candidate-only probe; current global DB uniqueness is a separate FIN-P1-104 mismatch | No rows in candidate-only probe | Not applicable | Not implemented | REPRODUCED DEFECT |
-| `MoneyMovementService._generate_settlement_code` | Tenant `COUNT(*) + 1` | `SET` + `GLOBAL` | N=20 returned 1 unique value | 19 collisions; all `SET-000001` | Candidate-only probe; current global DB uniqueness is a separate FIN-P1-104 mismatch | No rows in candidate-only probe | Not applicable | Not implemented | REPRODUCED DEFECT |
+## Final gate results
 
-**Rejected findings**: `DocumentSession.session_code` is intentionally global and aligned with its global constraint; it is not part of FIN-P1-103/104 remediation. Opening-balance and remote-inbox UUID-derived codes are separate static observations, not COUNT/MAX sequence defects.
+- Feature-012 PostgreSQL matrix: **88 passed, 0 failed, 0 skipped**.
+- Full backend suite with `FEATURE_012_TEST_DATABASE_URL`: **522 passed, 0 failed, 0 skipped**.
+- PostgreSQL matrix includes normal/reversal/mixed TRX, JE/PRJ/DOC/INV/BIL/ADV/REL/MM/SET, tenant/year isolation, historical continuity, monotonic merge, malformed history fail-closed, rollback, clean retry, non-retryable failure, bounded retry, at-most-once transaction/journal/allocation/audit/money-movement/settlement effects, orphan prevention, and new-engine persistence.
+- Alembic: current and sole head `023_historical_seq_bootstrap`; check clean; offline chain generated successfully from backend with 63,445 bytes and revision markers through 023.
+- Python compile: passed.
+- Dependency integrity: `pip check` passed; locked production `pip-audit==2.9.0` passed.
+- Repository safety: passed; no tracked environment files, credentials, private keys, or obvious live-token signatures.
+- Frontend: Vitest **26 files / 66 tests passed**; lint, typecheck, and build passed. Existing lint/Vite chunk/config warnings remain non-failing.
+- Optional `ruff`, `mypy`, `bandit`, and `safety` executables are not available in the environment and are not configured repository gates.
+- `git diff --check`: passed.
 
-## 4. FIN-P1-104 — Constraint Evidence
+## Scope review
 
-| Identifier | Current constraint | Actual live name | Generation/validation scope | Intended scope | Proposed constraint | Preflight | Migration safe | Downgrade risk |
-|---|---|---|---|---|---|---|---|---|
-| `movement_code` | Global unique | `uq_money_movements_movement_code` | Tenant/year generation | Tenant-local | `UNIQUE (organization_id, movement_code)` | 0 duplicate tenant/code tuples | Yes, after expected-name and duplicate checks | Global downgrade becomes impossible if cross-tenant duplicates are legitimately created |
-| `settlement_code` | Global unique | `uq_settlements_settlement_code` | Tenant-global generation | Tenant-local | `UNIQUE (organization_id, settlement_code)` | 0 duplicate tenant/code tuples | Yes, after expected-name and duplicate checks | Same downgrade limitation |
-| `asset_code` | Global unique | `uq_fixed_assets_asset_code` | Tenant-scoped service validation | Tenant-local | `UNIQUE (organization_id, asset_code)` | 0 duplicate tenant/code tuples | Yes, after expected-name and duplicate checks | Same downgrade limitation |
+Feature 012 intentionally changed database-backed identifier allocation, three tenant-scoped uniqueness constraints, historical sequence bootstrap, transaction retry boundaries, affected API transaction ownership, and the associated unit/PostgreSQL regression suites. It did not change accounting mappings, tax policy, capitalization policy, depreciation policy, visible business-code formats, historical business records, unrelated API contracts, frontend behavior, or protected storage.
 
-Live reproduction against two organizations:
+## Final consistency result
 
-- Same `movement_code` was rejected by PostgreSQL with `UniqueViolationError` on `uq_money_movements_movement_code`.
-- Same `settlement_code` was rejected by PostgreSQL with `UniqueViolationError` on `uq_settlements_settlement_code`.
-- Same `asset_code` passed tenant service validation but commit was rejected by PostgreSQL with `UniqueViolationError` on `uq_fixed_assets_asset_code`.
-- `DocumentSession.session_code` remained globally unique under `uq_document_sessions_session_code`; rejected as a mismatch.
+**Critical findings: 0. High findings: 0. Medium findings: 0. Low findings: 2 (deferred non-blocking observations).**
 
-## 5. Counter Design Validation
+Independent delegated subagent review returned `APPROVED`:
+- `F012-LOW-01`: outer-scope pre-validation inspection queries in payable/receivable endpoints before `run_in_clean_transaction` (inner transaction refetches with `populate_existing=True`; deferred refinement).
+- `F012-LOW-02`: opening balance random hex suffix `OPB-` intentionally excluded from sequential allocator; recognized and skipped safely by migration 023.
 
-Proposed key:
+The stale live-schema head assertion and the offline Alembic invocation were final-gate compatibility defects and were corrected narrowly: the test now asserts 023, and the online-only historical bootstrap explicitly no-ops during offline SQL rendering while preserving authoritative online validation/seeding. No unrelated product behavior was added.
 
-```text
-organization_id | namespace | scope_key
-```
-
-- Year-coded namespaces: `TRX`, `JE`, `PRJ`, `DOC`, `INV`, `BIL`, `ADV`, `REL`, `MM` with scope keys such as `"2026"`.
-- Tenant-global non-year namespace: `SET` with explicit non-null `scope_key="GLOBAL"`.
-- Required unique key: `(organization_id, namespace, scope_key)`; all columns `NOT NULL`.
-- Visible formats remain unchanged, including `SET-######`.
-
-Throwaway PostgreSQL validation passed:
-
-- N=50 concurrent first-row allocations for one tenant/namespace/year: 50 unique values, contiguous 1..50.
-- Different tenants on `SET|GLOBAL`: each received 1..5 independently.
-- Different years: `TRX|2026` continued while `TRX|2027` started at 1.
-- Namespace matrix: `TRX`, `JE`, `PRJ`, `DOC`, `INV`, `BIL`, `ADV`, `REL`, `MM`, and `SET|GLOBAL` rendered expected first codes.
-- Rollback: a rolled-back first allocation was not committed; the next allocation returned 1.
-- Failed transaction: a unique violation poisoned the transaction until rollback; after rollback a clean retry returned 1.
-- Application restart/multiple worker proxy: a new SQLAlchemy engine continued the existing sequence and returned 2.
-- Different tenant/scope rows did not collide in the harness.
-
-The harness used PostgreSQL `INSERT ... ON CONFLICT (...) DO UPDATE ... RETURNING` and did not modify production source. The production allocator remains unimplemented.
-
-## 6. Retry and Poisoned Session Gate
-
-Verified database behavior:
-
-1. A PostgreSQL uniqueness violation aborts the current transaction.
-2. SQLAlchemy rejects subsequent work before rollback (`DBAPIError` observed).
-3. Explicit rollback recovers the session.
-4. A fresh transaction/session unit is required for retry.
-
-Production retry result: **NOT IMPLEMENTED**. The future implementation must bound retries and establish a clean transaction boundary; it must not catch and continue on the poisoned session.
-
-## 7. Proposed Migration — Analysis Only
-
-One Alembic revision is required, after `021_fixed_asset_enhancements`.
-
-### Upgrade operations
-
-1. Verify the current revision/head and expected live global constraint names. Abort without DDL if any expected constraint is absent or has unexpected definition.
-2. Run duplicate preflight for `(organization_id, movement_code)`, `(organization_id, settlement_code)`, and `(organization_id, asset_code)`. Abort without DDL if any rows are returned.
-3. Create `uq_money_movements_org_code`, `uq_settlements_org_code`, and `uq_fixed_assets_org_code` composite unique constraints.
-4. Drop the corresponding global constraints only after the composite constraints exist.
-5. Verify metadata and same-tenant/cross-tenant behavior.
-6. Perform no data updates, deletes, renumbering, or historical rewrites.
-
-### Downgrade operations
-
-1. Preflight global duplicate codes for each affected table.
-2. Abort downgrade before DDL if any code is shared across organizations.
-3. If clean, create the original global constraints and then drop composite constraints.
-4. Never delete or reconcile records automatically to force downgrade success.
-
-## 8. Consistency and Readiness
-
-| Gate | Status | Evidence |
-|---|---|---|
-| Policy decisions | PASS | SET is tenant-global/non-year via `GLOBAL`; asset/depreciation validation length deferred. |
-| FIN-P1-103 PostgreSQL reproduction | PASS | Unmodified generators reproduced duplicate candidates and unique violations. |
-| FIN-P1-104 PostgreSQL reproduction | PASS | Three global constraints rejected legitimate same-code cross-tenant usage. |
-| First-row bootstrap design | PASS as throwaway harness evidence | N=50 concurrent first-row allocations were unique and contiguous. |
-| Rollback/session recovery | PASS as database behavior; implementation pending | Poisoned session required rollback; clean retry then succeeded. |
-| Live constraint verification | PASS | Expected names and definitions verified. |
-| Duplicate preflight | PASS | Zero existing tenant/code duplicate tuples. |
-| Alembic head | PASS | Fresh and existing disposable databases reached `021_fixed_asset_enhancements`. |
-| Alembic drift check | PASS | Refreshed current-main baseline reports `No new upgrade operations detected.` |
-| Tracked evidence tests | PENDING | Throwaway scripts are ignored; no tracked integration tests were added. |
-| Production implementation | NOT STARTED | No production source, model, migration, or tracked test changes. |
-
-**Requirement coverage: 100% (17/17).**
-
-**Critical/High consistency result**: No Feature 012 Critical/High consistency issue is identified. Baseline drift is resolved. Tracked PostgreSQL tests and production clean-retry behavior remain implementation work.
-
-**Constitution violations**: 0 identified.
-
-**Spec Kit consistency result**: **YES for implementation authorization**. The policy, evidence, current baseline, counter design, migration parent, and checkpoint tasks are consistent. Tracked regression tests and clean-retry behavior are pending implementation, not unresolved design ambiguity.
-
-**Exact next action**: Begin CP1 by adding the tracked PostgreSQL evidence/regression tests for FIN-P1-103 and FIN-P1-104. Do not begin CP1 in this reconciliation turn.
+**Spec Kit result: 100% requirement traceability, zero Critical/High/Medium consistency issues, zero Constitution violations.**

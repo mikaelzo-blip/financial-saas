@@ -14,7 +14,7 @@ uv run alembic current
 uv run pytest tests/integration/test_live_postgresql_schema.py -rs
 ```
 
-The integration test must connect to a real PostgreSQL database and verify the current migration head (`021_fixed_asset_enhancements`). The refreshed Feature 012 branch reaches that head, and the merged metadata prerequisite makes `uv run alembic check` clean. Feature 012 implementation may proceed from this baseline after the tracked PostgreSQL regression-test checkpoint is added.
+The integration test must connect to a real disposable PostgreSQL database and verify the current migration head (`023_historical_seq_bootstrap`). The Feature 012 branch reaches that head, and `uv run alembic check` reports no new upgrade operations. The historical bootstrap revision validates and seeds online; offline Alembic SQL generation emits the chain without attempting database inspection.
 
 ## 2. Concurrency reproduction
 

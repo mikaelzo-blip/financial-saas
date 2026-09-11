@@ -30,13 +30,13 @@ PG_URL = os.environ.get(
 
 @pytest.mark.asyncio
 async def test_live_postgresql_connection_and_alembic_head():
-    """Verify live PostgreSQL container is accessible and on Alembic head (020)."""
+    """Verify the disposable PostgreSQL database is on the current Alembic head."""
     try:
         engine = create_async_engine(PG_URL, echo=False)
         async with engine.connect() as conn:
             res = await conn.execute(text("SELECT version_num FROM alembic_version"))
             version = res.scalar()
-            assert version == "021_fixed_asset_enhancements", f"Expected 021_fixed_asset_enhancements, got {version}"
+            assert version == "023_historical_seq_bootstrap", f"Expected 023_historical_seq_bootstrap, got {version}"
         await engine.dispose()
     except Exception as e:
         pytest.skip(f"Live PostgreSQL not reachable or credentials mismatch: {e}")

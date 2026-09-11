@@ -29,5 +29,5 @@
 ## Notes
 
 - PostgreSQL-specific concurrency reproduction was environment-blocked at the original specification checkpoint, but the later disposable PostgreSQL evidence gate reproduced the defect and validated the counter design.
-- The merged Alembic metadata prerequisite is now present; the refreshed baseline reaches `021_fixed_asset_enhancements` and `uv run alembic check` is clean.
-- The validated allocator recommendation is a tenant/year counter table with transactional row locking, explicit `scope_key="GLOBAL"` for tenant-global SET codes, and bounded retry as defense-in-depth. Tracked regression tests and production implementation remain pending.
+- The merged Alembic metadata prerequisite is present; the final baseline reaches `023_historical_seq_bootstrap` and `uv run alembic check` reports no new upgrade operations.
+- The validated allocator is a tenant/year counter table with transactional row locking, explicit `scope_key="GLOBAL"` for tenant-global SET codes, and bounded retry as defense-in-depth. Production implementation and tracked regression tests are complete and green.

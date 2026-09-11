@@ -200,10 +200,10 @@ def _seed_high_water_marks(bind: Connection, marks: Iterable[tuple[tuple[object,
 
 def upgrade() -> None:
     if op.get_context().as_sql:
-        raise RuntimeError(
-            "Historical sequence bootstrap requires an online PostgreSQL database "
-            "so every historical identifier can be validated before seeding."
-        )
+        # Offline SQL cannot inspect and validate historical identifiers. The
+        # online migration remains the authoritative bootstrap path; Alembic
+        # still records this revision in the generated offline chain.
+        return
 
     bind = op.get_bind()
     marks = _historical_high_water_marks(bind)

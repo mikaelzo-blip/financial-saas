@@ -121,10 +121,12 @@ Confirmed now:
 - Global uniqueness remains correct for organization slugs and WhatsApp sender phone mappings.
 - `DocumentSession.session_code` is not included in the migration scope solely because it is globally unique; its entropy concern needs a separate decision if it becomes operationally material.
 
-Implementation checkpoints that remain:
+Implementation checkpoints completed:
 
-- Add tracked PostgreSQL regression tests for same-tenant concurrency and cross-tenant constraint behavior.
-- Implement and test the database-backed allocator and all affected generator call sites.
-- Add and validate the one forward migration after `021_fixed_asset_enhancements`.
-- Implement bounded retry with a clean transaction/session boundary and verify posting integrity.
+- Tracked PostgreSQL regression tests cover same-tenant concurrency and cross-tenant constraint behavior.
+- The database-backed allocator and all affected generator call sites are implemented and tested.
+- Feature 012 migrations `022_tenant_sequence_scope` and `023_historical_seq_bootstrap` are validated; the final head is `023_historical_seq_bootstrap`.
+- Bounded retry with a clean transaction/session boundary and posting-integrity verification are complete.
+
+CP7 note: the historical bootstrap is online-only for data inspection and fail-closed parsing. Offline Alembic SQL generation emits the schema chain and revision marker without attempting historical inspection.
 - Caller-supplied `asset_code` and depreciation transaction-code length validation remain separately approved follow-up observations; they are directly related but not required to prove FIN-P1-104.

@@ -50,7 +50,7 @@ Transaction code, journal entry number, project code, document code, invoice cod
 
 ## 3. Alembic Migration Strategy
 
-Required revision: one new forward Alembic revision after the current head `021_fixed_asset_enhancements`, with the actual revision identifier selected by repository convention during implementation.
+Required revisions: Feature 012 adds the schema revision after `021_fixed_asset_enhancements` and the historical bootstrap revision after it; the final head is `023_historical_seq_bootstrap`.
 
 ### Upgrade preflight
 

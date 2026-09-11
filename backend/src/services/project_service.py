@@ -13,6 +13,7 @@ from src.models.payable import VendorBill, VendorPaymentAllocation
 from src.models.transaction import Transaction
 from src.models.enums import ProjectStatus, CostCategory, BillingStatus, CollectionStatus, WorkflowStatus
 from src.schemas.project import ProjectCreate, ProjectUpdate, ProjectStatusUpdate, ProjectBudgetCreate
+from src.services.tenant_sequence_allocator import allocate_next
 from src.core.exceptions import EntityNotFoundException, InvariantViolationException
 
 # Valid lifecycle state transitions map
@@ -59,18 +60,9 @@ class ProjectService:
         """
         Generates the next sequential unique project code in format PRJ-YYYY-NNN (e.g. PRJ-2026-001).
         """
-        target_year = (project_date or date.today()).year
-        prefix = f"PRJ-{target_year}-"
-
-        stmt = select(func.count()).select_from(Project).where(
-            and_(
-                Project.organization_id == organization_id,
-                Project.project_code.like(f"{prefix}%")
-            )
-        )
-        count = await self.session.scalar(stmt) or 0
-        next_seq = count + 1
-        return f"{prefix}{next_seq:03d}"
+        target_year = str((project_date or date.today()).year)
+        seq = await allocate_next(self.session, organization_id, "PRJ", target_year)
+        return f"PRJ-{target_year}-{seq:03d}"
 
     async def create_project(self, organization_id: uuid.UUID, data: ProjectCreate) -> Project:
         """

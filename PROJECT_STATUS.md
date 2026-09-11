@@ -1,14 +1,15 @@
 # Project Status
 
-- **Last reconciled**: 2026-09-09
-- **Current origin/main baseline**: `origin/main` (exact commit verified from Git)
-- **Active branch**: `main`
-- **Active implementation feature**: None
-- **Feature 011 status**: COMPLETE and merged through PR #54 using squash merge. No uncommitted production application code remains.
-- **Feature 011 merge**: PR #54, squash commit `ec083874b73574abcd3a999536a3c175c7fd11d1`; implementation head was `799474c335f5864415e1807e21c61ccbfb8bf66c`.
-- **Feature 011 evidence**: Spec Kit coverage `12/12 (100%)`; Critical findings `0`; High findings `0`; Medium findings `0`. Backend `400 passed, 3 skipped`; frontend `66 passed`; Node bridge `6 passed` plus Baileys `9 passed`; lint `0 errors` with 8 pre-existing warnings; typecheck, production build, Alembic offline chain, repository safety, and GitHub CI passed.
-- **Documentation**: `specs/011-security-accounting-invariant-hardening/final-analysis.md` and the supplied audit document preserve the final traceability, invariant, security, and out-of-scope audit evidence.
-- **Protected data**: `backend/storage` and `backend/backend/storage` remain untouched. No `.env`, credentials, temporary logs, caches, or codebase-memory artifacts are part of Feature 011.
-- **Remaining notes**: `edge-relay/package.json` has no `test` script; standalone Node bridge tests pass. Broader P1/P2 audit observations remain deferred to their own approved scope and are not marked resolved here.
-- **Blockers**: None for Feature 011.
-- **Next action**: Select the next approved remediation item or feature through the required Spec Kit workflow. Do not start it automatically.
+- **Last reconciled**: 2026-09-11
+- **Current origin/main baseline**: `1d502016c1133a09de8eedd1e4bf0858c501bd98` (exact commit verified from Git)
+- **Active branch**: `hermes/012-tenant-sequence-and-code-integrity-hardening`
+- **Active implementation feature**: Feature 012, tenant sequence and code integrity hardening
+- **Feature 012 checkpoint**: CP7 final verification, independent review, and delivery readiness COMPLETE; CP1-CP6 implementation, regression evidence, and gates are verified.
+- **Feature 012 migration state**: Alembic current and sole head are `023_historical_seq_bootstrap`; `alembic check` reports `No new upgrade operations detected.`
+- **Feature 012 PostgreSQL evidence**: Disposable PostgreSQL 16 matrix passes 88 tests with zero failures and zero skips; the complete backend suite passes 522 tests with zero failures and zero skips when `FEATURE_012_TEST_DATABASE_URL` is explicitly configured.
+- **Feature 012 implementation state**: Database-backed tenant sequence allocation, historical bootstrap, all approved generator migrations, bounded clean-transaction retry, rollback safety, tenant/year/SET isolation, and at-most-once regression coverage are implemented and verified.
+- **Feature 012 final-gate corrections**: The live-schema baseline test now asserts the current `023_historical_seq_bootstrap` head. The online-only historical bootstrap migration is explicitly skipped in Alembic offline SQL generation; online PostgreSQL execution remains authoritative for historical validation and seeding.
+- **Feature 012 scope result**: Accounting mappings, tax/capitalization/depreciation policy, visible business-code formats, historical business records, unrelated API contracts, frontend behavior, and protected storage remain unchanged.
+- **Feature 011 status**: COMPLETE and merged through PR #54 using squash merge.
+- **Protected data**: `backend/storage` and `backend/backend/storage` remain untouched. No `.env`, credentials, temporary logs, caches, or codebase-memory artifacts are part of Feature 012.
+- **Next action**: Complete CP7 documentation reconciliation, independent review, commit the verified CP7 corrections, then open/update the PR without merging.

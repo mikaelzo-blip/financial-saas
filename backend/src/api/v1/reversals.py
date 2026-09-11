@@ -15,6 +15,7 @@ from src.models.audit import AuditLog
 from src.schemas.transaction import TransactionResponse
 from src.services.reversal_service import ReversalService
 from src.services.transaction_service import TransactionService
+from src.services.transaction_retry import run_in_clean_transaction
 
 router = APIRouter(tags=["Reversals & Audit"])
 
@@ -51,16 +52,22 @@ async def reverse_transaction(
     current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db)
 ):
-    service = ReversalService(db)
-    rev_trx, _ = await service.reverse_transaction(
-        organization_id=org_id,
-        original_transaction_id=transaction_id,
-        reason=data.reason,
-        actor_id=current_user.id,
-        actor_role=current_user.role
-    )
-    await db.commit()
-    return await TransactionService(db).get_transaction(org_id, rev_trx.id)
+    actor_id = current_user.id
+    actor_role = current_user.role
+
+    async def reverse(session: AsyncSession):
+        service = ReversalService(session)
+        rev_trx, _ = await service.reverse_transaction(
+            organization_id=org_id,
+            original_transaction_id=transaction_id,
+            reason=data.reason,
+            actor_id=actor_id,
+            actor_role=actor_role
+        )
+        return rev_trx.id
+
+    reversal_id = await run_in_clean_transaction(db, reverse)
+    return await TransactionService(db).get_transaction(org_id, reversal_id)
 
 
 @router.get(

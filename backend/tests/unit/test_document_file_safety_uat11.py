@@ -3,6 +3,7 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from src.core.exceptions import DuplicateEntityException
 from src.models.counterparty import Counterparty
@@ -51,6 +52,38 @@ async def test_unsupported_empty_corrupt_and_duplicate_files_fail_closed(db_sess
     await service.ingest_document(org.id, io.BytesIO(content), "first.pdf", "application/pdf", DocumentType.UNKNOWN)
     with pytest.raises(DuplicateEntityException):
         await service.ingest_document(org.id, io.BytesIO(content), "second.pdf", "application/pdf", DocumentType.UNKNOWN)
+    assert len(list(tmp_path.rglob("*.pdf"))) == 1
+
+
+@pytest.mark.asyncio
+async def test_code_collision_removes_file_written_before_database_flush(db_session, tmp_path, monkeypatch):
+    org = Organization(slug="uat11-code-cleanup", legal_name="Code Cleanup")
+    db_session.add(org)
+    await db_session.flush()
+    service = DocumentService(db_session)
+    service.storage.base_dir = tmp_path
+    existing = await service.ingest_document(
+        org.id,
+        io.BytesIO(b"%PDF-1.4\\nexisting-code"),
+        "existing.pdf",
+        "application/pdf",
+        DocumentType.UNKNOWN,
+    )
+    await db_session.commit()
+
+    async def conflicting_code(_: object) -> str:
+        return existing.document_code
+
+    monkeypatch.setattr(service, "generate_document_code", conflicting_code)
+    with pytest.raises(IntegrityError):
+        await service.ingest_document(
+            org.id,
+            io.BytesIO(b"%PDF-1.4\\nnew-file-after-code-collision"),
+            "collision.pdf",
+            "application/pdf",
+            DocumentType.UNKNOWN,
+        )
+
     assert len(list(tmp_path.rglob("*.pdf"))) == 1
 
 

@@ -1,9 +1,7 @@
 """Regression tests for authoritative SQLAlchemy model registration and schema parity."""
 
-import os
 import re
 from pathlib import Path
-import pytest
 
 from src.core.database import Base
 import src.models
@@ -30,13 +28,16 @@ def test_base_metadata_contains_all_migration_tables():
     assert not missing_tables, f"Base.metadata is missing production tables created by migrations: {sorted(missing_tables)}"
 
 
-def test_no_orphan_tables_in_base_metadata():
-    """Verify that Base.metadata does not contain unexpected tables absent from migrations."""
+def test_no_unapproved_orphan_tables_in_base_metadata():
+    """Verify every registered production table is migration-backed."""
     migration_tables = get_migration_tables()
     metadata_tables = set(Base.metadata.tables.keys())
 
     extra_tables = metadata_tables - migration_tables
-    assert not extra_tables, f"Base.metadata contains tables not tracked in migrations: {sorted(extra_tables)}"
+    assert not extra_tables, (
+        "Base.metadata contains tables absent from the Alembic chain: "
+        f"{sorted(extra_tables)}"
+    )
 
 
 def test_all_production_models_exported_in_models_init():
@@ -77,6 +78,7 @@ def test_all_production_models_exported_in_models_init():
         "MoneyMovement",
         "Settlement",
         "SettlementAllocation",
+        "TenantSequence",
         # Bank Reconciliation
         "BankStatementImport",
         "BankStatementLine",

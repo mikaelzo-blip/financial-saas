@@ -12,6 +12,7 @@ from src.models.transaction import Transaction
 from src.models.counterparty import Counterparty
 from src.models.project import Project
 from src.models.enums import TransactionType, WorkflowStatus
+from src.services.tenant_sequence_allocator import allocate_next
 from src.core.exceptions import EntityNotFoundException, InvariantViolationException
 
 
@@ -23,18 +24,9 @@ class VendorAPService:
         self.session = session
 
     async def generate_bill_code(self, organization_id: uuid.UUID, bill_date: Optional[date] = None) -> str:
-        year = (bill_date or date.today()).year
-        prefix = f"BIL-{year}-"
-
-        stmt = select(func.count()).select_from(VendorBill).where(
-            and_(
-                VendorBill.organization_id == organization_id,
-                VendorBill.bill_code.like(f"{prefix}%")
-            )
-        )
-        count = await self.session.scalar(stmt) or 0
-        next_seq = count + 1
-        return f"{prefix}{next_seq:06d}"
+        year = str((bill_date or date.today()).year)
+        seq = await allocate_next(self.session, organization_id, "BIL", year)
+        return f"BIL-{year}-{seq:06d}"
 
     async def calculate_effective_due_date(
         self,
@@ -55,18 +47,9 @@ class VendorAPService:
         return computed_date, None
 
     async def generate_advance_code(self, organization_id: uuid.UUID, advance_date: Optional[date] = None) -> str:
-        year = (advance_date or date.today()).year
-        prefix = f"ADV-{year}-"
-
-        stmt = select(func.count()).select_from(VendorAdvance).where(
-            and_(
-                VendorAdvance.organization_id == organization_id,
-                VendorAdvance.advance_code.like(f"{prefix}%")
-            )
-        )
-        count = await self.session.scalar(stmt) or 0
-        next_seq = count + 1
-        return f"{prefix}{next_seq:06d}"
+        year = str((advance_date or date.today()).year)
+        seq = await allocate_next(self.session, organization_id, "ADV", year)
+        return f"ADV-{year}-{seq:06d}"
 
     async def register_vendor_bill(
         self,

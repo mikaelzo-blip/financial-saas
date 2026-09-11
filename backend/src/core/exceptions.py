@@ -75,6 +75,21 @@ class AuthorizationException(ForbiddenException):
 
 def register_exception_handlers(app: FastAPI) -> None:
     """Register global exception handlers on FastAPI app."""
+    from src.services.tenant_sequence_allocator import SequenceCollisionError
+
+    @app.exception_handler(SequenceCollisionError)
+    async def sequence_collision_handler(request: Request, exc: SequenceCollisionError):
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "success": False,
+                "error": {
+                    "code": "SEQUENCE_COLLISION",
+                    "message": "Generated business identifier could not be allocated safely.",
+                    "details": {},
+                },
+            },
+        )
 
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException):

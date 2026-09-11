@@ -15,6 +15,7 @@ from src.services.audit_service import AuditService
 from src.services.payable_service import VendorAPService
 from src.services.receivable_service import CustomerARService
 from src.services.posting_rules import PostingRuleRegistry, GeneratedJournalLeg
+from src.services.tenant_sequence_allocator import allocate_next
 from src.core.exceptions import EntityNotFoundException, InvariantViolationException
 
 
@@ -28,18 +29,9 @@ class AccountingEngine:
 
     async def generate_entry_number(self, organization_id: uuid.UUID, posting_date: Optional[date] = None) -> str:
         """Generates sequential journal entry number: JE-YYYY-###### (e.g. JE-2026-000001)."""
-        year = (posting_date or date.today()).year
-        prefix = f"JE-{year}-"
-
-        stmt = select(func.count()).select_from(JournalEntry).where(
-            and_(
-                JournalEntry.organization_id == organization_id,
-                JournalEntry.entry_number.like(f"{prefix}%")
-            )
-        )
-        count = await self.session.scalar(stmt) or 0
-        next_seq = count + 1
-        return f"{prefix}{next_seq:06d}"
+        year = str((posting_date or date.today()).year)
+        seq = await allocate_next(self.session, organization_id, "JE", year)
+        return f"JE-{year}-{seq:06d}"
 
     async def assert_period_allows_posting(
         self,

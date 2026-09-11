@@ -12,6 +12,7 @@ from src.models.project import Project
 from src.models.enums import DocumentType, DocumentProcessingStatus
 from src.services.storage_service import StorageService
 from src.services.audit_service import AuditService
+from src.services.tenant_sequence_allocator import allocate_next
 from src.core.exceptions import EntityNotFoundException, DuplicateEntityException
 from src.core.config import settings
 
@@ -51,23 +52,9 @@ class DocumentService:
 
     async def generate_document_code(self, organization_id: uuid.UUID) -> str:
         """Generates sequential document code in format DOC-YYYY-###### (e.g. DOC-2026-000001)."""
-        year = date.today().year
-        prefix = f"DOC-{year}-"
-
-        stmt = select(Document.document_code).where(
-            and_(
-                Document.organization_id == organization_id,
-                Document.document_code.like(f"{prefix}%")
-            )
-        )
-        codes = (await self.session.execute(stmt)).scalars().all()
-        max_seq = 0
-        for code in codes:
-            suffix = code[len(prefix):]
-            if suffix.isdigit():
-                max_seq = max(max_seq, int(suffix))
-        next_seq = max_seq + 1
-        return f"{prefix}{next_seq:06d}"
+        year = str(date.today().year)
+        seq = await allocate_next(self.session, organization_id, "DOC", year)
+        return f"DOC-{year}-{seq:06d}"
 
     async def get_document_by_hash(
         self,
@@ -164,40 +151,49 @@ class DocumentService:
             if not project:
                 raise ValueError("Project is not available in this organization")
 
-        # Save to storage
-        storage_path = self.storage.save_file(organization_id, file_obj, file_name)
+        storage_path: Optional[str] = None
+        try:
+            # Save to storage
+            storage_path = self.storage.save_file(organization_id, file_obj, file_name)
 
-        # Generate code
-        doc_code = await self.generate_document_code(organization_id)
+            # Generate code
+            doc_code = await self.generate_document_code(organization_id)
 
-        document = Document(
-            organization_id=organization_id,
-            document_code=doc_code,
-            document_type=document_type,
-            file_name=file_name,
-            mime_type=mime_type,
-            file_size_bytes=file_size,
-            file_hash=file_hash,
-            storage_path=storage_path,
-            source_channel=source_channel,
-            source_metadata=source_metadata or {},
-            created_by=created_by,
-            processing_status=DocumentProcessingStatus.HASHED,
-        )
-        self.session.add(document)
-        await self.session.flush()
-        await AuditService(self.session).log_event(
-            organization_id, "Document", document.id, "DOCUMENT_RECEIVED", created_by,
-            new_values={"source_channel": source_channel, "file_hash": file_hash,
-                        "mime_type": mime_type, "file_size_bytes": file_size},
-        )
-
-        # Link to the already validated tenant-scoped project if provided.
-        if project:
-            self.session.add(ProjectDocumentLink(project_id=project.id, document_id=document.id))
+            document = Document(
+                organization_id=organization_id,
+                document_code=doc_code,
+                document_type=document_type,
+                file_name=file_name,
+                mime_type=mime_type,
+                file_size_bytes=file_size,
+                file_hash=file_hash,
+                storage_path=storage_path,
+                source_channel=source_channel,
+                source_metadata=source_metadata or {},
+                created_by=created_by,
+                processing_status=DocumentProcessingStatus.HASHED,
+            )
+            self.session.add(document)
             await self.session.flush()
+            await AuditService(self.session).log_event(
+                organization_id, "Document", document.id, "DOCUMENT_RECEIVED", created_by,
+                new_values={"source_channel": source_channel, "file_hash": file_hash,
+                            "mime_type": mime_type, "file_size_bytes": file_size},
+            )
 
-        return document
+            # Link to the already validated tenant-scoped project if provided.
+            if project:
+                self.session.add(ProjectDocumentLink(project_id=project.id, document_id=document.id))
+                await self.session.flush()
+
+            return document
+        except Exception:
+            if storage_path is not None:
+                try:
+                    self.storage.delete_file(storage_path)
+                except OSError:
+                    pass
+            raise
 
     async def list_documents(
         self,

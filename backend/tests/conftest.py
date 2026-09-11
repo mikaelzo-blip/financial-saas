@@ -1,3 +1,5 @@
+pytest_plugins = ["tests.integration.f012_postgresql_support"]
+
 from typing import AsyncGenerator
 
 import pytest

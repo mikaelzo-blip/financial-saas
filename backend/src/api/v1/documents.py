@@ -25,6 +25,7 @@ from src.services.documents.pipeline import process_document_background
 from src.services.transaction_service import TransactionService
 from src.services.accounting_engine import AccountingEngine
 from src.services.audit_service import AuditService
+from src.services.transaction_retry import run_in_clean_transaction
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
@@ -65,22 +66,26 @@ async def upload_document(
     process: bool = Form(True),
     org_id: uuid.UUID = Depends(get_current_org_id),
     user_id: uuid.UUID = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    service = DocumentService(db)
-    document = await service.ingest_document(
-        organization_id=org_id,
-        file_obj=file.file,
-        file_name=file.filename or "unknown_file",
-        mime_type=file.content_type or "application/octet-stream",
-        document_type=document_type,
-        source_channel=source_channel,
-        project_id=project_id,
-        created_by=user_id
-    )
+    async def ingest(session: AsyncSession):
+        document = await DocumentService(session).ingest_document(
+            organization_id=org_id,
+            file_obj=file.file,
+            file_name=file.filename or "unknown_file",
+            mime_type=file.content_type or "application/octet-stream",
+            document_type=document_type,
+            source_channel=source_channel,
+            project_id=project_id,
+            created_by=user_id,
+        )
+        if process:
+            document.processing_status = DocumentProcessingStatus.EXTRACTING
+            await session.flush()
+        return document
+
+    document = await run_in_clean_transaction(db, ingest)
     if process:
-        document.processing_status = DocumentProcessingStatus.EXTRACTING
-        await db.flush()
         background_tasks.add_task(process_document_background, document.id)
     return document
 
@@ -198,53 +203,58 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
 async def approve_document_candidate(document_id: uuid.UUID, org_id: uuid.UUID = Depends(get_current_org_id),
                                      current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
                                      db: AsyncSession = Depends(get_db)):
-    document = await DocumentService(db).get_document(org_id, document_id, for_update=True)
     user_id = current_user.id
-    reviewer = await require_reviewer(db, org_id, user_id)
-    if document.review_flags or document.processing_status != DocumentProcessingStatus.READY_FOR_APPROVAL:
-        raise HTTPException(status_code=409, detail="Document has unresolved review requirements")
-    candidate = TransactionCandidate.model_validate(document.candidate_transaction)
-    if candidate.converted_transaction_id:
-        raise HTTPException(status_code=409, detail="Candidate already converted")
-    if not candidate.proposed_transaction_type or not candidate.transaction_date or not candidate.amount:
-        raise HTTPException(status_code=409, detail="Candidate is incomplete")
-    if candidate.proposed_transaction_type == TransactionType.CUSTOMER_PAYMENT and not candidate.allocation_target_id:
-        raise HTTPException(status_code=409, detail="Customer payment requires an invoice allocation")
-    if candidate.proposed_transaction_type == TransactionType.PAY_VENDOR_BILL and not candidate.allocation_target_id:
-        raise HTTPException(status_code=409, detail="Vendor payment requires a bill allocation")
-    transaction = await TransactionService(db).create_transaction(org_id, TransactionCreate(
-        transaction_type=candidate.proposed_transaction_type, transaction_date=candidate.transaction_date,
-        amount=candidate.amount, currency=candidate.currency_code or "IDR", counterparty_id=candidate.counterparty_id,
-        payment_account_id=candidate.payment_account_id, reference_no=candidate.external_reference,
-        description=candidate.description or f"Document {document.document_code}", document_ids=[document.id],
-        project_id=candidate.project_id, cost_category=candidate.cost_category,
-        expense_category=candidate.expense_category), created_by=user_id)
-    journal = await AccountingEngine(db).post_transaction(
-        org_id,
-        transaction.id,
-        actor_id=user_id,
-        actor_role=reviewer.role,
-    )
-    if candidate.proposed_transaction_type == TransactionType.CUSTOMER_PAYMENT:
-        from src.services.receivable_service import CustomerARService
-        await CustomerARService(db).allocate_customer_payment(
-            org_id, transaction.id, [(candidate.allocation_target_id, candidate.amount)]
+
+    async def approve(session: AsyncSession) -> uuid.UUID:
+        document = await DocumentService(session).get_document(org_id, document_id, for_update=True)
+        reviewer = await require_reviewer(session, org_id, user_id)
+        if document.review_flags or document.processing_status != DocumentProcessingStatus.READY_FOR_APPROVAL:
+            raise HTTPException(status_code=409, detail="Document has unresolved review requirements")
+        candidate = TransactionCandidate.model_validate(document.candidate_transaction)
+        if candidate.converted_transaction_id:
+            raise HTTPException(status_code=409, detail="Candidate already converted")
+        if not candidate.proposed_transaction_type or not candidate.transaction_date or not candidate.amount:
+            raise HTTPException(status_code=409, detail="Candidate is incomplete")
+        if candidate.proposed_transaction_type == TransactionType.CUSTOMER_PAYMENT and not candidate.allocation_target_id:
+            raise HTTPException(status_code=409, detail="Customer payment requires an invoice allocation")
+        if candidate.proposed_transaction_type == TransactionType.PAY_VENDOR_BILL and not candidate.allocation_target_id:
+            raise HTTPException(status_code=409, detail="Vendor payment requires a bill allocation")
+        transaction = await TransactionService(session).create_transaction(org_id, TransactionCreate(
+            transaction_type=candidate.proposed_transaction_type, transaction_date=candidate.transaction_date,
+            amount=candidate.amount, currency=candidate.currency_code or "IDR", counterparty_id=candidate.counterparty_id,
+            payment_account_id=candidate.payment_account_id, reference_no=candidate.external_reference,
+            description=candidate.description or f"Document {document.document_code}", document_ids=[document.id],
+            project_id=candidate.project_id, cost_category=candidate.cost_category,
+            expense_category=candidate.expense_category), created_by=user_id)
+        journal = await AccountingEngine(session).post_transaction(
+            org_id,
+            transaction.id,
+            actor_id=user_id,
+            actor_role=reviewer.role,
         )
-    elif candidate.proposed_transaction_type == TransactionType.PAY_VENDOR_BILL:
-        from src.services.payable_service import VendorAPService
-        await VendorAPService(db).allocate_vendor_payment(
-            org_id, transaction.id, [(candidate.allocation_target_id, candidate.amount)]
-        )
-    if candidate.proposed_transaction_type in (TransactionType.CUSTOMER_PAYMENT, TransactionType.PAY_VENDOR_BILL):
-        from src.services.money_movement_service import MoneyMovementService
-        await MoneyMovementService(db).synchronize_payment_money_movement(org_id, transaction.id)
-    candidate.status, candidate.converted_transaction_id = CandidateStatus.CONVERTED, transaction.id
-    document.candidate_transaction = candidate.model_dump(mode="json")
-    document.processing_status = DocumentProcessingStatus.PROCESSED
-    await AuditService(db).log_event(org_id, "Document", document.id, "APPROVE_CANDIDATE", user_id,
-        new_values={"transaction_id": str(transaction.id), "journal_id": str(journal.id)})
-    await db.flush()
-    return await TransactionService(db).get_transaction(org_id, transaction.id)
+        if candidate.proposed_transaction_type == TransactionType.CUSTOMER_PAYMENT:
+            from src.services.receivable_service import CustomerARService
+            await CustomerARService(session).allocate_customer_payment(
+                org_id, transaction.id, [(candidate.allocation_target_id, candidate.amount)]
+            )
+        elif candidate.proposed_transaction_type == TransactionType.PAY_VENDOR_BILL:
+            from src.services.payable_service import VendorAPService
+            await VendorAPService(session).allocate_vendor_payment(
+                org_id, transaction.id, [(candidate.allocation_target_id, candidate.amount)]
+            )
+        if candidate.proposed_transaction_type in (TransactionType.CUSTOMER_PAYMENT, TransactionType.PAY_VENDOR_BILL):
+            from src.services.money_movement_service import MoneyMovementService
+            await MoneyMovementService(session).synchronize_payment_money_movement(org_id, transaction.id)
+        candidate.status, candidate.converted_transaction_id = CandidateStatus.CONVERTED, transaction.id
+        document.candidate_transaction = candidate.model_dump(mode="json")
+        document.processing_status = DocumentProcessingStatus.PROCESSED
+        await AuditService(session).log_event(org_id, "Document", document.id, "APPROVE_CANDIDATE", user_id,
+            new_values={"transaction_id": str(transaction.id), "journal_id": str(journal.id)})
+        await session.flush()
+        return transaction.id
+
+    transaction_id = await run_in_clean_transaction(db, approve)
+    return await TransactionService(db).get_transaction(org_id, transaction_id)
 
 
 @router.get("/review-queue", response_model=List[DocumentResponse], summary="List Document Candidates Requiring Review")

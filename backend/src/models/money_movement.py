@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Enum as SAEnum,
     Text,
+    UniqueConstraint,
     func
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -26,6 +27,13 @@ from src.models.enums import (
 
 class MoneyMovement(Base):
     __tablename__ = "money_movements"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "movement_code",
+            name="uq_money_movements_org_code",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         primary_key=True,
@@ -38,8 +46,7 @@ class MoneyMovement(Base):
     )
     movement_code: Mapped[str] = mapped_column(
         String(50),
-        nullable=False,
-        unique=True
+        nullable=False
     )
     payment_account_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("payment_accounts.id", ondelete="RESTRICT"),
@@ -92,6 +99,13 @@ class MoneyMovement(Base):
 
 class Settlement(Base):
     __tablename__ = "settlements"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "settlement_code",
+            name="uq_settlements_org_code",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         primary_key=True,
@@ -104,8 +118,7 @@ class Settlement(Base):
     )
     settlement_code: Mapped[str] = mapped_column(
         String(50),
-        nullable=False,
-        unique=True
+        nullable=False
     )
     money_movement_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("money_movements.id", ondelete="RESTRICT"),

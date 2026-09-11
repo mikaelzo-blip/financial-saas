@@ -46,6 +46,7 @@ from src.models.bank_reconciliation import BankStatementImport, BankStatementLin
 from src.models.fixed_asset import FixedAsset, FixedAssetDepreciation
 from src.models.inbox import InboxMessage, InboxAttachment, DocumentSession, MatchEvidence
 from src.models.money_movement import MoneyMovement, Settlement, SettlementAllocation
+from src.models.tenant_sequence import TenantSequence
 
 __all__ = [
     "UserRole",
@@ -118,4 +119,5 @@ __all__ = [
     "MoneyMovement",
     "Settlement",
     "SettlementAllocation",
+    "TenantSequence",
 ]

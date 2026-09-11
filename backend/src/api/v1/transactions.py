@@ -15,6 +15,7 @@ from src.schemas.transaction import (
 )
 from src.services.transaction_service import TransactionService
 from src.services.opening_balance_service import OpeningBalanceService
+from src.services.transaction_retry import run_in_clean_transaction
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -30,8 +31,10 @@ async def create_transaction(
     org_id: uuid.UUID = Depends(get_current_org_id),
     db: AsyncSession = Depends(get_db)
 ):
-    service = TransactionService(db)
-    return await service.create_transaction(org_id, data)
+    async def create(session: AsyncSession):
+        return await TransactionService(session).create_transaction(org_id, data)
+
+    return await run_in_clean_transaction(db, create)
 
 
 @router.get(
@@ -78,18 +81,22 @@ async def post_transaction(
     current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db)
 ):
+    actor_id = current_user.id
+    actor_role = current_user.role
     from src.services.processing_policy_service import ProcessingPolicyService
-    policy_svc = ProcessingPolicyService(db)
-    await policy_svc.authorize_and_post(
-        org_id,
-        transaction_id,
-        actor_id=current_user.id,
-        actor_role=current_user.role,
-        bypass_role_check=False
-    )
-    await db.commit()
-    service = TransactionService(db)
-    return await service.get_transaction(org_id, transaction_id)
+
+    async def post(session: AsyncSession) -> uuid.UUID:
+        transaction, _ = await ProcessingPolicyService(session).authorize_and_post(
+            org_id,
+            transaction_id,
+            actor_id=actor_id,
+            actor_role=actor_role,
+            bypass_role_check=False,
+        )
+        return transaction.id
+
+    posted_transaction_id = await run_in_clean_transaction(db, post)
+    return await TransactionService(db).get_transaction(org_id, posted_transaction_id)
 
 
 @router.post(
@@ -103,18 +110,22 @@ async def approve_transaction(
     current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db)
 ):
+    actor_id = current_user.id
+    actor_role = current_user.role
     from src.services.processing_policy_service import ProcessingPolicyService
-    policy_svc = ProcessingPolicyService(db)
-    await policy_svc.authorize_and_post(
-        org_id,
-        transaction_id,
-        actor_id=current_user.id,
-        actor_role=current_user.role,
-        bypass_role_check=False
-    )
-    await db.commit()
-    service = TransactionService(db)
-    return await service.get_transaction(org_id, transaction_id)
+
+    async def approve(session: AsyncSession) -> uuid.UUID:
+        transaction, _ = await ProcessingPolicyService(session).authorize_and_post(
+            org_id,
+            transaction_id,
+            actor_id=actor_id,
+            actor_role=actor_role,
+            bypass_role_check=False,
+        )
+        return transaction.id
+
+    approved_transaction_id = await run_in_clean_transaction(db, approve)
+    return await TransactionService(db).get_transaction(org_id, approved_transaction_id)
 
 
 @router.post(
@@ -129,17 +140,22 @@ async def establish_opening_balances(
     current_user: User = Depends(require_roles(UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db)
 ):
-    service = OpeningBalanceService(db)
     raw_entries = [e.model_dump() for e in payload.entries]
-    posted_trx = await service.post_opening_balances(
-        organization_id=org_id,
-        as_of_date=payload.as_of_date,
-        balance_entries=raw_entries,
-        notes=payload.notes or "Saldo Awal Pembukuan",
-        actor_id=current_user.id,
-        actor_role=current_user.role
-    )
-    await db.commit()
-    return await TransactionService(db).get_transaction(org_id, posted_trx.id)
+    actor_id = current_user.id
+    actor_role = current_user.role
+
+    async def establish(session: AsyncSession) -> uuid.UUID:
+        posted_trx = await OpeningBalanceService(session).post_opening_balances(
+            organization_id=org_id,
+            as_of_date=payload.as_of_date,
+            balance_entries=raw_entries,
+            notes=payload.notes or "Saldo Awal Pembukuan",
+            actor_id=actor_id,
+            actor_role=actor_role,
+        )
+        return posted_trx.id
+
+    posted_transaction_id = await run_in_clean_transaction(db, establish)
+    return await TransactionService(db).get_transaction(org_id, posted_transaction_id)
 
 

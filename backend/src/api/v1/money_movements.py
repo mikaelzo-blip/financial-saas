@@ -14,6 +14,7 @@ from src.schemas.money_movement import (
     MoneyMovementResponse
 )
 from src.services.money_movement_service import MoneyMovementService
+from src.services.transaction_retry import run_in_clean_transaction
 
 router = APIRouter()
 
@@ -44,8 +45,10 @@ async def create_money_movement(
     current_user = Depends(require_application_user),
     db: AsyncSession = Depends(get_db)
 ):
-    service = MoneyMovementService(db)
-    return await service.create_money_movement(org_id, data)
+    async def create(session: AsyncSession):
+        return await MoneyMovementService(session).create_money_movement(org_id, data)
+
+    return await run_in_clean_transaction(db, create)
 
 
 @router.get(

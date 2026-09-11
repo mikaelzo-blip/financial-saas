@@ -19,6 +19,7 @@ from src.models.user import User
 from src.schemas.transaction import TransactionCreate
 from src.services.accounting_engine import AccountingEngine
 from src.services.payable_service import VendorAPService
+from src.services.transaction_retry import run_in_clean_transaction
 from src.services.transaction_service import TransactionService
 
 router = APIRouter(prefix="/vendor-bills", tags=["Payables"])
@@ -134,43 +135,53 @@ async def record_vendor_payment(
         raise InvariantViolationException(
             f"Vendor payment amount ({data.amount}) exceeds outstanding balance ({outstanding}) on {bill.bill_code}."
         )
-    payment = await TransactionService(db).create_transaction(
-        organization_id,
-        TransactionCreate(
-            transaction_type=TransactionType.PAY_VENDOR_BILL,
-            transaction_date=data.payment_date,
-            amount=data.amount,
-            counterparty_id=bill.vendor_id,
-            project_id=bill.project_id,
-            payment_account_id=data.payment_account_id,
-            reference_no=data.reference_no,
-            description=data.description or f"Pembayaran tagihan {bill.bill_code}",
-            source_channel="WEB",
-        ),
-        created_by=current_user.id,
-    )
-    if payment.workflow_status == WorkflowStatus.REVIEW_REQUIRED:
-        raise InvariantViolationException(
-            "Possible duplicate vendor payment is routed to review and will not be posted automatically."
+    bill_id = bill.id
+    bill_vendor_id = bill.vendor_id
+    bill_project_id = bill.project_id
+    bill_code = bill.bill_code
+    actor_id = current_user.id
+    actor_role = current_user.role
+
+    async def record_payment(session: AsyncSession):
+        payment = await TransactionService(session).create_transaction(
+            organization_id,
+            TransactionCreate(
+                transaction_type=TransactionType.PAY_VENDOR_BILL,
+                transaction_date=data.payment_date,
+                amount=data.amount,
+                counterparty_id=bill_vendor_id,
+                project_id=bill_project_id,
+                payment_account_id=data.payment_account_id,
+                reference_no=data.reference_no,
+                description=data.description or f"Pembayaran tagihan {bill_code}",
+                source_channel="WEB",
+            ),
+            created_by=actor_id,
         )
-    journal = await AccountingEngine(db).post_transaction(
-        organization_id,
-        payment.id,
-        actor_id=current_user.id,
-        actor_role=current_user.role,
-    )
-    allocations = await ap_service.allocate_vendor_payment(
-        organization_id, payment.id, [(bill.id, data.amount)]
-    )
-    from src.services.money_movement_service import MoneyMovementService
-    await MoneyMovementService(db).synchronize_payment_money_movement(organization_id, payment.id)
-    refreshed_bill = await ap_service.get_bill(organization_id, bill.id)
-    return VendorPaymentResponse(
-        payment_transaction_id=payment.id,
-        allocation_id=allocations[0].id,
-        journal_entry_id=journal.id,
-        bill_id=bill.id,
-        amount=data.amount,
-        bill_status=refreshed_bill.status,
-        outstanding_amount=refreshed_bill.calculate_outstanding_amount(),
-    )
+        if payment.workflow_status == WorkflowStatus.REVIEW_REQUIRED:
+            raise InvariantViolationException(
+                "Possible duplicate vendor payment is routed to review and will not be posted automatically."
+            )
+        journal = await AccountingEngine(session).post_transaction(
+            organization_id,
+            payment.id,
+            actor_id=actor_id,
+            actor_role=actor_role,
+        )
+        allocations = await VendorAPService(session).allocate_vendor_payment(
+            organization_id, payment.id, [(bill_id, data.amount)]
+        )
+        from src.services.money_movement_service import MoneyMovementService
+        await MoneyMovementService(session).synchronize_payment_money_movement(organization_id, payment.id)
+        refreshed_bill = await VendorAPService(session).get_bill(organization_id, bill_id)
+        return VendorPaymentResponse(
+            payment_transaction_id=payment.id,
+            allocation_id=allocations[0].id,
+            journal_entry_id=journal.id,
+            bill_id=bill_id,
+            amount=data.amount,
+            bill_status=refreshed_bill.status,
+            outstanding_amount=refreshed_bill.calculate_outstanding_amount(),
+        )
+
+    return await run_in_clean_transaction(db, record_payment)

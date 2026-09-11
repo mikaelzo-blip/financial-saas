@@ -14,20 +14,20 @@
 
 | Requirement | Implementation checkpoint | Authoritative test / acceptance gate | Status |
 |---|---|---|---|
-| FIN-001-R01 AR source protection | CP2 | Two-session AR barrier + N=50 total `<= collectible`; CP2 gate | Planned |
-| FIN-001-R02 AP source protection | CP2 | Two-session AP barrier + N=50 total `<= bill`; CP2 gate | Planned |
-| FIN-001-R03 source locks in transaction | CP2 | SQL/behavior assertion that balance is read after `FOR UPDATE`; CP2 gate | Planned |
-| FIN-001-R04 tenant isolation | CP1/CP2 | Cross-tenant source UUID fails closed with zero effects; CP2 gate | Planned |
-| FIN-001-R05 deterministic multi-source order | CP2 | Reversed-order independent-session no-deadlock test; CP2 gate | Planned |
-| FIN-001-R06 full rollback | CP1/CP3 | Forced post-allocation failure has zero partial graph; CP3 gate | Planned |
-| FIN-001-R07 at-most-once retry effects | CP3 | Controlled transient conflict/retry counts one graph; CP3 gate | Planned |
-| FIN-001-R08 sequential compatibility | CP2/CP4 | Existing AR/AP sequential safety suites green; CP4 gate | Planned |
-| FIN-001-R09 accounting policy unchanged | CP2/CP4 | Diff review + existing journal balance tests; CP4 gate | Planned |
-| FIN-001-R10 historical records unchanged | CP4 | Diff/schema/data review; no migration; CP4 gate | Planned |
-| FIN-001-R11 PostgreSQL evidence mandatory | CP1/CP4 | Independent sessions/barriers, migrated disposable DB, no SQLite substitution; CP4 gate | Planned |
-| FIN-001-R12 CI fails closed | CP1/CP4 | Dedicated helper rejects missing/unsafe URL; required CI PostgreSQL job rejects missing/unreachable URL and reports zero skip | CP1 helper verified; CI job planned |
-| FIN-001-R13 endpoint characterization | CP1 | Real same-tenant customer/vendor HTTP requests remain serialized at Feature-012 `TRX` allocation before allocation service entry | CP1 verified |
-| FIN-001-R14 no incidental-correctness reliance | CP2 | Direct independent-session service REDs remain executable until authoritative source/payment locking plus fresh aggregate validation is implemented | CP1 verified; CP2 planned |
+| FIN-001-R01 AR source protection | CP2 | Two-session AR barrier + N=50 total `<= collectible`; CP2 gate | Verified |
+| FIN-001-R02 AP source protection | CP2 | Two-session AP barrier + N=50 total `<= bill`; CP2 gate | Verified |
+| FIN-001-R03 source locks in transaction | CP2 | SQL/behavior assertion that balance is read after `FOR UPDATE`; CP2 gate | Verified |
+| FIN-001-R04 tenant isolation | CP1/CP2 | Cross-tenant source UUID fails closed with zero effects; CP2 gate | Verified |
+| FIN-001-R05 deterministic multi-source order | CP2 | Reversed-order independent-session no-deadlock test; CP2 gate | Verified |
+| FIN-001-R06 full rollback | CP1/CP3 | Forced post-allocation failure has zero partial graph; CP3 gate | Verified |
+| FIN-001-R07 at-most-once retry effects | CP3 | Controlled transient conflict/retry counts one graph; CP3 gate | Verified |
+| FIN-001-R08 sequential compatibility | CP2/CP4 | Existing AR/AP sequential safety suites green; CP4 gate | Verified |
+| FIN-001-R09 accounting policy unchanged | CP2/CP4 | Diff review + existing journal balance tests; CP4 gate | Verified |
+| FIN-001-R10 historical records unchanged | CP4 | Diff/schema/data review; no migration; CP4 gate | Verified |
+| FIN-001-R11 PostgreSQL evidence mandatory | CP1/CP4 | Independent sessions/barriers, migrated disposable DB, no SQLite substitution; CP4 gate | Verified |
+| FIN-001-R12 CI fails closed | CP1/CP4 | Dedicated helper rejects missing/unsafe URL; required CI PostgreSQL job rejects missing/unreachable URL and reports zero skip | Verified |
+| FIN-001-R13 endpoint characterization | CP1 | Real same-tenant customer/vendor HTTP requests remain serialized at Feature-012 `TRX` allocation before allocation service entry | Verified |
+| FIN-001-R14 no incidental-correctness reliance | CP2 | Direct independent-session service REDs remain executable until authoritative source/payment locking plus fresh aggregate validation is implemented | Verified |
 
 **TOTAL REQUIREMENTS: 14**
 **MAPPED: 14**

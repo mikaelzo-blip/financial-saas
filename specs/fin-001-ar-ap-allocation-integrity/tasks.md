@@ -39,11 +39,11 @@
 
 ## CP4 — Full Verification, Review, and Delivery Readiness
 
-- [ ] T020 Provision a dedicated `postgres:16` GitHub Actions service for the required FIN-001 concurrency job; export its explicit test URL, run migrations/head validation, and assert missing/unreachable/unsafe prerequisites fail rather than skip.
-- [ ] T021 Run focused FIN-001 PostgreSQL tests, existing Feature 012 PostgreSQL/recovery suites, sequential AR/AP tests, and complete backend suite.
-- [ ] T022 Run dependency check, configured lint/type checks, frontend test/lint/type/build where applicable, Alembic head/check/offline chain, repository safety, `git diff --check`, and staged-diff review.
-- [ ] T023 Complete `analysis.md` with 100% R01–R12 traceability and independent-review resolution; require zero Critical/High findings and zero Constitution violations.
-- [ ] T024 Follow repository delivery workflow only after all gates: concise checkpoint commits, push `hermes/fin-001-ar-ap-concurrency`, PR, GitHub CI, and merge eligibility review. This is not authorized in the current design turn.
+- [x] T020 Provision a dedicated `postgres:16` GitHub Actions service for the required FIN-001 concurrency job; export its explicit test URL, run migrations/head validation, and assert missing/unreachable/unsafe prerequisites fail rather than skip.
+- [x] T021 Run focused FIN-001 PostgreSQL tests, existing Feature 012 PostgreSQL/recovery suites, sequential AR/AP tests, and complete backend suite.
+- [x] T022 Run dependency check, configured lint/type checks, frontend test/lint/type/build where applicable, Alembic head/check/offline chain, repository safety, `git diff --check`, and staged-diff review.
+- [x] T023 Complete `analysis.md` with 100% R01–R14 traceability and independent-review resolution; require zero Critical/High findings and zero Constitution violations.
+- [ ] T024 Follow repository delivery workflow only after all gates: concise checkpoint commits, push `hermes/fin-001-ar-ap-concurrency`, PR, GitHub CI, and merge eligibility review.
 
 ## Dependencies and Execution Order
 

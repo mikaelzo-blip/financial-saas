@@ -108,6 +108,24 @@ async def test_organizations(
                 parameters,
             )
             await session.execute(
+                text(
+                    "DELETE FROM customer_payment_allocations WHERE "
+                    "payment_transaction_id IN (SELECT id FROM transactions WHERE "
+                    + organization_filter + ") OR invoice_id IN "
+                    "(SELECT id FROM customer_invoices WHERE " + organization_filter + ")"
+                ),
+                parameters,
+            )
+            await session.execute(
+                text(
+                    "DELETE FROM vendor_payment_allocations WHERE "
+                    "payment_transaction_id IN (SELECT id FROM transactions WHERE "
+                    + organization_filter + ") OR bill_id IN "
+                    "(SELECT id FROM vendor_bills WHERE " + organization_filter + ")"
+                ),
+                parameters,
+            )
+            await session.execute(
                 text("DELETE FROM settlements WHERE " + organization_filter),
                 parameters,
             )
@@ -134,7 +152,60 @@ async def test_organizations(
                 parameters,
             )
             await session.execute(
+                text(
+                    "DELETE FROM transaction_review_flags WHERE transaction_id IN "
+                    "(SELECT id FROM transactions WHERE " + organization_filter + ")"
+                ),
+                parameters,
+            )
+            await session.execute(
+                text(
+                    "DELETE FROM transaction_document_links WHERE transaction_id IN "
+                    "(SELECT id FROM transactions WHERE " + organization_filter + ")"
+                ),
+                parameters,
+            )
+            await session.execute(
+                text("DELETE FROM customer_retention_releases WHERE " + organization_filter),
+                parameters,
+            )
+            await session.execute(
+                text("DELETE FROM vendor_advances WHERE " + organization_filter),
+                parameters,
+            )
+            await session.execute(
+                text("DELETE FROM customer_invoices WHERE " + organization_filter),
+                parameters,
+            )
+            await session.execute(
+                text("DELETE FROM vendor_bills WHERE " + organization_filter),
+                parameters,
+            )
+            await session.execute(
+                text("DELETE FROM audit_logs WHERE " + organization_filter),
+                parameters,
+            )
+            await session.execute(
                 text("DELETE FROM transactions WHERE " + organization_filter),
+                parameters,
+            )
+            await session.execute(
+                text(
+                    "DELETE FROM project_document_links WHERE project_id IN "
+                    "(SELECT id FROM projects WHERE " + organization_filter + ")"
+                ),
+                parameters,
+            )
+            await session.execute(
+                text("DELETE FROM projects WHERE " + organization_filter),
+                parameters,
+            )
+            await session.execute(
+                text("DELETE FROM documents WHERE " + organization_filter),
+                parameters,
+            )
+            await session.execute(
+                text("DELETE FROM counterparties WHERE " + organization_filter),
                 parameters,
             )
             await session.execute(
@@ -142,9 +213,11 @@ async def test_organizations(
                 parameters,
             )
             await session.execute(
-                text(
-                    "DELETE FROM chart_of_accounts WHERE " + organization_filter
-                ),
+                text("DELETE FROM chart_of_accounts WHERE " + organization_filter),
+                parameters,
+            )
+            await session.execute(
+                text("DELETE FROM tenant_sequences WHERE " + organization_filter),
                 parameters,
             )
             await session.execute(

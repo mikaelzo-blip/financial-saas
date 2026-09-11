@@ -302,12 +302,19 @@ async def test_retry_rolls_back_complete_financial_side_effect_graph(
         payment_account_id = payment_account.id
 
     attempts = 0
+    failed_transaction_id: UUID | None = None
+    failed_journal_id: UUID | None = None
+    failed_movement_id: UUID | None = None
+    failed_settlement_id: UUID | None = None
     successful_transaction_id: UUID | None = None
 
     async def operation(session: AsyncSession) -> UUID:
-        nonlocal attempts, successful_transaction_id
+        nonlocal attempts, failed_transaction_id, failed_journal_id
+        nonlocal failed_movement_id, failed_settlement_id, successful_transaction_id
         attempts += 1
         transaction_id = uuid4()
+        if attempts == 1:
+            failed_transaction_id = transaction_id
         transaction_code = await TransactionService(session).generate_transaction_code(
             organization_id, BUSINESS_DATE
         )
@@ -334,10 +341,10 @@ async def test_retry_rolls_back_complete_financial_side_effect_graph(
         generated_entry_number = await AccountingEngine(session).generate_entry_number(
             organization_id, BUSINESS_DATE
         )
-        entry_number = conflict_journal_number if attempts == 1 else generated_entry_number
         journal = JournalEntry(
+            id=uuid4(),
             organization_id=organization_id,
-            entry_number=entry_number,
+            entry_number=generated_entry_number,
             transaction_id=transaction_id,
             posting_date=BUSINESS_DATE,
             description="CP5 complete graph retry",
@@ -346,7 +353,8 @@ async def test_retry_rolls_back_complete_financial_side_effect_graph(
             is_balanced=True,
         )
         session.add(journal)
-        await session.flush()
+        if attempts == 1:
+            failed_journal_id = journal.id
         session.add_all([
             JournalLine(
                 journal_entry_id=journal.id,
@@ -371,6 +379,7 @@ async def test_retry_rolls_back_complete_financial_side_effect_graph(
             ),
         ])
         movement = MoneyMovement(
+            id=uuid4(),
             organization_id=organization_id,
             movement_code=f"MM-2026-{900000 + attempts:06d}",
             payment_account_id=payment_account_id,
@@ -380,9 +389,12 @@ async def test_retry_rolls_back_complete_financial_side_effect_graph(
             source_type=MovementSourceType.MANUAL,
             description="CP5 complete graph retry",
         )
+        if attempts == 1:
+            failed_movement_id = movement.id
         session.add(movement)
         await session.flush()
         settlement = Settlement(
+            id=uuid4(),
             organization_id=organization_id,
             settlement_code=f"SET-{900000 + attempts:06d}",
             money_movement_id=movement.id,
@@ -390,6 +402,8 @@ async def test_retry_rolls_back_complete_financial_side_effect_graph(
             settlement_type=SettlementType.DIRECT_EXPENSE,
             amount=Decimal("100.00"),
         )
+        if attempts == 1:
+            failed_settlement_id = settlement.id
         session.add(settlement)
         await session.flush()
         session.add(
@@ -399,6 +413,21 @@ async def test_retry_rolls_back_complete_financial_side_effect_graph(
             )
         )
         await session.flush()
+        if attempts == 1:
+            session.add(
+                JournalEntry(
+                    id=uuid4(),
+                    organization_id=organization_id,
+                    entry_number=conflict_journal_number,
+                    transaction_id=transaction_id,
+                    posting_date=BUSINESS_DATE,
+                    description="CP5 injected retry collision",
+                    total_debit=Decimal("100.00"),
+                    total_credit=Decimal("100.00"),
+                    is_balanced=True,
+                )
+            )
+            await session.flush()
         successful_transaction_id = transaction_id
         return transaction_id
 
@@ -409,7 +438,52 @@ async def test_retry_rolls_back_complete_financial_side_effect_graph(
 
         assert attempts == 2
         assert result == successful_transaction_id
+        assert failed_transaction_id is not None
+        assert failed_journal_id is not None
+        assert failed_movement_id is not None
+        assert failed_settlement_id is not None
         async with pg_session_factory() as session:
+            assert await session.scalar(
+                select(func.count()).select_from(Transaction).where(
+                    Transaction.id == failed_transaction_id,
+                )
+            ) == 0
+            assert await session.scalar(
+                select(func.count()).select_from(TransactionAllocation).where(
+                    TransactionAllocation.transaction_id == failed_transaction_id,
+                )
+            ) == 0
+            assert await session.scalar(
+                select(func.count()).select_from(JournalEntry).where(
+                    JournalEntry.id == failed_journal_id,
+                )
+            ) == 0
+            assert await session.scalar(
+                select(func.count()).select_from(JournalLine).where(
+                    JournalLine.journal_entry_id == failed_journal_id,
+                )
+            ) == 0
+            assert await session.scalar(
+                select(func.count()).select_from(AuditLog).where(
+                    AuditLog.entity_id == failed_transaction_id,
+                    AuditLog.action == "CP5_RETRY_GRAPH",
+                )
+            ) == 0
+            assert await session.scalar(
+                select(func.count()).select_from(MoneyMovement).where(
+                    MoneyMovement.id == failed_movement_id,
+                )
+            ) == 0
+            assert await session.scalar(
+                select(func.count()).select_from(Settlement).where(
+                    Settlement.id == failed_settlement_id,
+                )
+            ) == 0
+            assert await session.scalar(
+                select(func.count()).select_from(SettlementAllocation).join(Settlement).where(
+                    Settlement.id == failed_settlement_id,
+                )
+            ) == 0
             assert await session.scalar(
                 select(func.count()).select_from(Transaction).where(
                     Transaction.organization_id == organization_id,

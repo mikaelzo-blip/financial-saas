@@ -19,21 +19,21 @@
 
 ## CP2 — Source/Payment Locks and Deterministic Ordering
 
-- [ ] T010 Implement shared canonical coalescing and UUID-ordering behavior in the AR/AP allocation paths without changing public API payloads.
-- [ ] T011 Update `backend/src/services/receivable_service.py` to lock the posted payment and target invoices inside the authoritative operation, calculate post-lock payment/source totals with explicit SQL aggregates, then validate and derive status.
-- [ ] T012 Update `backend/src/services/payable_service.py` symmetrically for payment and vendor-bill locks and explicit post-lock aggregates.
-- [ ] T013 Update `CustomerARService.release_customer_retention()` to lock the invoice before changing `retention_released_amount`, sharing the source-lock protocol without changing retention accounting policy.
-- [ ] T014 Update `backend/src/api/v1/receivables.py` and `backend/src/api/v1/payables.py` so authoritative source eligibility/balance checks occur only inside the locked operation boundary.
-- [ ] T015 Turn the AR/AP service/HTTP race, N=50, multi-source ordering, tenant, payment-integrity, retention interaction, and sequential regression tests green.
+- [x] T010 Implement shared canonical coalescing and UUID-ordering behavior in the AR/AP allocation paths without changing public API payloads.
+- [x] T011 Update `backend/src/services/receivable_service.py` to lock the posted payment and target invoices inside the authoritative operation, calculate post-lock payment/source totals with explicit SQL aggregates, then validate and derive status.
+- [x] T012 Update `backend/src/services/payable_service.py` symmetrically for payment and vendor-bill locks and explicit post-lock aggregates.
+- [x] T013 Update `CustomerARService.release_customer_retention()` to lock the invoice before changing `retention_released_amount`, sharing the source-lock protocol without changing retention accounting policy.
+- [x] T014 Update `backend/src/api/v1/receivables.py` and `backend/src/api/v1/payables.py` so authoritative source eligibility/balance checks occur only inside the locked operation boundary.
+- [x] T015 Turn the AR/AP service/HTTP race, N=50, multi-source ordering, tenant, payment-integrity, retention interaction, and sequential regression tests green.
 
 **CP2 gate**: PostgreSQL source total never exceeds balance; no reversed-input deadlock; route/service behavior retains tenant and accounting semantics; no migration/API schema/accounting change.
 
 ## CP3 — Retry, Rollback, and At-Most-Once Effects
 
-- [ ] T016 Extend `backend/src/services/transaction_retry.py` to catch `IntegrityError`, `DBAPIError`, and `OperationalError`; classify only PostgreSQL `40001`, `40P01`, and explicitly verified retry-safe `55P03`, preserve three total attempts, and apply 50 ms exponential capped (200 ms) jittered backoff after rollback.
-- [ ] T017 Add a controlled allocation-contention exception/handler only if existing exception types cannot represent retry exhaustion without leaking DB details.
-- [ ] T018 Keep payment creation, posting, allocation, status, money movement, settlement, and audit effects in the same retryable transaction closure; audit all direct AR/AP payment callers.
-- [ ] T019 Turn forced transient conflict, rollback, exhausted retry, no-orphan, and at-most-once graph tests green.
+- [x] T016 Extend `backend/src/services/transaction_retry.py` to catch `IntegrityError`, `DBAPIError`, and `OperationalError`; classify only PostgreSQL `40001`, `40P01`, and explicitly verified retry-safe `55P03`, preserve three total attempts, and apply 50 ms exponential capped (200 ms) jittered backoff after rollback.
+- [x] T017 Add a controlled allocation-contention exception/handler only if existing exception types cannot represent retry exhaustion without leaking DB details.
+- [x] T018 Keep payment creation, posting, allocation, status, money movement, settlement, and audit effects in the same retryable transaction closure; audit all direct AR/AP payment callers.
+- [x] T019 Turn forced transient conflict, rollback, exhausted retry, no-orphan, and at-most-once graph tests green.
 
 **CP3 gate**: Failed attempts persist no transaction/journal/allocation/movement/settlement/audit graph; a successful retry commits exactly one graph; invariant failures are not retried.
 

@@ -160,7 +160,9 @@ async def release_customer_retention(
             notes=data.notes,
         )
 
-    release = await run_in_clean_transaction(db, release_retention)
+    release = await run_in_clean_transaction(
+        db, release_retention, allow_lock_not_available=True
+    )
     return RetentionReleaseResponse(
         id=release.id,
         invoice_id=release.invoice_id,
@@ -235,4 +237,6 @@ async def record_customer_payment(
             outstanding_amount=refreshed_invoice.calculate_outstanding_amount(),
         )
 
-    return await run_in_clean_transaction(db, record_payment)
+    return await run_in_clean_transaction(
+        db, record_payment, allow_lock_not_available=True
+    )

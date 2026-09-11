@@ -73,9 +73,38 @@ class AuthorizationException(ForbiddenException):
     pass
 
 
+class TransactionContentionError(AppException):
+    """Raised when a database transaction encounters persistent concurrent conflict after bounded retries."""
+    def __init__(
+        self,
+        message: str = "Transaction could not be completed due to persistent concurrent conflict.",
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(
+            message=message,
+            status_code=status.HTTP_409_CONFLICT,
+            error_code="TRANSACTION_CONTENTION",
+            details=details or {},
+        )
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """Register global exception handlers on FastAPI app."""
     from src.services.tenant_sequence_allocator import SequenceCollisionError
+
+    @app.exception_handler(TransactionContentionError)
+    async def transaction_contention_handler(request: Request, exc: TransactionContentionError):
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "success": False,
+                "error": {
+                    "code": exc.error_code,
+                    "message": exc.message,
+                    "details": exc.details,
+                },
+            },
+        )
 
     @app.exception_handler(SequenceCollisionError)
     async def sequence_collision_handler(request: Request, exc: SequenceCollisionError):

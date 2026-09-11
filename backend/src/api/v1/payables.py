@@ -184,4 +184,6 @@ async def record_vendor_payment(
             outstanding_amount=refreshed_bill.calculate_outstanding_amount(),
         )
 
-    return await run_in_clean_transaction(db, record_payment)
+    return await run_in_clean_transaction(
+        db, record_payment, allow_lock_not_available=True
+    )

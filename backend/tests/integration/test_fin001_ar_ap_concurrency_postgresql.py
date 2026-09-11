@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 
 from src.api.auth import require_application_user
 from src.core.database import get_db
+from src.core.exceptions import InvariantViolationException
 from src.main import create_application
 from src.models.audit import AuditLog
 from src.models.coa import PaymentAccount
@@ -158,28 +159,22 @@ async def _allocation_total(session_factory, allocation_model, source_column, so
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    raises=AssertionError,
-    strict=True,
-    reason="FIN-001 CP1 known defect: independent PostgreSQL transactions can over-allocate one invoice.",
-)
-async def test_ar_service_race_reproduces_overallocation_with_independent_postgresql_transactions(
+async def test_ar_service_race_rejects_second_allocation_after_authoritative_source_lock(
     fin001_session_factory: async_sessionmaker[AsyncSession],
     fin001_organizations: tuple[UUID, UUID],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     context = await _create_context(fin001_session_factory, fin001_organizations[0], label="ar-race")
     records = await _create_sources_and_payments(fin001_session_factory, context)
-    source_read_barrier = asyncio.Barrier(2)
-    original_get_invoice = CustomerARService.get_invoice
+    source_lock_barrier = asyncio.Barrier(2)
+    original_lock_invoice = CustomerARService._lock_invoice
 
-    async def synchronized_get_invoice(self, organization_id: UUID, invoice_id: UUID):
-        invoice = await original_get_invoice(self, organization_id, invoice_id)
+    async def synchronized_lock_invoice(self, organization_id: UUID, invoice_id: UUID):
         if invoice_id == records["invoice_id"]:
-            await source_read_barrier.wait()
-        return invoice
+            await source_lock_barrier.wait()
+        return await original_lock_invoice(self, organization_id, invoice_id)
 
-    monkeypatch.setattr(CustomerARService, "get_invoice", synchronized_get_invoice)
+    monkeypatch.setattr(CustomerARService, "_lock_invoice", synchronized_lock_invoice)
 
     async def allocate(payment_id: UUID) -> None:
         async with fin001_session_factory() as session:
@@ -188,36 +183,34 @@ async def test_ar_service_race_reproduces_overallocation_with_independent_postgr
             )
             await session.commit()
 
-    await asyncio.gather(allocate(records["ar_payment_a"]), allocate(records["ar_payment_b"]))
-    final_total = await _allocation_total(
-        fin001_session_factory, CustomerPaymentAllocation, CustomerPaymentAllocation.invoice_id, records["invoice_id"]
+    outcomes = await asyncio.wait_for(
+        asyncio.gather(allocate(records["ar_payment_a"]), allocate(records["ar_payment_b"]), return_exceptions=True),
+        timeout=5,
     )
-    assert final_total <= Decimal("100.00"), f"authoritative PostgreSQL total was {final_total}"
+    assert sum(isinstance(outcome, InvariantViolationException) for outcome in outcomes) == 1
+    assert sum(outcome is None for outcome in outcomes) == 1
+    assert await _allocation_total(
+        fin001_session_factory, CustomerPaymentAllocation, CustomerPaymentAllocation.invoice_id, records["invoice_id"]
+    ) == Decimal("60.00")
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    raises=AssertionError,
-    strict=True,
-    reason="FIN-001 CP1 known defect: independent PostgreSQL transactions can over-allocate one vendor bill.",
-)
-async def test_ap_service_race_reproduces_overallocation_with_independent_postgresql_transactions(
+async def test_ap_service_race_rejects_second_allocation_after_authoritative_source_lock(
     fin001_session_factory: async_sessionmaker[AsyncSession],
     fin001_organizations: tuple[UUID, UUID],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     context = await _create_context(fin001_session_factory, fin001_organizations[0], label="ap-race")
     records = await _create_sources_and_payments(fin001_session_factory, context)
-    source_read_barrier = asyncio.Barrier(2)
-    original_get_bill = VendorAPService.get_bill
+    source_lock_barrier = asyncio.Barrier(2)
+    original_lock_bill = VendorAPService._lock_bill
 
-    async def synchronized_get_bill(self, organization_id: UUID, bill_id: UUID):
-        bill = await original_get_bill(self, organization_id, bill_id)
+    async def synchronized_lock_bill(self, organization_id: UUID, bill_id: UUID):
         if bill_id == records["bill_id"]:
-            await source_read_barrier.wait()
-        return bill
+            await source_lock_barrier.wait()
+        return await original_lock_bill(self, organization_id, bill_id)
 
-    monkeypatch.setattr(VendorAPService, "get_bill", synchronized_get_bill)
+    monkeypatch.setattr(VendorAPService, "_lock_bill", synchronized_lock_bill)
 
     async def allocate(payment_id: UUID) -> None:
         async with fin001_session_factory() as session:
@@ -226,11 +219,15 @@ async def test_ap_service_race_reproduces_overallocation_with_independent_postgr
             )
             await session.commit()
 
-    await asyncio.gather(allocate(records["ap_payment_a"]), allocate(records["ap_payment_b"]))
-    final_total = await _allocation_total(
-        fin001_session_factory, VendorPaymentAllocation, VendorPaymentAllocation.bill_id, records["bill_id"]
+    outcomes = await asyncio.wait_for(
+        asyncio.gather(allocate(records["ap_payment_a"]), allocate(records["ap_payment_b"]), return_exceptions=True),
+        timeout=5,
     )
-    assert final_total <= Decimal("100.00"), f"authoritative PostgreSQL total was {final_total}"
+    assert sum(isinstance(outcome, InvariantViolationException) for outcome in outcomes) == 1
+    assert sum(outcome is None for outcome in outcomes) == 1
+    assert await _allocation_total(
+        fin001_session_factory, VendorPaymentAllocation, VendorPaymentAllocation.bill_id, records["bill_id"]
+    ) == Decimal("60.00")
 
 
 async def _real_endpoint_client(session_factory: async_sessionmaker[AsyncSession]) -> AsyncClient:
@@ -458,3 +455,222 @@ async def test_transaction_ownership_characterizes_clean_retry_and_request_side_
     assert await _allocation_total(
         fin001_session_factory, CustomerPaymentAllocation, CustomerPaymentAllocation.invoice_id, records["invoice_id"]
     ) == Decimal("0.00")
+
+
+@pytest.mark.asyncio
+async def test_payment_overallocation_race_rejects_second_allocation_after_payment_lock(
+    fin001_session_factory: async_sessionmaker[AsyncSession],
+    fin001_organizations: tuple[UUID, UUID],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = await _create_context(fin001_session_factory, fin001_organizations[0], label="pmt-race")
+    async with fin001_session_factory() as session:
+        inv1 = CustomerInvoice(
+            organization_id=context["organization_id"],
+            invoice_code=f"INV-FIN001-{uuid4().hex[:12]}",
+            customer_id=context["counterparty_id"],
+            project_id=context["project_id"],
+            invoice_date=date(2026, 9, 1),
+            due_date=date(2026, 10, 1),
+            total_amount=Decimal("100.00"),
+            status="UNPAID",
+        )
+        inv2 = CustomerInvoice(
+            organization_id=context["organization_id"],
+            invoice_code=f"INV-FIN001-{uuid4().hex[:12]}",
+            customer_id=context["counterparty_id"],
+            project_id=context["project_id"],
+            invoice_date=date(2026, 9, 1),
+            due_date=date(2026, 10, 1),
+            total_amount=Decimal("100.00"),
+            status="UNPAID",
+        )
+        payment = Transaction(
+            organization_id=context["organization_id"],
+            transaction_code=f"TRX-FIN001-{uuid4().hex[:12]}",
+            transaction_type=TransactionType.CUSTOMER_PAYMENT,
+            transaction_date=date(2026, 9, 2),
+            amount=Decimal("100.00"),
+            workflow_status=WorkflowStatus.POSTED,
+            counterparty_id=context["counterparty_id"],
+            payment_account_id=context["payment_account_id"],
+            description="Single payment race over-allocation test",
+        )
+        session.add_all([inv1, inv2, payment])
+        await session.commit()
+        payment_id = payment.id
+        inv1_id = inv1.id
+        inv2_id = inv2.id
+
+    payment_lock_barrier = asyncio.Barrier(2)
+    original_lock_payment = CustomerARService._lock_payment
+
+    async def synchronized_lock_payment(self, organization_id: UUID, p_id: UUID):
+        if p_id == payment_id:
+            await payment_lock_barrier.wait()
+        return await original_lock_payment(self, organization_id, p_id)
+
+    monkeypatch.setattr(CustomerARService, "_lock_payment", synchronized_lock_payment)
+
+    async def allocate(invoice_id: UUID) -> None:
+        async with fin001_session_factory() as session:
+            await CustomerARService(session).allocate_customer_payment(
+                context["organization_id"], payment_id, [(invoice_id, Decimal("60.00"))]
+            )
+            await session.commit()
+
+    outcomes = await asyncio.wait_for(
+        asyncio.gather(allocate(inv1_id), allocate(inv2_id), return_exceptions=True),
+        timeout=5,
+    )
+    assert sum(isinstance(outcome, InvariantViolationException) for outcome in outcomes) == 1
+    assert sum(outcome is None for outcome in outcomes) == 1
+    assert await _allocation_total(
+        fin001_session_factory,
+        CustomerPaymentAllocation,
+        CustomerPaymentAllocation.payment_transaction_id,
+        payment_id,
+    ) == Decimal("60.00")
+
+
+@pytest.mark.asyncio
+async def test_multi_source_reversed_order_canonical_locking_prevents_deadlock(
+    fin001_session_factory: async_sessionmaker[AsyncSession],
+    fin001_organizations: tuple[UUID, UUID],
+) -> None:
+    context = await _create_context(fin001_session_factory, fin001_organizations[0], label="rev-deadlock")
+    async with fin001_session_factory() as session:
+        inv_a = CustomerInvoice(
+            organization_id=context["organization_id"],
+            invoice_code=f"INV-FIN001-{uuid4().hex[:12]}",
+            customer_id=context["counterparty_id"],
+            project_id=context["project_id"],
+            invoice_date=date(2026, 9, 1),
+            due_date=date(2026, 10, 1),
+            total_amount=Decimal("100.00"),
+            status="UNPAID",
+        )
+        inv_b = CustomerInvoice(
+            organization_id=context["organization_id"],
+            invoice_code=f"INV-FIN001-{uuid4().hex[:12]}",
+            customer_id=context["counterparty_id"],
+            project_id=context["project_id"],
+            invoice_date=date(2026, 9, 1),
+            due_date=date(2026, 10, 1),
+            total_amount=Decimal("100.00"),
+            status="UNPAID",
+        )
+        pmt1 = Transaction(
+            organization_id=context["organization_id"],
+            transaction_code=f"TRX-FIN001-{uuid4().hex[:12]}",
+            transaction_type=TransactionType.CUSTOMER_PAYMENT,
+            transaction_date=date(2026, 9, 2),
+            amount=Decimal("50.00"),
+            workflow_status=WorkflowStatus.POSTED,
+            counterparty_id=context["counterparty_id"],
+            payment_account_id=context["payment_account_id"],
+            description="Reversed multi-source pmt 1",
+        )
+        pmt2 = Transaction(
+            organization_id=context["organization_id"],
+            transaction_code=f"TRX-FIN001-{uuid4().hex[:12]}",
+            transaction_type=TransactionType.CUSTOMER_PAYMENT,
+            transaction_date=date(2026, 9, 2),
+            amount=Decimal("50.00"),
+            workflow_status=WorkflowStatus.POSTED,
+            counterparty_id=context["counterparty_id"],
+            payment_account_id=context["payment_account_id"],
+            description="Reversed multi-source pmt 2",
+        )
+        session.add_all([inv_a, inv_b, pmt1, pmt2])
+        await session.commit()
+        low_id, high_id = sorted([inv_a.id, inv_b.id])
+        pmt1_id = pmt1.id
+        pmt2_id = pmt2.id
+
+    async def run_op1():
+        async with fin001_session_factory() as session:
+            await CustomerARService(session).allocate_customer_payment(
+                context["organization_id"],
+                pmt1_id,
+                [(high_id, Decimal("20.00")), (low_id, Decimal("20.00"))],
+            )
+            await session.commit()
+
+    async def run_op2():
+        async with fin001_session_factory() as session:
+            await CustomerARService(session).allocate_customer_payment(
+                context["organization_id"],
+                pmt2_id,
+                [(low_id, Decimal("20.00")), (high_id, Decimal("20.00"))],
+            )
+            await session.commit()
+
+    await asyncio.wait_for(asyncio.gather(run_op1(), run_op2()), timeout=5)
+
+    assert await _allocation_total(
+        fin001_session_factory, CustomerPaymentAllocation, CustomerPaymentAllocation.invoice_id, low_id
+    ) == Decimal("40.00")
+    assert await _allocation_total(
+        fin001_session_factory, CustomerPaymentAllocation, CustomerPaymentAllocation.invoice_id, high_id
+    ) == Decimal("40.00")
+
+
+@pytest.mark.asyncio
+async def test_duplicate_source_ids_coalescing_and_validation(
+    fin001_session_factory: async_sessionmaker[AsyncSession],
+    fin001_organizations: tuple[UUID, UUID],
+) -> None:
+    context = await _create_context(fin001_session_factory, fin001_organizations[0], label="coalesce")
+    records = await _create_sources_and_payments(fin001_session_factory, context)
+
+    async with fin001_session_factory() as session:
+        allocations = await CustomerARService(session).allocate_customer_payment(
+            context["organization_id"],
+            records["ar_payment_a"],
+            [(records["invoice_id"], Decimal("30.00")), (records["invoice_id"], Decimal("20.00"))],
+        )
+        assert len(allocations) == 1
+        assert allocations[0].allocated_amount == Decimal("50.00")
+        await session.commit()
+
+    assert await _allocation_total(
+        fin001_session_factory, CustomerPaymentAllocation, CustomerPaymentAllocation.invoice_id, records["invoice_id"]
+    ) == Decimal("50.00")
+
+    async with fin001_session_factory() as session:
+        with pytest.raises(InvariantViolationException):
+            await CustomerARService(session).allocate_customer_payment(
+                context["organization_id"],
+                records["ar_payment_b"],
+                [(records["invoice_id"], Decimal("35.00")), (records["invoice_id"], Decimal("20.00"))],
+            )
+
+
+@pytest.mark.asyncio
+async def test_tenant_isolation_concurrent_locks_do_not_block_different_tenants(
+    fin001_session_factory: async_sessionmaker[AsyncSession],
+    fin001_organizations: tuple[UUID, UUID],
+) -> None:
+    context_a = await _create_context(fin001_session_factory, fin001_organizations[0], label="iso-a")
+    context_b = await _create_context(fin001_session_factory, fin001_organizations[1], label="iso-b")
+    records_a = await _create_sources_and_payments(fin001_session_factory, context_a)
+    records_b = await _create_sources_and_payments(fin001_session_factory, context_b)
+
+    async def allocate_tenant(context, records):
+        async with fin001_session_factory() as session:
+            await CustomerARService(session).allocate_customer_payment(
+                context["organization_id"], records["ar_payment_a"], [(records["invoice_id"], Decimal("60.00"))]
+            )
+            await session.commit()
+
+    await asyncio.wait_for(
+        asyncio.gather(allocate_tenant(context_a, records_a), allocate_tenant(context_b, records_b)),
+        timeout=5,
+    )
+    assert await _allocation_total(
+        fin001_session_factory, CustomerPaymentAllocation, CustomerPaymentAllocation.invoice_id, records_a["invoice_id"]
+    ) == Decimal("60.00")
+    assert await _allocation_total(
+        fin001_session_factory, CustomerPaymentAllocation, CustomerPaymentAllocation.invoice_id, records_b["invoice_id"]
+    ) == Decimal("60.00")

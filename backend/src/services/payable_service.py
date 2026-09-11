@@ -94,75 +94,106 @@ class VendorAPService:
             raise EntityNotFoundException("Vendor Bill", bill_id)
         return bill
 
+    async def _lock_payment(
+        self, organization_id: uuid.UUID, payment_transaction_id: uuid.UUID
+    ) -> Transaction:
+        payment = await self.session.scalar(
+            select(Transaction)
+            .execution_options(populate_existing=True)
+            .where(
+                Transaction.id == payment_transaction_id,
+                Transaction.organization_id == organization_id,
+            )
+            .with_for_update()
+        )
+        if not payment:
+            raise EntityNotFoundException("Vendor Payment Transaction", payment_transaction_id)
+        return payment
+
+    async def _lock_bill(self, organization_id: uuid.UUID, bill_id: uuid.UUID) -> VendorBill:
+        bill = await self.session.scalar(
+            select(VendorBill)
+            .options(selectinload(VendorBill.allocations))
+            .execution_options(populate_existing=True)
+            .where(
+                VendorBill.id == bill_id,
+                VendorBill.organization_id == organization_id,
+            )
+            .with_for_update()
+        )
+        if not bill:
+            raise EntityNotFoundException("Vendor Bill", bill_id)
+        return bill
+
     async def allocate_vendor_payment(
         self,
         organization_id: uuid.UUID,
         payment_transaction_id: uuid.UUID,
-        bill_allocations: List[Tuple[uuid.UUID, Decimal]]
+        bill_allocations: List[Tuple[uuid.UUID, Decimal]],
     ) -> List[VendorPaymentAllocation]:
-        """
-        Allocates payment transaction against one or multiple vendor bills.
-        """
         if not bill_allocations:
             raise InvariantViolationException("Vendor payment requires at least one bill allocation.")
-        payment = await self.session.scalar(select(Transaction).where(
-            Transaction.id == payment_transaction_id,
-            Transaction.organization_id == organization_id,
-        ))
-        if not payment:
-            raise EntityNotFoundException("Vendor Payment Transaction", payment_transaction_id)
+
+        payment = await self._lock_payment(organization_id, payment_transaction_id)
         if payment.transaction_type != TransactionType.PAY_VENDOR_BILL:
             raise InvariantViolationException("Only PAY_VENDOR_BILL transactions can be allocated to vendor bills.")
         if payment.workflow_status != WorkflowStatus.POSTED:
             raise InvariantViolationException("Vendor payment must be posted before allocation.")
         if not payment.counterparty_id:
             raise InvariantViolationException("Vendor payment requires a vendor counterparty before allocation.")
+
         allocation_by_bill: Dict[uuid.UUID, Decimal] = {}
         for bill_id, amount in bill_allocations:
             if amount <= Decimal("0.00"):
                 raise InvariantViolationException("Vendor payment allocations must be greater than zero.")
             allocation_by_bill[bill_id] = allocation_by_bill.get(bill_id, Decimal("0.00")) + amount
-        existing_payment_total = await self.session.scalar(select(
-            func.coalesce(func.sum(VendorPaymentAllocation.allocated_amount), Decimal("0.00"))
-        ).where(VendorPaymentAllocation.payment_transaction_id == payment_transaction_id))
-        requested_total = sum(allocation_by_bill.values(), Decimal("0.00"))
-        if Decimal(str(existing_payment_total)) + requested_total > payment.amount:
-            raise InvariantViolationException("Vendor payment allocations exceed the posted payment amount.")
 
         bills: Dict[uuid.UUID, VendorBill] = {}
-        for bill_id, amount in allocation_by_bill.items():
-            bill = await self.get_bill(organization_id, bill_id)
+        for bill_id in sorted(allocation_by_bill, key=lambda value: (organization_id.int, value.int)):
+            bills[bill_id] = await self._lock_bill(organization_id, bill_id)
+
+        existing_payment_total = Decimal(str(await self.session.scalar(
+            select(func.coalesce(func.sum(VendorPaymentAllocation.allocated_amount), Decimal("0.00"))).where(
+                VendorPaymentAllocation.payment_transaction_id == payment_transaction_id
+            )
+        )))
+        requested_total = sum(allocation_by_bill.values(), Decimal("0.00"))
+        if existing_payment_total + requested_total > payment.amount:
+            raise InvariantViolationException("Vendor payment allocations exceed the posted payment amount.")
+
+        paid_by_bill: Dict[uuid.UUID, Decimal] = {}
+        for bill_id, bill in bills.items():
+            amount = allocation_by_bill[bill_id]
             if bill.status == "CANCELLED":
                 raise InvariantViolationException(f"Cancelled bill {bill.bill_code} cannot receive a payment allocation.")
             if bill.vendor_id != payment.counterparty_id:
                 raise InvariantViolationException("Vendor payment and bill must belong to the same vendor.")
-            current_outstanding = bill.calculate_outstanding_amount()
-            if current_outstanding == Decimal("0.00"):
-                raise InvariantViolationException(f"Bill {bill.bill_code} is already fully paid.")
-
-            if amount > current_outstanding:
-                raise InvariantViolationException(
-                    f"Allocated payment amount ({amount}) exceeds outstanding bill balance ({current_outstanding}) for {bill.bill_code}.",
-                    details={"bill_id": str(bill_id), "allocated_amount": str(amount), "outstanding": str(current_outstanding)}
+            existing_bill_total = Decimal(str(await self.session.scalar(
+                select(func.coalesce(func.sum(VendorPaymentAllocation.allocated_amount), Decimal("0.00"))).where(
+                    VendorPaymentAllocation.bill_id == bill_id
                 )
-            bills[bill_id] = bill
+            )))
+            outstanding = bill.total_amount - existing_bill_total
+            if outstanding <= Decimal("0.00"):
+                raise InvariantViolationException(f"Bill {bill.bill_code} is already fully paid.")
+            if amount > outstanding:
+                raise InvariantViolationException(
+                    f"Allocated payment amount ({amount}) exceeds outstanding bill balance ({outstanding}) on {bill.bill_code}.",
+                    details={"bill_id": str(bill_id), "allocated_amount": str(amount), "outstanding": str(outstanding)},
+                )
+            paid_by_bill[bill_id] = existing_bill_total
 
         created_allocations = []
         for bill_id, amount in allocation_by_bill.items():
             bill = bills[bill_id]
-            current_outstanding = bill.calculate_outstanding_amount()
-
-            alloc = VendorPaymentAllocation(
+            allocation = VendorPaymentAllocation(
                 bill_id=bill_id,
                 payment_transaction_id=payment_transaction_id,
-                allocated_amount=amount
+                allocated_amount=amount,
             )
-            self.session.add(alloc)
-            created_allocations.append(alloc)
-
-            # Update bill status
-            new_outstanding = current_outstanding - amount
-            bill.status = "PAID" if new_outstanding == Decimal("0.00") else "PARTIALLY_PAID"
+            self.session.add(allocation)
+            created_allocations.append(allocation)
+            bill.status = "PAID" if paid_by_bill[bill_id] + amount >= bill.total_amount else "PARTIALLY_PAID"
 
         await self.session.flush()
         return created_allocations

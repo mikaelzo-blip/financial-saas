@@ -4,13 +4,16 @@ pytest_plugins = [
 ]
 
 from typing import AsyncGenerator
+from uuid import UUID
 
 import pytest
+from fastapi import Request
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.api.auth import require_application_user
 from src.core.database import Base, get_db
+from src.models.user import User
 from src.main import create_application
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -46,8 +49,18 @@ async def authenticated_client(db_session: AsyncSession) -> AsyncGenerator[Async
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
         yield db_session
 
+    async def override_authenticated_user(request: Request) -> User:
+        user_id = request.headers.get("X-User-ID")
+        organization_id = request.headers.get("X-Organization-ID")
+        if not user_id or not organization_id:
+            raise AssertionError("authenticated_client requires a seeded user identity")
+        user = await db_session.get(User, UUID(user_id))
+        if not user or str(user.organization_id) != organization_id:
+            raise AssertionError("authenticated_client requires a matching seeded user identity")
+        return user
+
     app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[require_application_user] = lambda: None
+    app.dependency_overrides[require_application_user] = override_authenticated_user
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

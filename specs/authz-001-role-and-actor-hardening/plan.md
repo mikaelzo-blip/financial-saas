@@ -56,7 +56,7 @@ Enforce strict backend role-based access control (RBAC) across all human applica
       - /api/v1/hermes/*           ▼
                             [require_application_user]
                             - Decode & verify Bearer JWT
-                            - Assert X-User-ID == user.id (403 on mismatch)
+                            - If supplied, assert X-User-ID == user.id (403 on mismatch)
                             - Assert X-Organization-ID == user.organization_id (403 on mismatch)
                             - Fail-closed if token missing/invalid (401)
                                    │

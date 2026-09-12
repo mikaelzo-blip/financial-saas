@@ -27,9 +27,9 @@ This specification establishes complete, non-bypassable backend role-based acces
 
 | Finding ID | Historical Claim | Live Source Audit Status | Exact Evidence & Current Classification |
 |---|---|---|---|
-| **AUTH-002 (Header Spoof Elevation)** | Low-privilege JWT + privileged `X-User-ID` escalates document reviewer permissions to mutate candidate or bypass review. | **REJECTED / NOT REPRODUCIBLE** | `src/api/auth.py:60-63` verifies `request.headers.get("X-User-ID") == str(user.id)` and `X-Organization-ID == str(user.organization_id)` against the verified JWT principal. Mismatched headers immediately return `403 Forbidden` (`User mismatch` / `Organization mismatch`) before route handler or actor helper execution. |
-| **AUTH-ID-001 (Legacy Actor Helper)** | `backend/src/api/deps.py:31-43` defines `get_current_user_id` reading `X-User-ID` with dummy fallback UUID. | **CONFIRMED (DEFENSE-IN-DEPTH)** | Consumed in `documents.py:68, 121, 271`. Not exploitable for cross-user impersonation in normal traffic due to JWT header binding, but represents an architectural anti-pattern and unsafe fallback that must be replaced with direct `current_user.id` binding. |
-| **AUTH-ID-002 (RBAC Fallback Code)** | `backend/src/api/auth.py:112-128` contains an unauthenticated fallback block in `require_roles` querying DB on headers if `current_user is None`. | **CONFIRMED (LATENT UNSAFE FALLBACK)** | Unreachable in real mounted human application traffic because `application_router` requires `require_application_user` (which never yields `None`). Only reachable when `require_application_user` is mocked to `None` in test fixtures (`conftest.py:50`). Must be deleted to eliminate latent bypass risk. |
+| **AUTH-002 (Header Spoof Elevation)** | Low-privilege JWT + privileged `X-User-ID` escalates document reviewer permissions to mutate candidate or bypass review. | **REJECTED / NOT REPRODUCIBLE** | A supplied `X-User-ID` is checked only for equality with the verified JWT-backed user and a mismatch returns `403 Forbidden` (`User mismatch`); it never establishes identity. `X-Organization-ID` remains checked against the principal organization and mismatch returns `403` (`Organization mismatch`). |
+| **AUTH-ID-001 (Legacy Actor Helper)** | `backend/src/api/deps.py:get_current_user_id` read `X-User-ID` with a dummy fallback UUID. | **REMEDIATED (CP2)** | The helper and sentinel UUID are deleted. Former document upload/correction/rejection actor uses bind directly to `require_application_user` and `current_user.id`; zero production callers remain. |
+| **AUTH-ID-002 (RBAC Fallback Code)** | `require_roles` could query a user from `X-User-ID` and `X-Organization-ID` when `current_user is None`. | **REMEDIATED (CP2)** | The header/DB reconstruction path is removed. `require_roles` accepts only the verified `current_user` dependency and fails closed with `401 Authenticated user required` when it is absent. |
 | **AUTHZ-001 (Perimeter Role Gaps)** | Human application mutation endpoints under `application_router` lack explicit role checks, allowing `VIEWER` mutation. | **CONFIRMED (CRITICAL P1)** | Exactly **17 human application mutation endpoints** completely lack role checks (`require_roles` or in-body checks). Authenticated `VIEWER` can create transactions, counterparties, projects, money movements, bank reconciliation imports/matches, COA accounts, payment accounts, and review flags. |
 | **DOC-REV-001 (Document Review Security)** | `correct_document` and `reject_document_candidate` allow `VIEWER` mutation via header spoofing. | **REJECTED (ALREADY PROTECTED IN-BODY)** | `documents.py:125, 274` calls `await require_reviewer(db, org_id, user_id)` which queries `User.role.in_([UserRole.ADMIN, UserRole.MANAGER])`. An authenticated `VIEWER` receives `403 Forbidden` (`Manager or administrator review permission required`). Spoofed headers are blocked by JWT verification. Currently protected; CP3 will standardize to declarative `require_roles`. |
 
@@ -65,17 +65,17 @@ The implementation must uphold the following hard security invariants:
 4. `application_router` executes `require_application_user`:
    - Validates JWT signature;
    - Verifies user is active;
-   - Verifies headers match JWT claims (`X-User-ID == user.id`, `X-Organization-ID == user.organization_id`);
+   - Verifies `X-Organization-ID == user.organization_id`;
+   - Treats `X-User-ID` as optional compatibility metadata: when supplied, it must equal `user.id`; when omitted, the JWT-backed user remains authoritative;
    - PASSES!
 5. Because none of these 17 endpoints declare `require_roles(...)` or check `user.role`, the handler executes and the mutation succeeds.
 6. This violates the core invariant that `VIEWER` is strictly read-only.
 
 ### Why the Old AUTH-002 Exploit Claim is Rejected
-- The previous claim assumed that a `VIEWER` could send their own token but put an `ADMIN`'s UUID in `X-User-ID` to satisfy `require_reviewer`.
-- On current `origin/main` (`3d51609`), `src/api/auth.py:62` asserts `if request.headers.get("X-User-ID") != str(user.id): raise HTTPException(403, "User mismatch")`.
-- The request is terminated with HTTP 403 before `require_reviewer` or `get_current_user_id` ever runs.
-- Thus, header-based privilege escalation is NOT an active exploit on live code.
-- Removing `get_current_user_id` and the `current_user is None` fallback in `require_roles` is defense-in-depth code hygiene, not an active exploit patch.
+- The previous claim assumed that a `VIEWER` could send their own token but put an `ADMIN` UUID in `X-User-ID` to satisfy `require_reviewer`.
+- A supplied `X-User-ID` is checked against the verified JWT-backed `user.id`; a mismatch terminates the request with HTTP 403 before `require_reviewer` or route actor binding runs.
+- Thus, header-based privilege escalation is NOT an active exploit on the live mounted application stack.
+- CP2 removes `get_current_user_id` and the `current_user is None` fallback in `require_roles` as defense-in-depth hardening. `X-User-ID` is optional compatibility metadata and cannot establish an actor identity.
 
 ---
 

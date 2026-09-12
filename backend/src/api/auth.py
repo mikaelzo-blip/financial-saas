@@ -59,7 +59,8 @@ async def authenticated_user(request: Request, db: AsyncSession) -> User:
         raise HTTPException(401, "Authenticated user required")
     if request.headers.get("X-Organization-ID") != str(user.organization_id):
         raise HTTPException(403, "Organization mismatch")
-    if request.headers.get("X-User-ID") != str(user.id):
+    user_id_header = request.headers.get("X-User-ID")
+    if user_id_header is not None and user_id_header != str(user.id):
         raise HTTPException(403, "User mismatch")
     return user
 
@@ -105,28 +106,9 @@ def require_roles(*allowed_roles: UserRole):
             roles.add(item)
 
     async def role_checker(
-        request: Request,
-        db: AsyncSession = Depends(get_db),
         current_user: User | None = Depends(require_application_user),
     ) -> User:
         if current_user is None:
-            user_id_header = request.headers.get("X-User-ID") or request.headers.get("x-user-id")
-            org_id_header = request.headers.get("X-Organization-ID") or request.headers.get("x-organization-id")
-            if user_id_header and org_id_header:
-                try:
-                    from uuid import UUID
-                    uid = UUID(user_id_header)
-                    oid = UUID(org_id_header)
-                    current_user = await db.scalar(
-                        select(User).where(
-                            User.id == uid,
-                            User.organization_id == oid,
-                            User.is_active.is_(True),
-                        )
-                    )
-                except (ValueError, TypeError):
-                    pass
-        if not current_user:
             raise HTTPException(401, "Authenticated user required")
         if current_user.role not in roles:
             raise AuthorizationException(
@@ -135,4 +117,3 @@ def require_roles(*allowed_roles: UserRole):
         return current_user
 
     return role_checker
-

@@ -363,30 +363,102 @@ async def test_characterization_require_roles_fallback_unreachable_in_normal_tra
 
 
 @pytest.mark.asyncio
-async def test_characterization_require_roles_latent_fallback_unit_behavior(security_test_env):
-    """Unit test documenting the latent fallback behavior when current_user is None (e.g. test override)."""
-    env = security_test_env
-    admin_id = env["users"][UserRole.ADMIN]
-    org_id = env["org_id"]
-
+async def test_require_roles_rejects_headers_without_verified_principal(security_test_env):
+    """Headers cannot reconstruct a principal when the verified dependency yields none."""
     checker = require_roles(UserRole.ADMIN)
 
-    # Mock starlette Request
-    from starlette.requests import Request
-    scope = {
-        "type": "http",
-        "headers": [
-            (b"x-user-id", str(admin_id).encode()),
-            (b"x-organization-id", str(org_id).encode()),
-        ],
-    }
-    req = Request(scope)
+    with pytest.raises(HTTPException) as error:
+        await checker(current_user=None)
 
-    async with env["session_factory"]() as session:
-        # When current_user is None (as in dependency override), fallback activates:
-        resolved_user = await checker(request=req, db=session, current_user=None)
-        assert resolved_user.id == admin_id
-        assert resolved_user.role == UserRole.ADMIN
+    assert error.value.status_code == 401
+    assert error.value.detail == "Authenticated user required"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", [UserRole.ADMIN, UserRole.MANAGER])
+async def test_document_correction_audit_actor_is_verified_jwt_principal(security_test_env, role, monkeypatch):
+    env = security_test_env
+    actor_id = env["users"][role]
+    captured_actor_ids = []
+
+    async def capture_audit_actor(_self, _org_id, _entity_name, _entity_id, _action, actor_id, **_kwargs):
+        captured_actor_ids.append(actor_id)
+
+    monkeypatch.setattr(documents_api.AuditService, "log_event", capture_audit_actor)
+    headers = make_auth_headers(env["org_id"], actor_id)
+    headers.pop("X-User-ID")
+    response = await env["client"].post(
+        f"/api/v1/documents/{env['doc_id']}/corrections",
+        headers=headers,
+        json={"changes": {"amount": "1500.00"}, "reason": "verified actor test"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert captured_actor_ids == [actor_id]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", [UserRole.ADMIN, UserRole.MANAGER])
+async def test_document_rejection_audit_actor_is_verified_jwt_principal(security_test_env, role, monkeypatch):
+    env = security_test_env
+    actor_id = env["users"][role]
+    captured_actor_ids = []
+
+    async def capture_audit_actor(_self, _org_id, _entity_name, _entity_id, _action, actor_id, **_kwargs):
+        captured_actor_ids.append(actor_id)
+
+    monkeypatch.setattr(documents_api.AuditService, "log_event", capture_audit_actor)
+    headers = make_auth_headers(env["org_id"], actor_id)
+    headers.pop("X-User-ID")
+    response = await env["client"].post(
+        f"/api/v1/documents/{env['doc_id']}/reject",
+        headers=headers,
+        json={"reason": "verified actor test"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert captured_actor_ids == [actor_id]
+
+
+@pytest.mark.asyncio
+async def test_valid_jwt_without_user_header_uses_jwt_principal(security_test_env):
+    env = security_test_env
+    actor_id = env["users"][UserRole.MANAGER]
+    headers = make_auth_headers(env["org_id"], actor_id)
+    headers.pop("X-User-ID")
+    response = await env["client"].get("/api/v1/documents/review-queue", headers=headers)
+
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.asyncio
+async def test_role_header_cannot_elevate_viewer(security_test_env):
+    env = security_test_env
+    headers = make_auth_headers(env["org_id"], env["users"][UserRole.VIEWER])
+    headers["X-Role"] = UserRole.ADMIN.value
+    response = await env["client"].post(
+        f"/api/v1/documents/{env['doc_id']}/reject",
+        headers=headers,
+        json={"reason": "role header spoof"},
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path, payload", [
+    ("corrections", {"changes": {"amount": "1500.00"}, "reason": "operator attempt"}),
+    ("reject", {"reason": "operator attempt"}),
+])
+async def test_document_review_operator_remains_denied(security_test_env, path, payload):
+    env = security_test_env
+    response = await env["client"].post(
+        f"/api/v1/documents/{env['doc_id']}/{path}",
+        headers=make_auth_headers(env["org_id"], env["users"][UserRole.OPERATOR]),
+        json=payload,
+    )
+
+    assert response.status_code == 403
+    assert "review permission required" in response.json()["detail"].lower()
 
 
 MUTATION_CASES = [

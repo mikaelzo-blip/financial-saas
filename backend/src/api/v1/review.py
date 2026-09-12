@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
-from src.api.deps import get_current_org_id, get_current_user_id
+from src.api.deps import get_current_org_id
 from src.api.auth import require_roles
 from src.models.enums import ReviewFlag, UserRole
 from src.models.user import User

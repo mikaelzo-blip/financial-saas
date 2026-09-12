@@ -5,9 +5,11 @@
 - **AUTHZ-001 starting source head**: `c33112c1744e25d12ea1e30b9a133b6931c788b8`
 - **Active branch**: `hermes/authz-001-role-and-actor-hardening`
 - **Active feature**: AUTHZ-001 — role enforcement and actor hardening.
-- **Checkpoint**: CP1 is verified and committed; CP2 and CP3 are not started.
-- **CP1 evidence**: Live route inventory has 59 mutating routes: 38 human state mutations, with 17 genuinely vulnerable VIEWER-reachable routes, 4 protected in-body, and 17 declaratively protected. Four POST reporting/query routes are non-mutating; machine, webhook, and public routes remain outside human RBAC scope.
-- **CP1 verification**: 10 PASS characterizations cover JWT/header mismatches, missing/invalid authentication, document review, accounting periods, tenant isolation, and latent fallback reachability. The 17 expected RED cases each prove the VIEWER request reaches a controlled mutation boundary before a 403. Existing security/auth/document-review/accounting-period/tenant/machine-webhook tests: 40 passed.
-- **Independent review**: No Critical or High finding and no production-scope breach. The single Medium sentinel-noise finding was resolved and reverified.
-- **Scope**: No production API/auth code, migration, accounting logic, protected storage, or credentials changed. `ruff` is not installed in the declared backend environment; Python compilation and `git diff --check` pass.
-- **Next action**: Stop after CP1. Start CP2 only with an explicit authorized follow-up.
+- **Checkpoint**: CP2 is verified and committed in this checkpoint; independent review passed. CP3 has not started.
+- **CP1 route inventory (unchanged)**: 38 human state mutations: 17 genuinely vulnerable VIEWER-reachable routes, 4 protected in-body, and 17 declaratively protected. Four POST reporting/query routes are non-mutating; machine, webhook, and public routes remain outside human RBAC scope.
+- **CP2 decisions**: `get_current_user_id` and its sentinel UUID are removed; human document actor identity now comes from the verified JWT-backed `current_user.id`; `require_roles` cannot reconstruct users from headers and fails closed with 401 without a principal. `X-User-ID` is optional compatibility metadata: if supplied it must match the JWT principal or returns 403; it never establishes identity. `X-Organization-ID` remains mandatory and principal-matched.
+- **Role-policy boundary**: Document correction/rejection retain in-body `require_reviewer` (ADMIN/MANAGER allowed; OPERATOR/VIEWER denied). CP2 added no declarative role guards to the 17 vulnerable routes; their 17 CP1 RED cases remain expected failures for CP3.
+- **CP2 verification**: identity/protected subset 18 passed; CP1 vulnerable matrix 17 failed as expected; document/auth/period/tenant/machine/accounting regression selection 34 passed; Python compile and `git diff --check` passed. Ruff is unavailable in the declared backend environment.
+- **CP2 independent review**: bounded read-only review passed with Critical 0, High 0, Medium 0, Low 0; it confirmed no machine/webhook, accounting, migration, frontend product, or CP3 role-policy change.
+- **Scope**: No migration, accounting logic, tenant ownership rule, frontend product code, machine/webhook authentication, protected storage, or credentials changed.
+- **Next action**: Run the final CP2 repository gates, commit only CP2 as `fix(authz-001): bind application actors to verified principals (CP2)`, and stop. Do not begin CP3, push, or open a PR.

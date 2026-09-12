@@ -30,15 +30,15 @@
 ---
 
 ### Checkpoint 2 (CP2): Verified Principal & Defense-in-Depth Actor Hardening
-- [ ] **T2.1 (Deps Cleanup)**: Delete `get_current_user_id` and sentinel UUID `00000000-0000-0000-0000-000000000001` from `backend/src/api/deps.py`.
-- [ ] **T2.2 (Fallback Elimination)**: Purge lines 112–128 of `backend/src/api/auth.py:require_roles`. Ensure immediate fail-closed `401 Unauthorized` if `current_user is None`.
-- [ ] **T2.3 (Document Routes Refactoring)**:
-  - Refactor `POST /api/v1/documents/upload`: Ingest `current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR))`, bind `created_by=current_user.id`.
-  - Refactor `POST /api/v1/documents/{id}/retry`: Ingest `current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR))`.
-  - Refactor `POST /api/v1/documents/{id}/corrections`: Ingest `current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER))`, bind `corrected_by=current_user.id` and audit log `actor_id=current_user.id`. Remove `require_reviewer`.
-  - Refactor `POST /api/v1/documents/{id}/reject`: Ingest `current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER))`, bind audit log `actor_id=current_user.id`. Remove `require_reviewer`.
-- [ ] **T2.4 (Test Fixture Harmonization)**: Update `backend/tests/conftest.py` (`authenticated_client`) to inject an authentic seeded user principal instead of `lambda: None`.
-- [ ] **T2.5 (CP2 Verification & Commit)**: Verify existing document upload/review tests pass; commit CP2.
+- [x] **T2.1 (Deps Cleanup)**: Deleted `get_current_user_id` and sentinel UUID `00000000-0000-0000-0000-000000000001` from `backend/src/api/deps.py`; zero production callers remain.
+- [x] **T2.2 (Fallback Elimination)**: Deleted the `require_roles` header/DB fallback. `current_user is None` now fails closed with `401 Unauthorized`.
+- [x] **T2.3 (Document Actor Refactoring)**:
+  - `POST /api/v1/documents/upload` binds `created_by=current_user.id` via `require_application_user` without changing the CP3 role matrix.
+  - `POST /api/v1/documents/{id}/corrections` and `POST /api/v1/documents/{id}/reject` bind correction and audit actor IDs to `current_user.id`, while preserving `require_reviewer` and its existing ADMIN/MANAGER policy.
+  - `POST /api/v1/documents/{id}/retry` had no actor field or `get_current_user_id` dependency; its role gap remains a CP3 item.
+- [x] **T2.4 (Test Fixture Harmonization)**: Updated `backend/tests/conftest.py` (`authenticated_client`) to inject a matching seeded user principal rather than `lambda: None`.
+- [x] **T2.5 (CP2 Verification)**: CP2 identity tests and protected-route regressions pass; the 17 CP1 vulnerable-route cases remain expected RED pending CP3.
+- [x] **T2.6 (CP2 Independent Review & Commit Gate)**: Bounded read-only security review reported Critical 0, High 0, Medium 0; final CP2 gates passed and checkpoint commit is authorized.
 
 ---
 

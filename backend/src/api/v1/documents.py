@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, select
 
 from src.core.database import get_db
-from src.api.deps import get_current_org_id, get_current_user_id
-from src.api.auth import require_roles
+from src.api.deps import get_current_org_id
+from src.api.auth import require_application_user, require_roles
 from src.models.enums import DocumentType, DocumentProcessingStatus, CandidateStatus, ProjectStatus, TransactionType
 from src.models.document import DocumentCorrection
 from src.models.project import Project
@@ -65,7 +65,7 @@ async def upload_document(
     project_id: Optional[uuid.UUID] = Form(None),
     process: bool = Form(True),
     org_id: uuid.UUID = Depends(get_current_org_id),
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    current_user: User = Depends(require_application_user),
     db: AsyncSession = Depends(get_db),
 ):
     async def ingest(session: AsyncSession):
@@ -77,7 +77,7 @@ async def upload_document(
             document_type=document_type,
             source_channel=source_channel,
             project_id=project_id,
-            created_by=user_id,
+            created_by=current_user.id,
         )
         if process:
             document.processing_status = DocumentProcessingStatus.EXTRACTING
@@ -118,8 +118,9 @@ async def retry_document(document_id: uuid.UUID, background_tasks: BackgroundTas
 @router.post("/{document_id}/corrections", response_model=DocumentResponse)
 async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionRequest,
                            org_id: uuid.UUID = Depends(get_current_org_id),
-                           user_id: uuid.UUID = Depends(get_current_user_id),
+                           current_user: User = Depends(require_application_user),
                            db: AsyncSession = Depends(get_db)):
+    user_id = current_user.id
     service = DocumentService(db)
     document = await service.get_document(org_id, document_id, for_update=True)
     await require_reviewer(db, org_id, user_id)
@@ -268,8 +269,9 @@ async def list_document_review_queue(org_id: uuid.UUID = Depends(get_current_org
 @router.post("/{document_id}/reject", response_model=DocumentResponse)
 async def reject_document_candidate(document_id: uuid.UUID, data: DocumentRejectionRequest,
                                     org_id: uuid.UUID = Depends(get_current_org_id),
-                                    user_id: uuid.UUID = Depends(get_current_user_id),
+                                    current_user: User = Depends(require_application_user),
                                     db: AsyncSession = Depends(get_db)):
+    user_id = current_user.id
     document = await DocumentService(db).get_document(org_id, document_id, for_update=True)
     await require_reviewer(db, org_id, user_id)
     if document.processing_status in {DocumentProcessingStatus.PROCESSED, DocumentProcessingStatus.REJECTED}:

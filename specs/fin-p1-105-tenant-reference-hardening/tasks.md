@@ -1,7 +1,7 @@
 # Task Breakdown: FIN-P1-105
 
 **Feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References  
-**Status**: CP2 COMPLETE — CP3 FINANCIAL LINKAGE HARDENING REMAINS OPEN
+**Status**: CP3 VERIFIED IN WORKTREE — AWAITING REVIEWED CHECKPOINT COMMIT
 **Checkpoints**: 4 (CP1 -> CP2 -> CP3 -> CP4)  
 
 ---
@@ -40,13 +40,13 @@
 
 ## Checkpoint 3: Financial Linkage Hardening
 
-- [ ] **Task 3.1 (CP3-T1)**: Harden `MoneyMovementService.create_money_movement` to validate `s.transaction_id` against `Transaction.organization_id == organization_id` within the pre-validation loop before model instantiation or code generation.
-- [ ] **Task 3.2 (CP3-T2)**: Harden `BankReconciliationService.match_manual` to validate:
-  - `req.journal_line_id` via JOIN `JournalEntry` on `organization_id == organization_id`;
-  - `req.money_movement_id` via `MoneyMovement.organization_id == organization_id`;
-  - `req.transaction_id` via `Transaction.organization_id == organization_id`.
-- [ ] **Task 3.3 (CP3-T3)**: Fix legacy single-argument `EntityNotFoundException` calls in `bank_reconciliation_service.py` to use canonical `(entity_name, identifier)` format.
-- [ ] **Task 3.4 (CP3-T4)**: Verify CP3 test subset transitions from RED to GREEN; verify full `test_fin_p1_105_tenant_reference_hardening.py` passes 100%; commit CP3.
+- [x] **Task 3.1 (CP3-T1)**: Hardened `MoneyMovementService.create_money_movement` to scope every supplied non-null settlement `transaction_id` by `Transaction.organization_id == organization_id` before code allocation, model construction, or flush.
+- [x] **Task 3.2 (CP3-T2)**: Hardened `BankReconciliationService.match_manual` to scope supplied references before mutation:
+  - `journal_line_id` through `JournalLine -> JournalEntry.organization_id`;
+  - `money_movement_id` through `MoneyMovement.organization_id`;
+  - `transaction_id` through `Transaction.organization_id`.
+- [x] **Task 3.3 (CP3-T3)**: Replaced legacy single-argument `EntityNotFoundException` calls in `bank_reconciliation_service.py` with canonical `(entity_name, identifier)` calls.
+- [x] **Task 3.4 (CP3-T4)**: All six CP3 strict XFAIL cases are normal green regressions. Focused suite: 36 passed, 0 xfailed, 0 failed; targeted MoneyMovement, BankReconciliation, AUTHZ-001, PostgreSQL confirmation, compilation, diff hygiene, and repository safety checks pass. Independent review: 0 Critical, 0 High, 0 Medium; one Low scope-hygiene finding resolved before commit.
 
 ---
 

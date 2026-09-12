@@ -17,6 +17,7 @@ from src.models.bank_reconciliation import (
 from src.models.coa import PaymentAccount
 from src.models.journal import JournalLine, JournalEntry
 from src.models.money_movement import MoneyMovement, Settlement
+from src.models.transaction import Transaction
 
 from src.models.enums import ReconciliationStatus, StatementImportStatus, MovementDirection
 from src.schemas.bank_reconciliation import (
@@ -57,7 +58,7 @@ class BankReconciliationService:
             )
         )
         if not pa:
-            raise EntityNotFoundException("Payment account not found in organization")
+            raise EntityNotFoundException("PaymentAccount", payment_account_id)
 
         # Compute SHA-256
         file_hash = hashlib.sha256(file_content).hexdigest()
@@ -169,7 +170,7 @@ class BankReconciliationService:
             )
         )
         if not stmt_import:
-            raise EntityNotFoundException("Bank statement import not found")
+            raise EntityNotFoundException("BankStatementImport", import_id)
 
         # Load unmatched lines
         lines = (await self.session.scalars(
@@ -261,7 +262,39 @@ class BankReconciliationService:
             )
         )
         if not line:
-            raise EntityNotFoundException("Statement line not found")
+            raise EntityNotFoundException("BankStatementLine", req.statement_line_id)
+
+        if req.journal_line_id:
+            journal_line_id = await self.session.scalar(
+                select(JournalLine.id)
+                .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
+                .where(
+                    JournalLine.id == req.journal_line_id,
+                    JournalEntry.organization_id == organization_id,
+                )
+            )
+            if not journal_line_id:
+                raise EntityNotFoundException("JournalLine", req.journal_line_id)
+
+        if req.money_movement_id:
+            money_movement_id = await self.session.scalar(
+                select(MoneyMovement.id).where(
+                    MoneyMovement.id == req.money_movement_id,
+                    MoneyMovement.organization_id == organization_id,
+                )
+            )
+            if not money_movement_id:
+                raise EntityNotFoundException("MoneyMovement", req.money_movement_id)
+
+        if req.transaction_id:
+            transaction_id = await self.session.scalar(
+                select(Transaction.id).where(
+                    Transaction.id == req.transaction_id,
+                    Transaction.organization_id == organization_id,
+                )
+            )
+            if not transaction_id:
+                raise EntityNotFoundException("Transaction", req.transaction_id)
 
         reconcil = BankReconciliation(
             organization_id=organization_id,

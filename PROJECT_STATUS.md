@@ -4,7 +4,7 @@
 - **Current branch**: `hermes/fin-p1-105-tenant-reference-hardening`
 - **Base commit**: `c15548abc8e1b0678b5ec14a96e48b2e8b68fc48`
 - **Active feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References
-- **Active checkpoint**: CP2 — Core Entity Tenant Hardening (COMPLETED)
+- **Active checkpoint**: CP3 — Financial Linkage Tenant Hardening (VERIFIED IN WORKTREE; AWAITING CHECKPOINT COMMIT)
 - **CP1 Deliverables**:
   - Spec Kit tracked under `specs/fin-p1-105-tenant-reference-hardening/`
   - Dedicated security regression test suite: `backend/tests/security/test_fin_p1_105_tenant_reference_hardening.py`
@@ -18,6 +18,13 @@
   - `ProjectService.create_project` and `update_project` scope supplied `pic_user_id` to `User.organization_id`; update preserves omitted versus explicit-null semantics.
   - `FixedAssetService.create_asset` scopes nullable `vendor_id` and `document_id` to their tenant before asset construction or flush.
   - ProjectBudget service methods require `organization_id`, establish tenant-owned project existence, and all callers are migrated.
-  - Focused suite: 30 passed, 6 expected CP3 xfailed, 0 unexpected failures. CP3 settlement and reconciliation paths remain untouched.
+  - Focused suite: 30 passed, 6 expected CP3 xfailed, 0 unexpected failures.
+- **CP3 verified deliverables:**
+  - `MoneyMovementService.create_money_movement` scopes all non-null `Settlement.transaction_id` values to the caller organization before code allocation, construction, or flush; mixed settlement requests are atomic.
+  - `BankReconciliationService.match_manual` scopes supplied journal lines through `JournalEntry`, and money movements/transactions directly; all optional IDs are validated before reconciliation construction or statement-line status mutation.
+  - Foreign and nonexistent CP3 references return the same HTTP 404 `NOT_FOUND` contract. Same-tenant and nullable flows remain accepted.
+  - Focused FIN-P1-105 suite: 36 passed, 0 xfailed, 0 failed. Targeted MoneyMovement/BankReconciliation/AUTHZ suite: 107 passed. PostgreSQL FK confirmation: 1 passed.
+  - Independent CP3 review: 0 Critical, 0 High, 0 Medium; one Low scope-hygiene issue was resolved.
+  - Remaining active FIN-P1-105 tenant-reference vulnerabilities: 0.
 - **Scope adherence**: No migration, accounting, AUTHZ policy, frontend, or historical-data change.
-- **Next checkpoint**: CP3 — Financial Linkage Hardening (not started).
+- **Next checkpoint**: Commit CP3, then stop; CP4 Full Regression, Schema Safety & Remote Delivery Readiness remains open.

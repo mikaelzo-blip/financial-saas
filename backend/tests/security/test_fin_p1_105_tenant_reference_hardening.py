@@ -883,17 +883,8 @@ async def test_money_movement_create_same_tenant_settlement_transaction_accepted
     assert body["settlements"][0]["transaction_id"] == str(env["tx_a"].id)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="FIN-P1-105: create_money_movement accepts foreign Tenant B Transaction in Settlement",
-)
-async def test_red_money_movement_create_cross_tenant_settlement_transaction_rejected(tenant_hardening_env):
-    """EXPECTED RED: Tenant A creates settlement referencing Tenant B Transaction UUID.
-
-    Future Security Invariant: rejected with 404 NOT_FOUND; zero MoneyMovement or Settlement persisted.
-    Baseline Behavior: returns 201 Created and links foreign transaction.
-    """
+async def test_money_movement_create_cross_tenant_settlement_transaction_rejected(tenant_hardening_env):
+    """Tenant A cannot link a settlement to Tenant B transaction."""
     env = tenant_hardening_env
     client = env["client"]
     headers = make_auth_headers(env["org_a"].id, env["users_a"][UserRole.OPERATOR])
@@ -915,10 +906,18 @@ async def test_red_money_movement_create_cross_tenant_settlement_transaction_rej
     }
     response = await client.post("/api/v1/money-movements", json=payload, headers=headers)
 
-    # Future Invariant: fail-closed 404 NOT_FOUND
     assert response.status_code == 404
     error_body = response.json().get("error", {})
     assert error_body.get("code") == "NOT_FOUND"
+
+    async with env["session_factory"]() as session:
+        assert not (await session.scalars(
+            select(MoneyMovement).where(MoneyMovement.description == payload["description"])
+        )).all()
+        assert not (await session.scalars(
+            select(Settlement).where(Settlement.transaction_id == env["tx_b"].id)
+        )).all()
+        assert not (await session.scalars(select(SettlementAllocation))).all()
 
 
 async def test_money_movement_create_null_settlement_transaction_accepted(tenant_hardening_env):
@@ -948,18 +947,8 @@ async def test_money_movement_create_null_settlement_transaction_accepted(tenant
     assert body["settlements"][0]["transaction_id"] is None
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="FIN-P1-105: multi-settlement mixed batch accepts foreign transaction and persists rows",
-)
-async def test_red_money_movement_create_mixed_settlement_atomicity_rejected(tenant_hardening_env):
-    """EXPECTED RED: Multi-settlement batch with 1st valid Tenant A and 2nd foreign Tenant B transaction.
-
-    Future Invariant: Entire operation fails with 404; zero MoneyMovement, Settlement, or
-    Allocation rows persist (Strict Atomicity).
-    Baseline Behavior: returns 201 Created.
-    """
+async def test_money_movement_create_mixed_settlement_atomicity_rejected(tenant_hardening_env):
+    """A valid settlement cannot allow a foreign settlement in the same request."""
     env = tenant_hardening_env
     client = env["client"]
     headers = make_auth_headers(env["org_a"].id, env["users_a"][UserRole.OPERATOR])
@@ -986,8 +975,16 @@ async def test_red_money_movement_create_mixed_settlement_atomicity_rejected(ten
     }
     response = await client.post("/api/v1/money-movements", json=payload, headers=headers)
 
-    # Future Invariant: fail-closed 404 NOT_FOUND
     assert response.status_code == 404
+
+    async with env["session_factory"]() as session:
+        assert not (await session.scalars(
+            select(MoneyMovement).where(MoneyMovement.description == payload["description"])
+        )).all()
+        assert not (await session.scalars(
+            select(Settlement).where(Settlement.transaction_id.in_([env["tx_a"].id, env["tx_b"].id]))
+        )).all()
+        assert not (await session.scalars(select(SettlementAllocation))).all()
 
 
 async def test_money_movement_create_nonexistent_transaction_characterization(tenant_hardening_env):
@@ -1012,7 +1009,8 @@ async def test_money_movement_create_nonexistent_transaction_characterization(te
         ],
     }
     response = await client.post("/api/v1/money-movements", json=payload, headers=headers)
-    assert response.status_code in (201, 404, 500)
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "NOT_FOUND"
 
 
 # =============================================================================
@@ -1036,17 +1034,8 @@ async def test_bank_reconciliation_match_same_tenant_journal_line_accepted(tenan
     assert response.json().get("message") == "Reconciliation match created"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="FIN-P1-105: manual_reconcile accepts foreign Tenant B JournalLine (via JournalEntry)",
-)
-async def test_red_bank_reconciliation_match_cross_tenant_journal_line_rejected(tenant_hardening_env):
-    """EXPECTED RED: Tenant A reconciles statement line supplying foreign Tenant B journal_line_id.
-
-    Future Invariant: 404 NOT_FOUND; statement_line remains UNMATCHED_BANK; zero BankReconciliation row.
-    Baseline Behavior: returns 200 OK and mutates statement line to MATCHED.
-    """
+async def test_bank_reconciliation_match_cross_tenant_journal_line_rejected(tenant_hardening_env):
+    """Tenant A cannot reconcile against Tenant B journal line."""
     env = tenant_hardening_env
     client = env["client"]
     headers = make_auth_headers(env["org_a"].id, env["users_a"][UserRole.OPERATOR])
@@ -1059,10 +1048,16 @@ async def test_red_bank_reconciliation_match_cross_tenant_journal_line_rejected(
     }
     response = await client.post("/api/v1/bank-reconciliation/reconcile", json=payload, headers=headers)
 
-    # Future Invariant: fail-closed 404 NOT_FOUND
     assert response.status_code == 404
     error_body = response.json().get("error", {})
     assert error_body.get("code") == "NOT_FOUND"
+
+    async with env["session_factory"]() as session:
+        statement_line = await session.get(BankStatementLine, env["stmt_line_a"].id)
+        assert statement_line.reconciliation_status == ReconciliationStatus.UNMATCHED_BANK
+        assert not await session.scalar(
+            select(BankReconciliation).where(BankReconciliation.statement_line_id == env["stmt_line_a"].id)
+        )
 
 
 async def test_bank_reconciliation_match_nonexistent_journal_line_characterization(tenant_hardening_env):
@@ -1078,7 +1073,8 @@ async def test_bank_reconciliation_match_nonexistent_journal_line_characterizati
         "notes": "Nonexistent JL match",
     }
     response = await client.post("/api/v1/bank-reconciliation/reconcile", json=payload, headers=headers)
-    assert response.status_code in (200, 404, 500)
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "NOT_FOUND"
 
 
 # =============================================================================
@@ -1102,17 +1098,8 @@ async def test_bank_reconciliation_match_same_tenant_money_movement_accepted(ten
     assert response.json().get("message") == "Reconciliation match created"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="FIN-P1-105: manual_reconcile accepts foreign Tenant B MoneyMovement",
-)
-async def test_red_bank_reconciliation_match_cross_tenant_money_movement_rejected(tenant_hardening_env):
-    """EXPECTED RED: Tenant A reconciles statement line supplying foreign Tenant B money_movement_id.
-
-    Future Invariant: 404 NOT_FOUND; statement line remains UNMATCHED_BANK; zero BankReconciliation row.
-    Baseline Behavior: returns 200 OK.
-    """
+async def test_bank_reconciliation_match_cross_tenant_money_movement_rejected(tenant_hardening_env):
+    """Tenant A cannot reconcile against Tenant B money movement."""
     env = tenant_hardening_env
     client = env["client"]
     headers = make_auth_headers(env["org_a"].id, env["users_a"][UserRole.OPERATOR])
@@ -1125,10 +1112,16 @@ async def test_red_bank_reconciliation_match_cross_tenant_money_movement_rejecte
     }
     response = await client.post("/api/v1/bank-reconciliation/reconcile", json=payload, headers=headers)
 
-    # Future Invariant: fail-closed 404 NOT_FOUND
     assert response.status_code == 404
     error_body = response.json().get("error", {})
     assert error_body.get("code") == "NOT_FOUND"
+
+    async with env["session_factory"]() as session:
+        statement_line = await session.get(BankStatementLine, env["stmt_line_a"].id)
+        assert statement_line.reconciliation_status == ReconciliationStatus.UNMATCHED_BANK
+        assert not await session.scalar(
+            select(BankReconciliation).where(BankReconciliation.statement_line_id == env["stmt_line_a"].id)
+        )
 
 
 async def test_bank_reconciliation_match_nonexistent_money_movement_characterization(tenant_hardening_env):
@@ -1144,7 +1137,8 @@ async def test_bank_reconciliation_match_nonexistent_money_movement_characteriza
         "notes": "Nonexistent MM match",
     }
     response = await client.post("/api/v1/bank-reconciliation/reconcile", json=payload, headers=headers)
-    assert response.status_code in (200, 404, 500)
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "NOT_FOUND"
 
 
 # =============================================================================
@@ -1168,17 +1162,8 @@ async def test_bank_reconciliation_match_same_tenant_transaction_accepted(tenant
     assert response.json().get("message") == "Reconciliation match created"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="FIN-P1-105: manual_reconcile accepts foreign Tenant B Transaction",
-)
-async def test_red_bank_reconciliation_match_cross_tenant_transaction_rejected(tenant_hardening_env):
-    """EXPECTED RED: Tenant A reconciles statement line supplying foreign Tenant B transaction_id.
-
-    Future Invariant: 404 NOT_FOUND; statement line remains UNMATCHED_BANK; zero BankReconciliation row.
-    Baseline Behavior: returns 200 OK.
-    """
+async def test_bank_reconciliation_match_cross_tenant_transaction_rejected(tenant_hardening_env):
+    """Tenant A cannot reconcile against Tenant B transaction."""
     env = tenant_hardening_env
     client = env["client"]
     headers = make_auth_headers(env["org_a"].id, env["users_a"][UserRole.OPERATOR])
@@ -1191,10 +1176,16 @@ async def test_red_bank_reconciliation_match_cross_tenant_transaction_rejected(t
     }
     response = await client.post("/api/v1/bank-reconciliation/reconcile", json=payload, headers=headers)
 
-    # Future Invariant: fail-closed 404 NOT_FOUND
     assert response.status_code == 404
     error_body = response.json().get("error", {})
     assert error_body.get("code") == "NOT_FOUND"
+
+    async with env["session_factory"]() as session:
+        statement_line = await session.get(BankStatementLine, env["stmt_line_a"].id)
+        assert statement_line.reconciliation_status == ReconciliationStatus.UNMATCHED_BANK
+        assert not await session.scalar(
+            select(BankReconciliation).where(BankReconciliation.statement_line_id == env["stmt_line_a"].id)
+        )
 
 
 async def test_bank_reconciliation_match_nonexistent_transaction_characterization(tenant_hardening_env):
@@ -1210,25 +1201,16 @@ async def test_bank_reconciliation_match_nonexistent_transaction_characterizatio
         "notes": "Nonexistent TX match",
     }
     response = await client.post("/api/v1/bank-reconciliation/reconcile", json=payload, headers=headers)
-    assert response.status_code in (200, 404, 500)
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "NOT_FOUND"
 
 
 # =============================================================================
 # 8. Bank Mixed-Reference Atomicity
 # =============================================================================
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="FIN-P1-105: manual_reconcile mixed references accepts cross-tenant reference",
-)
-async def test_red_bank_reconciliation_mixed_reference_atomicity_rejected(tenant_hardening_env):
-    """EXPECTED RED: Bank reconciliation request with 1 valid same-tenant reference AND 1 foreign reference.
-
-    Future Invariant: Entire operation fails with 404; statement line remains UNMATCHED_BANK;
-    zero BankReconciliation rows persisted.
-    Baseline Behavior: returns 200 OK and mutates statement line.
-    """
+async def test_bank_reconciliation_mixed_reference_atomicity_rejected(tenant_hardening_env):
+    """A valid bank reference cannot allow a foreign reference in the same request."""
     env = tenant_hardening_env
     client = env["client"]
     headers = make_auth_headers(env["org_a"].id, env["users_a"][UserRole.OPERATOR])
@@ -1242,8 +1224,14 @@ async def test_red_bank_reconciliation_mixed_reference_atomicity_rejected(tenant
     }
     response = await client.post("/api/v1/bank-reconciliation/reconcile", json=payload, headers=headers)
 
-    # Future Invariant: fail-closed 404 NOT_FOUND
     assert response.status_code == 404
+
+    async with env["session_factory"]() as session:
+        statement_line = await session.get(BankStatementLine, env["stmt_line_a"].id)
+        assert statement_line.reconciliation_status == ReconciliationStatus.UNMATCHED_BANK
+        assert not await session.scalar(
+            select(BankReconciliation).where(BankReconciliation.statement_line_id == env["stmt_line_a"].id)
+        )
 
 
 # =============================================================================

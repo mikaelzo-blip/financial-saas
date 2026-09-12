@@ -1,39 +1,19 @@
 # Project Status
 
-- **Last reconciled**: 2026-09-12
-- **Current branch**: `hermes/fin-p1-105-tenant-reference-hardening`
-- **Base commit**: `c15548abc8e1b0678b5ec14a96e48b2e8b68fc48`
-- **Active feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References
-- **Active checkpoint**: CP4 — Final Regression, Schema Safety & Delivery Readiness (LOCAL VERIFICATION COMPLETED; REMOTE DELIVERY PENDING)
-- **CP1 Deliverables**:
-  - Spec Kit tracked under `specs/fin-p1-105-tenant-reference-hardening/`
-  - Dedicated security regression test suite: `backend/tests/security/test_fin_p1_105_tenant_reference_hardening.py`
-  - Test results: 34 tests collected (24 passed, 10 xfailed, 0 unexpected failures)
-  - 7 vulnerable reference fields reproduced with executable RED tests (Project PIC create/update, FixedAsset vendor/document, Settlement transaction, BankReconciliation journal_line/money_movement/transaction + mixed atomicity)
-  - ProjectBudget characterized as DEFENSE-IN-DEPTH SERVICE CONTRACT GAP (API protected with 404, direct service lacks organization_id)
-  - Same-tenant positive controls, nullability controls, nonexistent fail-closed characterization, and AUTHZ-001 regression verified
-  - Authoritative PostgreSQL confirmation verified (`test_postgresql_cross_tenant_foreign_key_acceptance_confirmation`) proving global database FKs accept cross-tenant UUIDs without error
-  - Zero production code fixes, zero migrations, zero accounting changes, zero frontend changes
-- **CP2 verified deliverables:**
-  - `ProjectService.create_project` and `update_project` scope supplied `pic_user_id` to `User.organization_id`; update preserves omitted versus explicit-null semantics.
-  - `FixedAssetService.create_asset` scopes nullable `vendor_id` and `document_id` to their tenant before asset construction or flush.
-  - ProjectBudget service methods require `organization_id`, establish tenant-owned project existence, and all callers are migrated.
-  - Focused suite: 30 passed, 6 expected CP3 xfailed, 0 unexpected failures.
-- **CP3 verified deliverables:**
-  - `MoneyMovementService.create_money_movement` scopes all non-null `Settlement.transaction_id` values to the caller organization before code allocation, construction, or flush; mixed settlement requests are atomic.
-  - `BankReconciliationService.match_manual` scopes supplied journal lines through `JournalEntry`, and money movements/transactions directly; all optional IDs are validated before reconciliation construction or statement-line status mutation.
-  - Foreign and nonexistent CP3 references return the same HTTP 404 `NOT_FOUND` contract. Same-tenant and nullable flows remain accepted.
-  - Focused FIN-P1-105 suite: 36 passed, 0 xfailed, 0 failed. Targeted MoneyMovement/BankReconciliation/AUTHZ suite: 107 passed. PostgreSQL FK confirmation: 1 passed.
-  - Independent CP3 review: 0 Critical, 0 High, 0 Medium; one Low scope-hygiene issue was resolved.
-  - Remaining active FIN-P1-105 tenant-reference vulnerabilities: 0.
-- **Scope adherence**: No migration, accounting, AUTHZ policy, frontend, or historical-data change.
-- **CP3 implementation commit**: `80c9f8f9944c09d2224813d59dbef782d86cde64` (`fix(fin-p1-105): scope financial references to tenant (CP3)`).
-- **CP4 local verification**:
-  - Full backend: 694 passed, 0 failed, 0 skipped, 0 xfailed (explicit local PostgreSQL 16 disposable target).
-  - FIN-P1-105 focused suite: 36 passed, 0 failed, 0 skipped, 0 xfailed; AUTHZ-001: 103 passed.
-  - Relevant PostgreSQL regression: 84 passed, including FIN-001 concurrency/retry and the required global-FK acceptance confirmation.
-  - Alembic: current/head `023_historical_seq_bootstrap`, one expected head, zero drift, offline migration chain generated successfully; FIN-P1-105 migrations: 0.
-  - Frontend: 66 tests, lint, typecheck, production build, and production dependency audit passed (0 vulnerabilities).
-  - Python compilation, `pip check`, repository safety, dependency audit, and direct + independent tenant-security review passed; findings: 0 Critical, 0 High, 0 Medium, 0 Low.
-  - Required remaining delivery work: commit CP4 governance/diff-hygiene corrections, push the feature branch, open PR, and wait for GitHub CI. Do not merge without explicit authorization.
-- **Next checkpoint**: CP4 Remote Delivery — push, PR, CI verification, then await explicit squash-merge authorization.
+- **Last reconciled**: 2026-09-13
+- **Current branch**: `hermes/fin-p1-102-transaction-type-contract`
+- **Base commit**: `befb74a9b60ab746e8ac779accccc151c5552047` (`origin/main` aligned at branch creation)
+- **Active feature**: FIN-P1-102 — TransactionType Ingestion vs Executable Processing Contract
+- **Active checkpoint**: Specification, architecture, traceability, and checkpoint planning complete; CP1 has not started.
+- **Verified baseline**:
+  - `TransactionType`: 37 members.
+  - `PostingRuleRegistry`: 20 normal executable posting paths.
+  - Dedicated special workflow: `REVERSAL` only.
+  - Policy-blocked / no executable generic posting path: 16 types.
+  - Generic ingestion target: accept 20, reject 17 (16 unsupported + `REVERSAL`).
+  - `PETTY_CASH_EXPENSE` is incorrectly AUTO_SAFE in baseline and will be removed in CP3 without inventing accounting policy.
+- **Spec Kit**: `specs/fin-p1-102-transaction-type-contract/` contains `spec.md`, `research.md`, `plan.md`, `tasks.md`, `analysis.md`, `data-model.md`, `quickstart.md`, contract, and requirements checklist.
+- **Design decision**: `PostingRuleRegistry` will own the canonical normal generic-ingestion capability manifest and validation API; `TransactionService.create_transaction` is the primary pre-sequence/pre-persistence gate; document correction and approval receive targeted protections.
+- **Scope boundaries**: No posting rules, no accounting-policy decisions, no migration, no frontend product change, and no historical-row remediation.
+- **Design review**: Independent read-only review passed all 16 requested criteria; 0 Critical, 0 High, 0 Medium, 0 Low findings. Source corrections applied: document correction is an API-route boundary, and the dedicated reversal route returns 201 Created.
+- **Next action**: Begin FIN-P1-102 CP1 in a new turn: add only the executable characterization and strict-XFAIL RED suite, verify it, commit CP1, then stop.

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.project import Project, ProjectBudget
 from src.models.counterparty import Counterparty
+from src.models.user import User
 from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation
 from src.models.payable import VendorBill, VendorPaymentAllocation
 from src.models.transaction import Transaction
@@ -80,6 +81,18 @@ class ProjectService:
         if not customer:
             raise EntityNotFoundException("Customer Counterparty", data.customer_id)
 
+        if data.pic_user_id is not None:
+            pic_user = await self.session.scalar(
+                select(User).where(
+                    and_(
+                        User.id == data.pic_user_id,
+                        User.organization_id == organization_id,
+                    )
+                )
+            )
+            if not pic_user:
+                raise EntityNotFoundException("User", data.pic_user_id)
+
         # Generate unique human-readable code
         project_code = await self.generate_project_code(organization_id, data.start_date)
 
@@ -147,6 +160,18 @@ class ProjectService:
         """
         project = await self.get_project(organization_id, project_id)
 
+        if "pic_user_id" in data.model_fields_set and data.pic_user_id is not None:
+            pic_user = await self.session.scalar(
+                select(User).where(
+                    and_(
+                        User.id == data.pic_user_id,
+                        User.organization_id == organization_id,
+                    )
+                )
+            )
+            if not pic_user:
+                raise EntityNotFoundException("User", data.pic_user_id)
+
         if data.project_name is not None:
             project.project_name = data.project_name
         if data.po_spk_no is not None:
@@ -155,7 +180,7 @@ class ProjectService:
             project.po_spk_date = data.po_spk_date
         if data.target_end_date is not None:
             project.target_end_date = data.target_end_date
-        if data.pic_user_id is not None:
+        if "pic_user_id" in data.model_fields_set:
             project.pic_user_id = data.pic_user_id
 
         await self.session.flush()
@@ -268,10 +293,15 @@ class ProjectService:
         await self.session.flush()
         return project
 
-    async def get_project_budgets(self, project_id: uuid.UUID) -> List[ProjectBudget]:
+    async def get_project_budgets(
+        self,
+        organization_id: uuid.UUID,
+        project_id: uuid.UUID,
+    ) -> List[ProjectBudget]:
         """
         Fetches all budget line items for a project.
         """
+        await self.get_project(organization_id, project_id)
         stmt = select(ProjectBudget).where(
             ProjectBudget.project_id == project_id
         ).order_by(ProjectBudget.cost_category.asc())
@@ -280,12 +310,14 @@ class ProjectService:
 
     async def add_or_update_project_budget(
         self,
+        organization_id: uuid.UUID,
         project_id: uuid.UUID,
-        data: ProjectBudgetCreate
+        data: ProjectBudgetCreate,
     ) -> ProjectBudget:
         """
         Adds or updates a budget line item for a cost category.
         """
+        await self.get_project(organization_id, project_id)
         stmt = select(ProjectBudget).where(
             and_(
                 ProjectBudget.project_id == project_id,

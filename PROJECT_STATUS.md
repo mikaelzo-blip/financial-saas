@@ -4,7 +4,7 @@
 - **Current branch**: `hermes/fin-p1-105-tenant-reference-hardening`
 - **Base commit**: `c15548abc8e1b0678b5ec14a96e48b2e8b68fc48`
 - **Active feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References
-- **Active checkpoint**: CP1 — Executable Cross-Tenant RED Regression Suite Only (COMPLETED)
+- **Active checkpoint**: CP2 — Core Entity Tenant Hardening (COMPLETED)
 - **CP1 Deliverables**:
   - Spec Kit tracked under `specs/fin-p1-105-tenant-reference-hardening/`
   - Dedicated security regression test suite: `backend/tests/security/test_fin_p1_105_tenant_reference_hardening.py`
@@ -14,5 +14,10 @@
   - Same-tenant positive controls, nullability controls, nonexistent fail-closed characterization, and AUTHZ-001 regression verified
   - Authoritative PostgreSQL confirmation verified (`test_postgresql_cross_tenant_foreign_key_acceptance_confirmation`) proving global database FKs accept cross-tenant UUIDs without error
   - Zero production code fixes, zero migrations, zero accounting changes, zero frontend changes
-- **Scope adherence**: Zero modifications to `backend/src/*` or production database.
-- **Next checkpoint**: CP2 — Core Entity Hardening (`ProjectService.create_project`, `ProjectService.update_project`, `FixedAssetService.create_asset`, `ProjectService` budget methods).
+- **CP2 verified deliverables:**
+  - `ProjectService.create_project` and `update_project` scope supplied `pic_user_id` to `User.organization_id`; update preserves omitted versus explicit-null semantics.
+  - `FixedAssetService.create_asset` scopes nullable `vendor_id` and `document_id` to their tenant before asset construction or flush.
+  - ProjectBudget service methods require `organization_id`, establish tenant-owned project existence, and all callers are migrated.
+  - Focused suite: 30 passed, 6 expected CP3 xfailed, 0 unexpected failures. CP3 settlement and reconciliation paths remain untouched.
+- **Scope adherence**: No migration, accounting, AUTHZ policy, frontend, or historical-data change.
+- **Next checkpoint**: CP3 — Financial Linkage Hardening (not started).

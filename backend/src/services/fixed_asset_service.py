@@ -7,6 +7,8 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.fixed_asset import FixedAsset, FixedAssetDepreciation
+from src.models.counterparty import Counterparty
+from src.models.document import Document
 from src.models.transaction import Transaction
 from src.models.enums import (
     AssetStatus,
@@ -145,6 +147,30 @@ class FixedAssetService:
         data: FixedAssetCreate,
         actor_id: Optional[uuid.UUID] = None
     ) -> FixedAsset:
+        if data.vendor_id is not None:
+            vendor = await self.session.scalar(
+                select(Counterparty).where(
+                    and_(
+                        Counterparty.id == data.vendor_id,
+                        Counterparty.organization_id == organization_id,
+                    )
+                )
+            )
+            if not vendor:
+                raise EntityNotFoundException("Counterparty", data.vendor_id)
+
+        if data.document_id is not None:
+            document = await self.session.scalar(
+                select(Document).where(
+                    and_(
+                        Document.id == data.document_id,
+                        Document.organization_id == organization_id,
+                    )
+                )
+            )
+            if not document:
+                raise EntityNotFoundException("Document", data.document_id)
+
         # 1. Uniqueness check on asset_code
         existing_code = await self.session.scalar(
             select(FixedAsset).where(

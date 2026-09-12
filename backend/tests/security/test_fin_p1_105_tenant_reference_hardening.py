@@ -514,17 +514,8 @@ async def test_project_create_same_tenant_pic_user_accepted(tenant_hardening_env
     assert body["pic_user_id"] == str(env["users_a"][UserRole.OPERATOR])
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="FIN-P1-105: create_project accepts foreign Tenant B User as pic_user_id",
-)
-async def test_red_project_create_cross_tenant_pic_user_rejected(tenant_hardening_env):
-    """EXPECTED RED: Tenant A supplies Tenant B User UUID as Project.pic_user_id.
-
-    Future Security Invariant: rejected with 404 NOT_FOUND; zero Project persisted.
-    Baseline Behavior: returns 201 Created and persists foreign pic_user_id.
-    """
+async def test_project_create_cross_tenant_pic_user_rejected(tenant_hardening_env):
+    """Tenant A cannot supply a Tenant B User UUID as Project.pic_user_id."""
     env = tenant_hardening_env
     client = env["client"]
     headers = make_auth_headers(env["org_a"].id, env["users_a"][UserRole.MANAGER])
@@ -545,12 +536,7 @@ async def test_red_project_create_cross_tenant_pic_user_rejected(tenant_hardenin
 
 
 async def test_project_create_nonexistent_pic_user_characterization(tenant_hardening_env):
-    """Nonexistent UUID Characterization: Project create with random UUID pic_user_id.
-
-    Documents current baseline behavior: ProjectService does not query User for pic_user_id,
-    so baseline accepts random UUID (or fails on relational DB FK).
-    Future CP2 requirement: fail-closed 404 EntityNotFoundException("User", :id).
-    """
+    """A nonexistent project PIC returns the same not-found contract as a foreign PIC."""
     env = tenant_hardening_env
     client = env["client"]
     headers = make_auth_headers(env["org_a"].id, env["users_a"][UserRole.MANAGER])
@@ -564,8 +550,8 @@ async def test_project_create_nonexistent_pic_user_characterization(tenant_harde
         "pic_user_id": str(nonexistent_id),
     }
     response = await client.post("/api/v1/projects", json=payload, headers=headers)
-    # Characterize: baseline accepts (201) because no validation occurs in SQLite
-    assert response.status_code in (201, 404, 500)
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "NOT_FOUND"
 
 
 async def test_project_update_same_tenant_pic_user_accepted(tenant_hardening_env):
@@ -582,35 +568,25 @@ async def test_project_update_same_tenant_pic_user_accepted(tenant_hardening_env
         assert updated.pic_user_id == env["users_a"][UserRole.OPERATOR]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="FIN-P1-105: update_project accepts foreign Tenant B User as pic_user_id",
-)
-async def test_red_project_update_cross_tenant_pic_user_rejected(tenant_hardening_env):
-    """EXPECTED RED: Tenant A updates project with Tenant B User UUID as pic_user_id.
-
-    Future Security Invariant: raises EntityNotFoundException("User", :id); project unchanged.
-    Baseline Behavior: mutates project.pic_user_id to foreign Tenant B user.
-    """
+async def test_project_update_cross_tenant_pic_user_rejected(tenant_hardening_env):
+    """Tenant A cannot assign a Tenant B User UUID as project PIC."""
     env = tenant_hardening_env
     session_factory = env["session_factory"]
     foreign_user_id = env["users_b"][UserRole.MANAGER]
 
     async with session_factory() as session:
         service = ProjectService(session)
-        # Attempt update with foreign user
-        try:
+        original_pic_user_id = (await service.get_project(env["org_a"].id, env["project_a"].id)).pic_user_id
+
+        with pytest.raises(EntityNotFoundException):
             await service.update_project(
                 organization_id=env["org_a"].id,
                 project_id=env["project_a"].id,
                 data=ProjectUpdate(pic_user_id=foreign_user_id),
             )
-            # If no exception raised, baseline accepted foreign user -> assert failure
-            assert False, "update_project accepted foreign Tenant B User"
-        except EntityNotFoundException:
-            # Future expected behavior
-            pass
+
+        unchanged = await service.get_project(env["org_a"].id, env["project_a"].id)
+        assert unchanged.pic_user_id == original_pic_user_id
 
 
 async def test_project_update_null_and_omitted_pic_user_accepted(tenant_hardening_env):
@@ -620,14 +596,22 @@ async def test_project_update_null_and_omitted_pic_user_accepted(tenant_hardenin
 
     async with session_factory() as session:
         service = ProjectService(session)
-        # Omission preserves existing PIC
+        original_pic_user_id = (await service.get_project(env["org_a"].id, env["project_a"].id)).pic_user_id
+
         p1 = await service.update_project(
             organization_id=env["org_a"].id,
             project_id=env["project_a"].id,
             data=ProjectUpdate(project_name="Renamed Project"),
         )
-        assert p1.pic_user_id == env["project_a"].pic_user_id
+        assert p1.pic_user_id == original_pic_user_id
         assert p1.project_name == "Renamed Project"
+
+        cleared = await service.update_project(
+            organization_id=env["org_a"].id,
+            project_id=env["project_a"].id,
+            data=ProjectUpdate(pic_user_id=None),
+        )
+        assert cleared.pic_user_id is None
 
 
 # =============================================================================
@@ -656,17 +640,8 @@ async def test_fixed_asset_create_same_tenant_vendor_accepted(tenant_hardening_e
     assert body["vendor_id"] == str(env["vendor_a"].id)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="FIN-P1-105: create_asset accepts foreign Tenant B Counterparty as vendor_id",
-)
-async def test_red_fixed_asset_create_cross_tenant_vendor_rejected(tenant_hardening_env):
-    """EXPECTED RED: Tenant A creates fixed asset with Tenant B Counterparty as vendor_id.
-
-    Future Security Invariant: rejected with 404 NOT_FOUND; zero FixedAsset persisted.
-    Baseline Behavior: returns 201 Created and links foreign vendor.
-    """
+async def test_fixed_asset_create_cross_tenant_vendor_rejected(tenant_hardening_env):
+    """Tenant A cannot create an asset with a Tenant B vendor reference."""
     env = tenant_hardening_env
     client = env["client"]
     headers = make_auth_headers(env["org_a"].id, env["users_a"][UserRole.OPERATOR])
@@ -683,10 +658,57 @@ async def test_red_fixed_asset_create_cross_tenant_vendor_rejected(tenant_harden
     }
     response = await client.post("/api/v1/fixed-assets", json=payload, headers=headers)
 
-    # Future Invariant: fail-closed 404 NOT_FOUND
     assert response.status_code == 404
     error_body = response.json().get("error", {})
     assert error_body.get("code") == "NOT_FOUND"
+
+    async with env["session_factory"]() as session:
+        assert not await session.scalar(
+            select(FixedAsset).where(FixedAsset.asset_code == payload["asset_code"])
+        )
+
+
+async def test_fixed_asset_create_mixed_tenant_references_are_atomic(tenant_hardening_env):
+    """A valid reference cannot permit persistence when the other reference is foreign."""
+    env = tenant_hardening_env
+    client = env["client"]
+    headers = make_auth_headers(env["org_a"].id, env["users_a"][UserRole.OPERATOR])
+
+    payloads = [
+        {
+            "asset_code": "AST-A-MIXED-DOC",
+            "asset_name": "Valid Vendor Foreign Document",
+            "asset_category": "EQUIPMENT",
+            "purchase_date": "2026-01-10",
+            "purchase_cost": "50000000.00",
+            "salvage_value": "5000000.00",
+            "useful_life_months": 24,
+            "vendor_id": str(env["vendor_a"].id),
+            "document_id": str(env["doc_b"].id),
+        },
+        {
+            "asset_code": "AST-A-MIXED-VENDOR",
+            "asset_name": "Foreign Vendor Valid Document",
+            "asset_category": "EQUIPMENT",
+            "purchase_date": "2026-01-10",
+            "purchase_cost": "50000000.00",
+            "salvage_value": "5000000.00",
+            "useful_life_months": 24,
+            "vendor_id": str(env["vendor_b"].id),
+            "document_id": str(env["doc_a"].id),
+        },
+    ]
+
+    for payload in payloads:
+        response = await client.post("/api/v1/fixed-assets", json=payload, headers=headers)
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "NOT_FOUND"
+
+    async with env["session_factory"]() as session:
+        result = await session.execute(
+            select(FixedAsset).where(FixedAsset.asset_code.in_([item["asset_code"] for item in payloads]))
+        )
+        assert list(result.scalars()) == []
 
 
 async def test_fixed_asset_create_null_vendor_accepted(tenant_hardening_env):
@@ -728,7 +750,8 @@ async def test_fixed_asset_create_nonexistent_vendor_characterization(tenant_har
         "vendor_id": str(uuid.uuid4()),
     }
     response = await client.post("/api/v1/fixed-assets", json=payload, headers=headers)
-    assert response.status_code in (201, 404, 500)
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "NOT_FOUND"
 
 
 # =============================================================================
@@ -757,17 +780,8 @@ async def test_fixed_asset_create_same_tenant_document_accepted(tenant_hardening
     assert body["document_id"] == str(env["doc_a"].id)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="FIN-P1-105: create_asset accepts foreign Tenant B Document as document_id",
-)
-async def test_red_fixed_asset_create_cross_tenant_document_rejected(tenant_hardening_env):
-    """EXPECTED RED: Tenant A creates fixed asset with Tenant B Document as document_id.
-
-    Future Security Invariant: rejected with 404 NOT_FOUND; zero FixedAsset persisted.
-    Baseline Behavior: returns 201 Created and links foreign document.
-    """
+async def test_fixed_asset_create_cross_tenant_document_rejected(tenant_hardening_env):
+    """Tenant A cannot create an asset with a Tenant B document reference."""
     env = tenant_hardening_env
     client = env["client"]
     headers = make_auth_headers(env["org_a"].id, env["users_a"][UserRole.OPERATOR])
@@ -784,10 +798,14 @@ async def test_red_fixed_asset_create_cross_tenant_document_rejected(tenant_hard
     }
     response = await client.post("/api/v1/fixed-assets", json=payload, headers=headers)
 
-    # Future Invariant: fail-closed 404 NOT_FOUND
     assert response.status_code == 404
     error_body = response.json().get("error", {})
     assert error_body.get("code") == "NOT_FOUND"
+
+    async with env["session_factory"]() as session:
+        assert not await session.scalar(
+            select(FixedAsset).where(FixedAsset.asset_code == payload["asset_code"])
+        )
 
 
 async def test_fixed_asset_create_null_document_accepted(tenant_hardening_env):
@@ -829,7 +847,8 @@ async def test_fixed_asset_create_nonexistent_document_characterization(tenant_h
         "document_id": str(uuid.uuid4()),
     }
     response = await client.post("/api/v1/fixed-assets", json=payload, headers=headers)
-    assert response.status_code in (201, 404, 500)
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "NOT_FOUND"
 
 
 # =============================================================================
@@ -1262,13 +1281,8 @@ async def test_project_budget_api_protection_rejects_cross_tenant_project(tenant
     assert res_post.status_code == 404
 
 
-async def test_project_budget_service_defense_in_depth_gap(tenant_hardening_env):
-    """Characterization: Direct ProjectService methods lack organization_id parameter.
-
-    Direct internal calls to ProjectService.get_project_budgets and add_or_update_project_budget
-    do not enforce organization_id at the service boundary.
-    This demonstrates the DEFENSE-IN-DEPTH SERVICE CONTRACT GAP without bypassing API controls.
-    """
+async def test_project_budget_service_defense_in_depth_rejects_cross_tenant_project(tenant_hardening_env):
+    """Direct service calls reject a foreign project before listing or creating budgets."""
     env = tenant_hardening_env
     session_factory = env["session_factory"]
     foreign_proj_id = env["project_b"].id
@@ -1276,20 +1290,44 @@ async def test_project_budget_service_defense_in_depth_gap(tenant_hardening_env)
     async with session_factory() as session:
         service = ProjectService(session)
 
-        # Baseline service method signature accepts only project_id, not organization_id
-        budgets = await service.get_project_budgets(foreign_proj_id)
-        assert isinstance(budgets, list)
+        with pytest.raises(EntityNotFoundException):
+            await service.get_project_budgets(env["org_a"].id, foreign_proj_id)
 
-        # Add budget directly through service without tenant check
-        b = await service.add_or_update_project_budget(
-            foreign_proj_id,
+        with pytest.raises(EntityNotFoundException):
+            await service.add_or_update_project_budget(
+                env["org_a"].id,
+                foreign_proj_id,
+                ProjectBudgetCreate(
+                    cost_category=CostCategory.EQP,
+                    budget_amount=Decimal("15000000.00"),
+                    notes="Service-level direct add",
+                ),
+            )
+
+        assert not await session.scalar(
+            select(ProjectBudget).where(ProjectBudget.project_id == foreign_proj_id)
+        )
+
+
+async def test_project_budget_service_same_tenant_calls_succeed(tenant_hardening_env):
+    """Direct same-tenant budget calls remain available after service hardening."""
+    env = tenant_hardening_env
+    session_factory = env["session_factory"]
+
+    async with session_factory() as session:
+        service = ProjectService(session)
+        budget = await service.add_or_update_project_budget(
+            env["org_a"].id,
+            env["project_a"].id,
             ProjectBudgetCreate(
                 cost_category=CostCategory.EQP,
                 budget_amount=Decimal("15000000.00"),
-                notes="Service-level direct add",
+                notes="Same-tenant service add",
             ),
         )
-        assert b.project_id == foreign_proj_id
+        assert budget.project_id == env["project_a"].id
+        budgets = await service.get_project_budgets(env["org_a"].id, env["project_a"].id)
+        assert [item.id for item in budgets] == [budget.id]
 
 
 # =============================================================================

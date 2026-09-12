@@ -1,7 +1,7 @@
 # Task Breakdown: FIN-P1-105
 
 **Feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References  
-**Status**: PLANNING  
+**Status**: CP2 COMPLETE — CP3 FINANCIAL LINKAGE HARDENING REMAINS OPEN
 **Checkpoints**: 4 (CP1 -> CP2 -> CP3 -> CP4)  
 
 ---
@@ -29,12 +29,12 @@
 
 ## Checkpoint 2: Core Entity Hardening
 
-- [ ] **Task 2.1 (CP2-T1)**: Harden `ProjectService.create_project` to validate `pic_user_id` against `User.organization_id == organization_id` before code generation.
-- [ ] **Task 2.2 (CP2-T2)**: Harden `ProjectService.update_project` to validate `pic_user_id` against `User.organization_id == organization_id` before mutation.
-- [ ] **Task 2.3 (CP2-T3)**: Harden `FixedAssetService.create_asset` to validate `vendor_id` (`Counterparty.organization_id == organization_id`) and `document_id` (`Document.organization_id == organization_id`) before persistence.
-- [ ] **Task 2.4 (CP2-T4)**: Harden `ProjectService.get_project_budgets` and `add_or_update_project_budget` to accept `organization_id` and enforce `await self.get_project(organization_id, project_id)`.
-- [ ] **Task 2.5 (CP2-T5)**: Update caller sites in `backend/src/api/v1/projects.py` and `backend/tests/integration/test_project_service.py`.
-- [ ] **Task 2.6 (CP2-T6)**: Verify CP2 test subset transitions from RED to GREEN; run unit and integration suites; commit CP2.
+- [x] **Task 2.1 (CP2-T1)**: Hardened `ProjectService.create_project` to validate `pic_user_id` against `User.organization_id == organization_id` before code generation.
+- [x] **Task 2.2 (CP2-T2)**: Hardened `ProjectService.update_project` to validate explicitly supplied non-null `pic_user_id` before mutation while preserving omitted versus explicit-null PATCH semantics.
+- [x] **Task 2.3 (CP2-T3)**: Hardened `FixedAssetService.create_asset` to validate nullable `vendor_id` (`Counterparty.organization_id == organization_id`) and `document_id` (`Document.organization_id == organization_id`) before persistence; both are validated before asset construction.
+- [x] **Task 2.4 (CP2-T4)**: Hardened `ProjectService.get_project_budgets` and `add_or_update_project_budget` to require `organization_id` and establish tenant-owned project existence via `get_project`.
+- [x] **Task 2.5 (CP2-T5)**: Migrated all production and test callers: two API callers and one integration caller.
+- [x] **Task 2.6 (CP2-T6)**: Verified CP2 RED-to-GREEN, targeted Project/FixedAsset/AUTHZ checks, PostgreSQL confirmation, compilation, and diff hygiene; CP3 remains strict RED/XFAIL pending its checkpoint commit.
 
 ---
 

@@ -1,15 +1,15 @@
 # Design Consistency & Risk Analysis: FIN-P1-105
 
 **Feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References  
-**Status**: ANALYSIS COMPLETE  
-**Review Gate**: Pre-Implementation Design Review  
+**Status**: CP2 IMPLEMENTATION VERIFIED — CP3 FINANCIAL LINKAGE REMAINS OPEN
+**Review Gate**: CP2 implementation and verification review complete; CP3 remains pending.
 
 ---
 
 ## 1. Compliance with Higher-Order Authorities
 
 ### A. Constitution v2.0.0 Compliance
-* **Principle XXIII (Security & Confidentiality)**: Strictly satisfied. Multi-tenant isolation is enforced so that no tenant can persist linkages to another tenant's users, counterparties, documents, transactions, journal lines, or money movements.
+* **Principle XXIII (Security & Confidentiality)**: CP2 enforces tenant isolation for Project PIC users and FixedAsset counterparties/documents. Settlement and Bank Reconciliation references remain explicitly unremediated CP3 work.
 * **Principle I (Single Input) & IV (Double-Entry Accounting)**: Preserved. No accounting entries, debit/credit mechanics, or single-input transaction mappings are modified.
 * **Principle X (Immutable Posted Records)**: Preserved. All posted records remain immutable.
 * **Principle XXIV (Testability & Verification)**: Satisfied. All 7 vulnerable fields have negative cross-tenant, positive same-tenant, and nonexistent random UUID test coverage.
@@ -28,30 +28,30 @@
 
 ## 2. Exhaustive Design Review (14 Checkpoints)
 
-1. **Are all 7 vulnerable foreign reference fields covered?**
-   - **YES**. `Project.pic_user_id`, `FixedAsset.vendor_id`, `FixedAsset.document_id`, `Settlement.transaction_id`, `BankReconciliation.journal_line_id`, `BankReconciliation.money_movement_id`, `BankReconciliation.transaction_id` are covered.
+1. **Which vulnerable foreign reference fields are remediated in CP2?**
+   - **CORE COMPLETE**. `Project.pic_user_id` (create/update), `FixedAsset.vendor_id`, and `FixedAsset.document_id` are enforced. `Settlement.transaction_id` and the three `BankReconciliation` references remain CP3 strict RED/XFAIL cases.
 2. **Is Project Budget correctly classified as defense-in-depth?**
    - **YES**. The HTTP router already validates project tenancy via `get_project(org_id, project_id)`. The service methods are hardened defense-in-depth to protect internal callers.
-3. **Does every foreign tenant UUID fail closed?**
-   - **YES**. Missing or foreign-tenant records fail closed with `EntityNotFoundException`.
+3. **Do the CP2 foreign tenant UUIDs fail closed?**
+   - **YES**. Missing or foreign-tenant Project PIC, FixedAsset vendor, and FixedAsset document records fail closed with `EntityNotFoundException`; CP3 references remain pending.
 4. **Are same-tenant valid references preserved?**
    - **YES**. Positive control tests verify normal operations continue unimpeded.
-5. **Are nonexistent IDs behaviorally indistinguishable where required?**
-   - **YES**. Both foreign-tenant and nonexistent UUIDs return HTTP 404 with identical error structures (`code: NOT_FOUND`), preventing existence or ownership leakage.
-6. **Are validations at service boundary?**
-   - **YES**. Validations reside directly in `ProjectService`, `FixedAssetService`, `MoneyMovementService`, and `BankReconciliationService`.
-7. **Can partial persistence occur before validation?**
-   - **NO**. All validations occur before model instantiation, sequence code allocation, and database flush.
+5. **Are CP2 nonexistent IDs behaviorally indistinguishable where required?**
+   - **YES**. Foreign-tenant and nonexistent Project PIC, FixedAsset vendor, and FixedAsset document UUIDs return HTTP 404 with identical `code: NOT_FOUND` structures. CP3 uniformity remains pending.
+6. **Are CP2 validations at the service boundary?**
+   - **YES**. CP2 validations reside directly in `ProjectService` and `FixedAssetService`; ProjectBudget methods establish tenant-owned project existence before reading or writing budgets. `MoneyMovementService` and `BankReconciliationService` remain CP3 scope.
+7. **Can CP2 rejection create partial persistence?**
+   - **NO**. Project PIC checks occur before project code allocation and mutation; FixedAsset references are checked before asset construction and flush; ProjectBudget establishes project ownership before reads or writes.
 8. **Does journal-line ownership follow the correct relation?**
-   - **YES**. `JournalLine` joins `JournalEntry` on `journal_line.journal_entry_id == journal_entry.id` and filters by `journal_entry.organization_id == organization_id`.
-9. **Are optional/null references preserved?**
-   - **YES**. When fields are `None` or omitted, validation is cleanly bypassed and null values are persisted.
+   - **PLANNED FOR CP3**. CP2 does not modify the `JournalLine` / `JournalEntry` ownership path.
+9. **Are CP2 optional/null references preserved?**
+   - **YES**. Omitted Project PIC values remain unchanged, explicit `None` clears the PIC, and nullable FixedAsset vendor/document values bypass tenant validation.
 10. **Is any accounting behavior being changed?**
     - **NO**. Financial ledger rules, journal postings, and balances are untouched.
 11. **Is migration truly unnecessary?**
     - **YES**. All foreign key columns already exist in PostgreSQL; validation is enforced by domain queries.
-12. **Is scope small enough?**
-    - **YES**. Bounded strictly to 4 service files and 1 router file, spanning 4 well-defined checkpoints.
+12. **Is CP2 scope bounded?**
+    - **YES**. CP2 changes only `ProjectService`, `FixedAssetService`, the Project Budget router callers, and targeted regression tests/artifacts. It does not touch CP3 financial paths, AUTHZ policy, accounting, schema, migrations, or frontend.
 13. **Does AUTHZ-001 remain unchanged?**
     - **YES**. Perimeter RBAC matrices and principal attribution remain intact.
 14. **Are all requirements testable?**

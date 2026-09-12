@@ -1,8 +1,8 @@
 # Data Model & Schema Analysis: Role Enforcement & Actor Attribution
 
 **Remediation**: AUTHZ-001 (AUTH-002 is NOT REPRODUCIBLE)
-**Specification**: [spec.md](spec.md)  
-**Database Migration Required**: **NO**  
+**Specification**: [spec.md](spec.md)
+**Database Migration Required**: **NO**
 
 ---
 

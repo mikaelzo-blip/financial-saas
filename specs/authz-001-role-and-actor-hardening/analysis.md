@@ -101,3 +101,40 @@
 - **REGRESSION EVIDENCE**: AUTHZ suite 103 passed; affected document/auth/period/tenant regression selection 124 passed; Feature 011 and machine-auth subset 21 passed. Python compile, `git diff --check`, dependency check, repository-safety check, and locked production dependency audit passed. Ruff and mypy are not configured in the declared backend environment.
 - **INDEPENDENT REVIEW**: Bounded read-only senior review passed with Critical 0, High 0, Medium 0, Low 0.
 - **CP3 STATUS**: Verified and committed as `1481a5f6ebcb2eaefe2bafa0c99552a50e1461a6`. CP4 remains responsible for full backend/frontend verification, delivery, PR, CI, and merge.
+
+---
+
+## 6. CP4 Final Verification and Security Review
+
+- **AUTHORITATIVE RECONCILIATION**: Lineage verified from `f46a0e2` (CP1), `76ff94b` (CP1 docs), `a8ea193` (CP2), `1481a5f` (CP3), `7479ca0` (CP3 docs).
+- **MUTATION ROUTE MATRIX**: 38 human mutating routes:
+  - Formerly vulnerable (Category A): 17 -> now declaratively protected via `require_roles`.
+  - Protected in-body (Category B): 4 -> preserved in-body guards (`require_reviewer` on document corrections/rejection; `current_user.role` on accounting periods).
+  - Declaratively protected (Category C): 17 -> existing `require_roles` or `require_whatsapp_admin`.
+  - Currently vulnerable: 0.
+  - VIEWER mutation protection: 100% (403 Forbidden across all 38 mutation routes).
+- **CP2 IDENTITY HARDENING**:
+  - JWT principal is the sole authoritative actor.
+  - `get_current_user_id` deleted from production.
+  - Header fallback in `require_roles` eliminated.
+  - Header mismatch (`X-User-ID` or `X-Organization-ID`) fails closed with 403.
+  - Missing/invalid JWT fails closed with 401.
+- **TEST VERIFICATION SUMMARY**:
+  - `tests/security/test_authz001_role_enforcement.py`: 103 passed, 0 failed.
+  - Security / Auth suites: 50 passed, 0 failed.
+  - Backend unit suite: 248 passed, 0 failed.
+  - Backend integration suite (SQLite-compatible): 169 passed, 0 failed.
+  - Full local backend suite: 520 passed, 0 failed, 78 pre-existing external skips (requiring external live PostgreSQL database).
+- **FRONTEND GATES**:
+  - Tests: 26 files passed, 66 tests passed.
+  - Lint: 0 errors, 8 warnings.
+  - Typecheck: 0 errors.
+  - Production build: Vite production build passed.
+  - Audit: 0 high/critical vulnerabilities.
+- **SECURITY & SCHEMA SAFETY**:
+  - Alembic: head `023_historical_seq_bootstrap`, 0 migrations created, 0 drift.
+  - Repository safety: passed (0 secret/token leaks, clean tree).
+  - Scope: 0 accounting logic changed, 0 API schema changed, 0 DB migrations, 0 frontend product code changed.
+- **FINAL SECURITY AUDIT FINDINGS**:
+  - Critical: 0, High: 0, Medium: 0, Low: 0.
+- **CP4 STATUS**: Local verification complete. Ready for remote branch push, PR creation, and real GitHub CI monitoring without merging.

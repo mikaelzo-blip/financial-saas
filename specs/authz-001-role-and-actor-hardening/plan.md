@@ -3,8 +3,8 @@
 **Feature**: AUTHZ-001 (Reconciled Baseline)
 **Branch**: `hermes/authz-001-role-and-actor-hardening`
 **Baseline Commit**: `c33112c1744e25d12ea1e30b9a133b6931c788b8`
-**Specification**: [spec.md](spec.md)  
-**Contract**: [contracts/authorization-matrix.md](contracts/authorization-matrix.md)  
+**Specification**: [spec.md](spec.md)
+**Contract**: [contracts/authorization-matrix.md](contracts/authorization-matrix.md)
 
 ---
 

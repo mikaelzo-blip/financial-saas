@@ -3,7 +3,7 @@
 **Remediation**: AUTHZ-001 (Reconciled Baseline)
 **Specification**: [specs/authz-001-role-and-actor-hardening/spec.md](../spec.md)
 **Baseline Commit**: `c33112c1744e25d12ea1e30b9a133b6931c788b8`
-**Scope**: 100% of all mutating endpoints (59 routes) in the application  
+**Scope**: 100% of all mutating endpoints (59 routes) in the application
 
 ---
 

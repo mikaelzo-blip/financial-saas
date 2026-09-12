@@ -4,7 +4,7 @@
 **Feature Branch**: `hermes/authz-001-role-and-actor-hardening`
 **Status**: CP1 verified and committed
 **Priority**: P1 (Security & Authorization Remediation — Outranks FIN-P1-105)
-**Authority**: Constitution v2.0.0, Financial Concept v1, AGENTS.md, Security Audit 2026-09-12  
+**Authority**: Constitution v2.0.0, Financial Concept v1, AGENTS.md, Security Audit 2026-09-12
 **Baseline Commit**: `c33112c1744e25d12ea1e30b9a133b6931c788b8`
 
 ---

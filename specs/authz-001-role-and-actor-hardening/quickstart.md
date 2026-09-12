@@ -1,8 +1,8 @@
 # Quickstart: Role Enforcement & Actor Attribution Testing
 
 **Feature**: AUTHZ-001 (Reconciled Baseline)
-**Specification**: [spec.md](spec.md)  
-**Tasks**: [tasks.md](tasks.md)  
+**Specification**: [spec.md](spec.md)
+**Tasks**: [tasks.md](tasks.md)
 
 ---
 

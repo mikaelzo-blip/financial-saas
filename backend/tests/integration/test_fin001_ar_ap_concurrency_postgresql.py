@@ -6,7 +6,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -242,8 +242,18 @@ async def _real_endpoint_client(session_factory: async_sessionmaker[AsyncSession
                 await session.rollback()
                 raise
 
+    async def override_authenticated_user(request: Request) -> User | None:
+        user_id = request.headers.get("X-User-ID")
+        organization_id = request.headers.get("X-Organization-ID")
+        if user_id and organization_id:
+            async with session_factory() as session:
+                user = await session.get(User, UUID(user_id))
+                if user and str(user.organization_id) == organization_id:
+                    return user
+        return None
+
     app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[require_application_user] = lambda: None
+    app.dependency_overrides[require_application_user] = override_authenticated_user
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://fin001.test")
 
 

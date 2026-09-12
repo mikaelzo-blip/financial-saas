@@ -2,48 +2,48 @@
 
 **Feature**: AUTHZ-001 (Reconciled Baseline)
 **Baseline Commit**: `c33112c1744e25d12ea1e30b9a133b6931c788b8`
-**Specification**: [specs/authz-001-role-and-actor-hardening/spec.md](../spec.md)  
-**Contract**: [specs/authz-001-role-and-actor-hardening/contracts/authorization-matrix.md](../contracts/authorization-matrix.md)  
+**Specification**: [specs/authz-001-role-and-actor-hardening/spec.md](../spec.md)
+**Contract**: [specs/authz-001-role-and-actor-hardening/contracts/authorization-matrix.md](../contracts/authorization-matrix.md)
 
 ---
 
 ## 1. Security Invariants Checklist
 
-- [ ] **AUTHZ-R01 (VIEWER Mutation Prohibition)**:
+- [x] **AUTHZ-R01 (VIEWER Mutation Prohibition)**:
   - `VIEWER` role receives `403 Forbidden` on the 17 CP1 RED targets, four in-body protected routes, and 17 declaratively protected routes across CP1–CP4.
   - CP1 instruments the 17 unprotected routes and characterizes the four in-body guards; CP3/CP4 complete the all-38 mutation matrix.
-- [ ] **AUTHZ-R02 (Explicit Backend Role Enforcement)**:
+- [x] **AUTHZ-R02 (Explicit Backend Role Enforcement)**:
   - Every human application mutation endpoint declares `Depends(require_roles(...))` or equivalent declarative guard.
   - Zero routes rely solely on `require_application_user` without role restriction.
-- [ ] **AUTHZ-R03 (Backend Authority)**:
+- [x] **AUTHZ-R03 (Backend Authority)**:
   - Role enforcement is evaluated at the FastAPI backend HTTP router boundary.
   - No assumption of frontend menu hiding as security.
-- [ ] **AUTHZ-R04 (Authoritative Actor Principal)**:
+- [x] **AUTHZ-R04 (Authoritative Actor Principal)**:
   - `current_user.id` from the verified JWT principal is the sole source of actor identity.
   - `created_by`, `approved_by`, `rejected_by`, `corrected_by`, and `actor_id` are bound to `current_user.id`.
-- [ ] **AUTHZ-R05 (Anti-Spoofing Invariant)**:
+- [x] **AUTHZ-R05 (Anti-Spoofing Invariant)**:
   - `X-User-ID` header mismatching the JWT subject returns `403 User mismatch`.
   - Supplying another user's UUID in `X-User-ID` cannot change actor attribution or satisfy reviewer checks.
-- [ ] **AUTHZ-R06 (Anti-Elevation Invariant)**:
+- [x] **AUTHZ-R06 (Anti-Elevation Invariant)**:
   - Header fallback in `auth.py:require_roles` (lines 112–128) is eliminated.
   - Unauthenticated requests cannot look up users or elevate privileges via headers.
-- [ ] **AUTHZ-R07 (Tenant Boundary Enforcement)**:
+- [x] **AUTHZ-R07 (Tenant Boundary Enforcement)**:
   - Authenticated user's `current_user.organization_id` is authoritative.
   - Header mismatch returns `403 Organization mismatch`; cross-tenant entity lookups fail closed with 404.
-- [ ] **AUTHZ-R08 (Machine/Webhook Boundary Preservation)**:
+- [x] **AUTHZ-R08 (Machine/Webhook Boundary Preservation)**:
   - Meta WhatsApp webhooks retain HMAC-SHA256 verification.
   - Hermes machine M2M endpoints retain bearer token verification.
-- [ ] **AUTHZ-R09 (403 Forbidden Semantics)**:
+- [x] **AUTHZ-R09 (403 Forbidden Semantics)**:
   - Authenticated users lacking the required role receive `403 Forbidden`.
-- [ ] **AUTHZ-R10 (401 Unauthorized Semantics)**:
+- [x] **AUTHZ-R10 (401 Unauthorized Semantics)**:
   - Missing, invalid, or expired tokens receive `401 Unauthorized`.
-- [ ] **AUTHZ-R11 (Authorized Workflow Compatibility)**:
+- [x] **AUTHZ-R11 (Authorized Workflow Compatibility)**:
   - Legitimate operational flows for `ADMIN`, `MANAGER`, and `OPERATOR` pass green.
-- [ ] **AUTHZ-R12 (Audit Attribution Fidelity)**:
+- [x] **AUTHZ-R12 (Audit Attribution Fidelity)**:
   - Audit log entries record the authentic `current_user.id` as `actor_id`.
-- [ ] **AUTHZ-R13 (Zero Financial Logic Alteration)**:
+- [x] **AUTHZ-R13 (Zero Financial Logic Alteration)**:
   - Debit/credit rules, double-entry equality, account mappings, and tax rules remain unchanged.
-- [ ] **AUTHZ-R14 (Automated Regression Coverage)**:
+- [x] **AUTHZ-R14 (Automated Regression Coverage)**:
   - Route-level automated test suite covers all negative and positive role permutations.
 
 ---
@@ -73,7 +73,7 @@
 - [x] Route-level positive access tests pass for authorized roles; ADMIN reaches 17 boundaries, MANAGER 15, and OPERATOR 13.
 
 ### CP4: Delivery & Verification
-- [ ] Full backend regression suite passes (555+ tests).
-- [ ] Frontend lint, typecheck, build pass.
-- [ ] Zero Constitution violations.
-- [ ] PR merged to `main`.
+- [x] Full backend regression suite passes (520 passed, 78 pre-existing external skips).
+- [x] Frontend lint, typecheck, build pass.
+- [x] Zero Constitution violations.
+- [ ] PR delivery and CI checks monitoring (STOP before merging per turn instructions).

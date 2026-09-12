@@ -1,8 +1,8 @@
 # Implementation Plan: Role Enforcement & Actor Attribution Hardening
 
-**Feature**: AUTHZ-001 & AUTH-002  
-**Branch**: `hermes/authz-001-role-enforcement`  
-**Baseline Commit**: `3d516096cc0085eb3e5e7273f6be57ec5c7d876c`  
+**Feature**: AUTHZ-001 (Reconciled Baseline)
+**Branch**: `hermes/authz-001-role-and-actor-hardening`
+**Baseline Commit**: `c33112c1744e25d12ea1e30b9a133b6931c788b8`
 **Specification**: [spec.md](spec.md)  
 **Contract**: [contracts/authorization-matrix.md](contracts/authorization-matrix.md)  
 
@@ -10,7 +10,7 @@
 
 ## 1. Summary
 
-Enforce strict backend role-based access control (RBAC) across all 42 human application mutation routes, eliminate caller-controlled actor identity (`X-User-ID`), purge the unauthenticated header fallback in `require_roles`, and guarantee that actor attribution derives solely from the verified JWT principal. No database schema migrations, accounting logic modifications, or frontend changes are in scope.
+Enforce strict backend role-based access control (RBAC) across all human application mutation routes, eliminate legacy actor helper `deps.py:get_current_user_id`, purge unreachable header fallback in `require_roles`, and guarantee that actor attribution derives solely from the verified JWT principal. No database schema migrations, accounting logic modifications, or frontend changes are in scope.
 
 ---
 
@@ -20,7 +20,7 @@ Enforce strict backend role-based access control (RBAC) across all 42 human appl
 - **ORM / Database**: SQLAlchemy 2 async, SQLite for fast unit/integration testing, PostgreSQL 16 authoritative
 - **Security / Token**: python-jose (JWT), passlib (bcrypt), FastAPI dependency injection
 - **Test Suite**: pytest, pytest-asyncio, httpx AsyncClient
-- **Scope**: Backend security layer (`src/api/auth.py`, `src/api/deps.py`, `src/api/v1/`), test fixtures (`tests/conftest.py`), and dedicated authorization regression test suite.
+- **Scope**: Backend security layer (`src/api/auth.py`, `src/api/deps.py`, `src/api/v1/`), test fixtures (`tests/conftest.py`), and dedicated authorization regression test suite (`tests/security/test_authz001_role_enforcement.py`).
 
 ---
 
@@ -48,105 +48,59 @@ Enforce strict backend role-based access control (RBAC) across all 42 human appl
 ```
                   [Incoming HTTP Request]
                             │
-           Header: Authorization: Bearer <JWT>
-                            │
-                            ▼
-             ┌──────────────────────────────┐
-             │   require_application_user   │
-             └──────────────────────────────┘
-                            │
-           1. Decode JWT (signature, expiration)
-           2. Extract claims: sub (user_id), organization_id
-           3. DB Query: User.id == sub, org == organization_id, is_active == True
-                            │
-                            ▼
-                [Authoritative User Principal]
-                ┌────────────────────────────┐
-                │ current_user.id            │ ──► Verified Actor ID
-                │ current_user.organization_id│ ──► Verified Tenant ID
-                │ current_user.role          │ ──► Verified Role
-                └────────────────────────────┘
-                            │
-            ┌───────────────┴───────────────┐
-            │                               │
-            ▼                               ▼
- ┌──────────────────────┐        ┌──────────────────────┐
- │ require_roles(...)   │        │ Route Handlers       │
- │ - Fail-closed:       │        │ - Read principal     │
- │   no current_user    │        │ - No get_current_user│
- │   -> 401             │        │ - No header fallback │
- │ - role not in allowed│        │ - Pass user.id to    │
- │   -> 403             │        │   services / audit   │
- └──────────────────────┘        └──────────────────────┘
+              ┌─────────────┴─────────────┐
+              ▼                           ▼
+      [Public / Webhook / M2M]   [Human Application Route]
+      - /api/v1/auth/login        - mounted under application_router
+      - /api/v1/whatsapp/webhook   │
+      - /api/v1/hermes/*           ▼
+                            [require_application_user]
+                            - Decode & verify Bearer JWT
+                            - Assert X-User-ID == user.id (403 on mismatch)
+                            - Assert X-Organization-ID == user.organization_id (403 on mismatch)
+                            - Fail-closed if token missing/invalid (401)
+                                   │
+                                   ▼
+                         [require_roles(...)]
+                         - Declarative route dependency
+                         - Assert current_user.role in allowed_roles
+                         - Fail-closed if unauthorized (403 Forbidden)
+                         - Zero unauthenticated / header fallback
+                                   │
+                                   ▼
+                         [Route Handler Execution]
+                         - Ingests verified current_user: User
+                         - Binds actor_id = current_user.id
+                         - Mutates domain entity / logs audit event
 ```
-
-### Key Architectural Refactorings:
-1. **Delete `deps.py:get_current_user_id`**:
-   - Completely remove the function and its default sentinel `00000000-0000-0000-0000-000000000001`.
-   - Any endpoint needing user identity must consume `current_user: User = Depends(require_application_user)` or `require_roles(...)`.
-2. **Purge Header Fallbacks in `auth.py:require_roles`**:
-   - Remove lines 112–128. If `current_user is None`, raise `HTTPException(401, "Authenticated user required")` immediately.
-3. **Decouple Redundant Header Checks in `auth.py:authenticated_user`**:
-   - Validate the cryptographic JWT token. If client passes `X-Organization-ID` or `X-User-ID`, verify match; if omitted, trust the verified JWT claims as authoritative.
-4. **Declarative Role Enforcement Across All 19 Vulnerable Routes**:
-   - Add `current_user: User = Depends(require_roles(...))` to each handler per the approved role matrix.
-5. **Harmonize Test Fixtures (`tests/conftest.py`)**:
-   - Update `authenticated_client` to inject a verified `User` principal (defaulting to `ADMIN` or configurable) so tests validate true authentication paths without security backdoors.
 
 ---
 
-## 5. Checkpoint Breakdown
+## 5. Checkpoints & Implementation Gates
 
-### Checkpoint 1 (CP1): Characterization & RED Regression Matrix
-- **Scope**:
-  - Implement comprehensive, parameterized RED regression tests in `backend/tests/security/test_authz001_role_enforcement.py`.
-  - Prove that `VIEWER` can currently mutate all 19 unprotected routes (RED test: assert `403` which fails with `200`/`201`/`202`).
-  - Prove AUTH-002 spoofing vulnerability on `POST /documents/{id}/corrections` and `POST /documents/{id}/reject` with spoofed `X-User-ID`.
-  - Prove header fallback in `require_roles` accepts unauthenticated `X-User-ID`.
-- **Exit Gate**:
-  - RED test suite committed; characterization clearly proves the defects; zero production code modified.
+### Checkpoint 1 (CP1): Honest Characterization & RED Regression Suite
+- **Scope**: Test harness creation, honest RED regression suite for the 17 actually vulnerable routes, PASS characterization for existing protected behavior, and documentation of latent fallback behavior. Zero production changes.
+- **Verification Gate**:
+  - 17 RED tests failing specifically because `VIEWER` is NOT blocked with 403.
+  - PASS characterization tests passing for header mismatches (403), missing JWT (401), document review routes denying `VIEWER` (403), and accounting period routes denying `VIEWER` (403).
+  - Latent fallback unit test passing.
+  - Spec Kit reconciled with live source reality.
 
-### Checkpoint 2 (CP2): Actor Attribution Hardening & Header Fallback Elimination
-- **Scope**:
-  - Delete `get_current_user_id` in `src/api/deps.py`.
-  - Purge lines 112–128 header fallback in `src/api/auth.py:require_roles`.
-  - Refactor `src/api/v1/documents.py`:
-    - In `upload_document`: require `ADMIN, MANAGER, OPERATOR`; bind `created_by=current_user.id`.
-    - In `correct_document`: require `ADMIN, MANAGER`; bind `corrected_by=current_user.id` and audit log `actor_id=current_user.id`.
-    - In `reject_document_candidate`: require `ADMIN, MANAGER`; bind audit log `actor_id=current_user.id`.
-    - Remove redundant `require_reviewer` helper.
-  - Harmonize `tests/conftest.py` so test clients pass real authenticated user principals.
-- **Exit Gate**:
-  - AUTH-002 tests turn GREEN; spoofing rejected; header fallback eliminated; existing test suite passes.
+### Checkpoint 2 (CP2): Verified Principal & Defense-in-Depth Actor Attribution
+- **Scope**: Purge unreachable header fallback in `auth.py:require_roles`; delete `deps.py:get_current_user_id`; refactor `documents.py` (upload, retry, corrections, reject) to ingest verified `current_user`; update `tests/conftest.py` fixture.
+- **Verification Gate**:
+  - `deps.py:get_current_user_id` deleted and zero references remain.
+  - Document upload and review tests pass cleanly using verified principal.
+  - Zero regression across existing document tests.
 
-### Checkpoint 3 (CP3): Declarative Role Enforcement Across All 19 Routes
-- **Scope**:
-  - Apply `require_roles(...)` to the remaining unprotected human mutation routes:
-    - `transactions.py`: `create_transaction` -> `ADMIN, MANAGER, OPERATOR`
-    - `projects.py`: `create_project` -> `ADMIN, MANAGER, OPERATOR`
-    - `projects.py`: `update_project_status` -> `ADMIN, MANAGER`
-    - `projects.py`: `add_or_update_project_budget` -> `ADMIN, MANAGER`
-    - `counterparties.py`: `create_counterparty` -> `ADMIN, MANAGER, OPERATOR`
-    - `reference_data.py`: `create_coa` -> `ADMIN`
-    - `reference_data.py`: `create_payment_account` -> `ADMIN`
-    - `money_movements.py`: `create_money_movement` -> `ADMIN, MANAGER, OPERATOR`
-    - `bank_reconciliation.py`: `upload_bank_statement` -> `ADMIN, MANAGER, OPERATOR`
-    - `bank_reconciliation.py`: `auto_match_statement` -> `ADMIN, MANAGER, OPERATOR`
-    - `bank_reconciliation.py`: `manual_reconcile` -> `ADMIN, MANAGER, OPERATOR`
-    - `documents.py`: `retry_document` -> `ADMIN, MANAGER, OPERATOR`
-    - `review.py`: `add_review_flag` -> `ADMIN, MANAGER, OPERATOR`
-    - `inbox.py`: `capture_remote_message`, `sync_backlog`, `analyze_document_session` -> `ADMIN, MANAGER, OPERATOR`
-    - Convert in-body checks in `accounting_periods.py` (`create_period`, `update_period_status`) to declarative `require_roles(ADMIN, MANAGER)`.
-- **Exit Gate**:
-  - Parameterized VIEWER denial matrix turns GREEN (100% 403 on all 42 human mutation routes).
-  - Positive compatibility matrix passes green for authorized roles.
+### Checkpoint 3 (CP3): Declarative Role Enforcement Across All Routes
+- **Scope**: Apply `require_roles(...)` to the 17 vulnerable endpoints; migrate in-body checks in document review and periods to declarative `require_roles(...)`.
+- **Verification Gate**:
+  - All 17 CP1 RED tests turn GREEN.
+  - Parameterized test across all 38 human mutation routes confirms `VIEWER` receives `403 Forbidden`.
+  - Positive compatibility tests confirm `ADMIN`, `MANAGER`, and `OPERATOR` retain authorized access.
 
-### Checkpoint 4 (CP4): Full Verification, Security Review, CI, and PR Delivery
-- **Scope**:
-  - Run full backend regression suite (all 555+ tests).
-  - Run frontend test suite (66/66), oxlint, and TypeScript build.
-  - Verify machine endpoints (`whatsapp.py`, `hermes.py`) remain functional.
-  - Finalize Spec Kit artifacts and requirements traceability.
-  - Open PR, monitor GitHub Actions CI, and squash-merge upon green completion.
-- **Exit Gate**:
-  - 100% test pass, CI green, zero security findings.
+### Checkpoint 4 (CP4): Full Verification, Security Review, CI, & PR Delivery
+- **Scope**: Full backend test suite (`pytest -v`), frontend checks (`npm test`, `npx oxlint`, `npm run build`), WhatsApp/Hermes machine isolation checks, independent review, PR creation, GitHub CI pass, squash merge, synchronization.
+- **Verification Gate**:
+  - Zero test failures, zero lint/type errors, 100% Spec Kit requirement coverage.

@@ -1,6 +1,6 @@
 # Data Model & Schema Analysis: Role Enforcement & Actor Attribution
 
-**Remediation**: AUTHZ-001 & AUTH-002  
+**Remediation**: AUTHZ-001 (AUTH-002 is NOT REPRODUCIBLE)
 **Specification**: [spec.md](spec.md)  
 **Database Migration Required**: **NO**  
 
@@ -18,7 +18,7 @@ A thorough inspection of all SQLAlchemy models and Alembic migrations confirms t
 - The `Document` model already includes `created_by: UUID`.
 - The `DocumentCorrection` model already includes `corrected_by: UUID`.
 
-The vulnerability exists entirely in the **API dependency injection and authorization validation layer**, where caller-supplied HTTP headers bypass the verified JWT identity.
+The verified-live-source risk is confined to authorization boundaries that lack role enforcement. `authenticated_user` binds `X-User-ID` and `X-Organization-ID` to the verified JWT principal before any route handler executes; caller-supplied headers do not bypass that identity check.
 
 ---
 

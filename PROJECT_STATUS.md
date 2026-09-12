@@ -1,17 +1,12 @@
 # Project Status
 
 - **Last reconciled**: 2026-09-12
-- **Current origin/main baseline**: `dd42bad8e8d44fe1bab726cc530fa12d7d9ad642` (Feature 012 post-merge status reconciliation; Git verified)
-- **Active branch**: `hermes/fin-001-ar-ap-concurrency`
-- **Active feature**: FIN-001 — AR/AP concurrent payment over-allocation remediation. CP1 (reproduction/characterization), CP2 (source/payment locks & canonical ordering), CP3 (clean retry, SQLSTATE classification, exhaustion handling), and CP4 (PostgreSQL 16 CI service, full verification, 100% traceability) are COMPLETE and verified against PostgreSQL 16.
-- **FIN-001 CP1 evidence**: PostgreSQL 16 strict expected RED tests reproduced two independent `60.00` AR and AP allocations committing against one `100.00` source (`120.00` committed). Real endpoint characterizations proved Feature-012 sequence serialization.
-- **FIN-001 CP2 evidence**: Implemented authoritative parent payment/source locks, canonical UUID source-lock ordering, and fresh post-lock SQL aggregate validation. All 11 PostgreSQL integration tests in `test_fin001_ar_ap_concurrency_postgresql.py` pass green.
-- **FIN-001 CP3 evidence**: Implemented `run_in_clean_transaction` with explicit SQLSTATE classification (`40001`, `40P01`, and approved `55P03`), exponential jittered backoff, clean rollback, session expunge, and bounded exhaustion raising `TransactionContentionError` (HTTP 409). 15 PostgreSQL integration scenarios and 7 unit tests pass green.
-- **FIN-001 CP4 evidence**: Dedicated `postgres:16` GitHub Actions service container configured in `.github/workflows/quality-gates.yml` with fail-closed prerequisites, online Alembic migration check, single-head check (`023_historical_seq_bootstrap`), zero-drift verification (`alembic check`), and mandatory execution of all 33 FIN-001 PostgreSQL tests. Local backend passed 553 tests (2 pre-existing skips explained); frontend test (66/66), lint (oxlint 0 errors), typecheck (tsc -b clean), and build passed. 100% requirement traceability (14/14) confirmed.
-- **Feature 012 status**: COMPLETE and merged through PR #59 using squash merge; CP1-CP7 implementation, regression evidence, independent review, and delivery gates are verified.
-- **Feature 012 migration state**: Alembic current and sole head are `023_historical_seq_bootstrap`; Feature 012 final evidence recorded `alembic check` clean.
-- **Feature 012 PostgreSQL evidence**: Disposable PostgreSQL 16 matrix passed 88 tests with zero failures/skips; full backend suite passed 553 tests with zero failures/skips when `FIN_001_TEST_DATABASE_URL` was explicitly configured.
-- **Feature 012 scope result**: Accounting mappings, tax/capitalization/depreciation policy, visible business-code formats, historical business records, unrelated API contracts, frontend behavior, and protected storage remained unchanged.
-- **Feature 011 status**: COMPLETE and merged through PR #54 using squash merge.
-- **Protected data**: `backend/storage` and `backend/backend/storage` remain untouched. No `.env`, credentials, temporary logs, caches, or codebase-memory artifacts are tracked.
-- **Next action**: Commit CP4, push `hermes/fin-001-ar-ap-concurrency`, create PR against `main`, and monitor remote GitHub CI.
+- **Current origin/main baseline**: `c33112c1744e25d12ea1e30b9a133b6931c788b8` (Git verified)
+- **Active branch**: `hermes/authz-001-role-and-actor-hardening`
+- **Active feature**: AUTHZ-001 — role enforcement and actor hardening.
+- **Checkpoint**: CP1 is verified and committed; CP2 and CP3 are not started.
+- **CP1 evidence**: Live route inventory has 59 mutating routes: 38 human state mutations, with 17 genuinely vulnerable VIEWER-reachable routes, 4 protected in-body, and 17 declaratively protected. Four POST reporting/query routes are non-mutating; machine, webhook, and public routes remain outside human RBAC scope.
+- **CP1 verification**: 10 PASS characterizations cover JWT/header mismatches, missing/invalid authentication, document review, accounting periods, tenant isolation, and latent fallback reachability. The 17 expected RED cases each prove the VIEWER request reaches a controlled mutation boundary before a 403. Existing security/auth/document-review/accounting-period/tenant/machine-webhook tests: 40 passed.
+- **Independent review**: No Critical or High finding and no production-scope breach. The single Medium sentinel-noise finding was resolved and reverified.
+- **Scope**: No production API/auth code, migration, accounting logic, protected storage, or credentials changed. `ruff` is not installed in the declared backend environment; Python compilation and `git diff --check` pass.
+- **Next action**: Stop after CP1. Start CP2 only with an explicit authorized follow-up.

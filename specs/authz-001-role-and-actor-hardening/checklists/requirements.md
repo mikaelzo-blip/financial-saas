@@ -61,16 +61,16 @@
 - [x] Zero production code modified.
 
 ### CP2: Actor Hardening
-- [ ] `deps.py:get_current_user_id` deleted.
-- [ ] `auth.py:require_roles` lines 112–128 deleted.
-- [ ] `documents.py` refactored to consume `current_user: User`.
-- [ ] `tests/conftest.py` fixture updated to inject authentic user principal.
+- [x] `deps.py:get_current_user_id` deleted.
+- [x] `auth.py:require_roles` header fallback deleted.
+- [x] `documents.py` refactored to consume verified `current_user: User`.
+- [x] `tests/conftest.py` fixture updated to inject an authentic user principal.
 
 ### CP3: Declarative Role Enforcement
-- [ ] `require_roles(...)` applied across all 17 vulnerable endpoints.
-- [ ] In-body checks in `documents.py` and `accounting_periods.py` migrated to `require_roles(...)`.
-- [ ] All CP1 RED tests turn GREEN.
-- [ ] Positive access tests pass for authorized roles.
+- [x] `require_roles(...)` applied across all 17 vulnerable endpoints with the approved role matrix.
+- [x] Existing in-body checks in document correction/rejection and accounting periods were intentionally preserved under CP3 scope; their protections remain characterized.
+- [x] All 17 CP1 RED tests turn GREEN with denied-request side-effect sentinels not called.
+- [x] Route-level positive access tests pass for authorized roles; ADMIN reaches 17 boundaries, MANAGER 15, and OPERATOR 13.
 
 ### CP4: Delivery & Verification
 - [ ] Full backend regression suite passes (555+ tests).

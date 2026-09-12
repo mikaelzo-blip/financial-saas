@@ -65,7 +65,8 @@ async def add_review_flag(
     transaction_id: uuid.UUID,
     data: AddReviewFlagRequest,
     org_id: uuid.UUID = Depends(get_current_org_id),
-    db: AsyncSession = Depends(get_db)
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
+    db: AsyncSession = Depends(get_db),
 ):
     service = ReviewQueueService(db)
     flag = await service.add_review_flag(

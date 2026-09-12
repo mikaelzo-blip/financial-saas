@@ -86,4 +86,18 @@
 - **DATABASE MIGRATION REQUIRED**: **NO**.
 - **ACCOUNTING LOGIC CHANGED**: **NO**.
 - **PRODUCTION CODE CHANGED IN CP1**: **NO**.
-- **CP1 STATUS**: Verified and committed; CP2 and CP3 are not started.
+- **CP1 STATUS**: Verified and committed.
+
+---
+
+## 5. CP3 Declarative Role Enforcement Verification
+
+- **ROUTE INVENTORY**: The human mutation inventory remains 38 routes: 17 formerly vulnerable, 4 protected in-body, and 17 already declaratively protected. The four reporting/query POST routes remain non-mutating; machine, webhook, and public routes remain outside human RBAC.
+- **FORMERLY VULNERABLE ROUTES**: All 17 Category A routes now declare `require_roles(...)` with the approved policy: 13 routine operational routes allow ADMIN/MANAGER/OPERATOR; project status and budget allow ADMIN/MANAGER; COA and payment-account creation allow ADMIN only.
+- **SIDE-EFFECT SAFETY**: The CP1 VIEWER boundary suite is now green for all 17 routes. Each request returns 403 and its controlled mutation/service sentinel is not called.
+- **POSITIVE MATRIX**: Route-level boundary probes verify ADMIN reaches 17 routes, MANAGER 15, and OPERATOR 13; every excluded role returns 403 before the mutation boundary.
+- **CP2 REGRESSION**: JWT principal identity, optional matching `X-User-ID`, principal-matched `X-Organization-ID`, 401 without a verified principal, and 403 mismatch behavior remain green.
+- **IN-BODY SCOPE**: Document correction/rejection and accounting-period authorization remain unchanged and continue to be characterized as protected in-body. CP3 intentionally did not migrate them, per the approved CP3 scope boundary.
+- **REGRESSION EVIDENCE**: AUTHZ suite 103 passed; affected document/auth/period/tenant regression selection 124 passed; Feature 011 and machine-auth subset 21 passed. Python compile, `git diff --check`, dependency check, repository-safety check, and locked production dependency audit passed. Ruff and mypy are not configured in the declared backend environment.
+- **INDEPENDENT REVIEW**: Bounded read-only senior review passed with Critical 0, High 0, Medium 0, Low 0.
+- **CP3 STATUS**: Verified and ready for checkpoint commit. CP4 remains responsible for full backend/frontend verification, delivery, PR, CI, and merge.

@@ -557,3 +557,71 @@ async def test_viewer_denied_before_reaching_vulnerable_mutation_boundary(
 
     assert not mutation_boundary_reached, f"{case_name}: mutation boundary reached before VIEWER was denied"
     assert response.status_code == 403
+
+
+PROJECT_CONTROL_CASES = {"update_project_status", "set_project_budget"}
+ADMIN_CONFIGURATION_CASES = {"create_coa", "create_payment_account"}
+
+
+def allowed_roles_for_mutation(case_name: str) -> set[UserRole]:
+    if case_name in PROJECT_CONTROL_CASES:
+        return {UserRole.ADMIN, UserRole.MANAGER}
+    if case_name in ADMIN_CONFIGURATION_CASES:
+        return {UserRole.ADMIN}
+    return {UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "case_name,method,path_template,patch_target,patch_attribute,is_async_boundary",
+    MUTATION_CASES,
+    ids=[case[0] for case in MUTATION_CASES],
+)
+@pytest.mark.parametrize("role", [UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR, UserRole.VIEWER])
+async def test_mutation_role_matrix_reaches_boundary_only_for_approved_roles(
+    security_test_env,
+    monkeypatch,
+    case_name,
+    method,
+    path_template,
+    patch_target,
+    patch_attribute,
+    is_async_boundary,
+    role,
+):
+    """Proves the complete approved role matrix runs before every mutation boundary."""
+    env = security_test_env
+    mutation_boundary_reached = False
+
+    if is_async_boundary:
+        async def mutation_boundary(*args, **kwargs):
+            nonlocal mutation_boundary_reached
+            mutation_boundary_reached = True
+            raise HTTPException(status_code=418, detail=f"{case_name} mutation boundary reached")
+    else:
+        def mutation_boundary(*args, **kwargs):
+            nonlocal mutation_boundary_reached
+            mutation_boundary_reached = True
+            raise HTTPException(status_code=418, detail=f"{case_name} mutation boundary reached")
+
+    monkeypatch.setattr(patch_target, patch_attribute, mutation_boundary)
+    path = path_template.format(
+        project_id=env["project_id"],
+        doc_id=env["doc_id"],
+        import_id=uuid.uuid4(),
+        transaction_id=uuid.uuid4(),
+        session_id=uuid.uuid4(),
+    )
+    response = await env["client"].request(
+        method,
+        path,
+        headers=make_auth_headers(env["org_id"], env["users"][role]),
+        **mutation_request(case_name, env),
+    )
+
+    if role in allowed_roles_for_mutation(case_name):
+        assert mutation_boundary_reached, f"{case_name}: {role.value} did not reach mutation boundary"
+        assert response.status_code == 418
+    else:
+        assert not mutation_boundary_reached, f"{case_name}: {role.value} reached mutation boundary"
+        assert response.status_code == 403

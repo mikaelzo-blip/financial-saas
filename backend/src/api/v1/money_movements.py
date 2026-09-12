@@ -6,7 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.api.deps import get_current_org_id
-from src.api.auth import require_application_user
+from src.api.auth import require_roles
+from src.models.enums import UserRole
+from src.models.user import User
 
 
 from src.schemas.money_movement import (
@@ -42,7 +44,7 @@ async def list_money_movements(
 async def create_money_movement(
     data: MoneyMovementCreate,
     org_id: uuid.UUID = Depends(get_current_org_id),
-    current_user = Depends(require_application_user),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db)
 ):
     async def create(session: AsyncSession):

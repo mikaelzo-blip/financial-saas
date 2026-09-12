@@ -5,7 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.api.deps import get_current_org_id
-from src.models.enums import ProjectStatus
+from src.api.auth import require_roles
+from src.models.enums import ProjectStatus, UserRole
+from src.models.user import User
 from src.schemas.project import (
     ProjectCreate,
     ProjectUpdate,
@@ -29,6 +31,7 @@ router = APIRouter(prefix="/projects", tags=["Projects"])
 async def create_project(
     data: ProjectCreate,
     org_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db)
 ):
     """Creates a new project master record for the tenant organization."""
@@ -79,6 +82,7 @@ async def update_project_status(
     project_id: uuid.UUID,
     data: ProjectStatusUpdate,
     org_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db)
 ):
     """Transitions a project lifecycle status."""
@@ -115,6 +119,7 @@ async def add_or_update_project_budget(
     project_id: uuid.UUID,
     data: ProjectBudgetCreate,
     org_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db)
 ):
     """Sets a budget allocation for a specific cost category."""

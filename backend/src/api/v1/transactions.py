@@ -29,6 +29,7 @@ router = APIRouter(prefix="/transactions", tags=["Transactions"])
 async def create_transaction(
     data: TransactionCreate,
     org_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db)
 ):
     async def create(session: AsyncSession):

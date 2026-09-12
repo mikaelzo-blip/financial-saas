@@ -65,7 +65,7 @@ async def upload_document(
     project_id: Optional[uuid.UUID] = Form(None),
     process: bool = Form(True),
     org_id: uuid.UUID = Depends(get_current_org_id),
-    current_user: User = Depends(require_application_user),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db),
 ):
     async def ingest(session: AsyncSession):
@@ -104,6 +104,7 @@ async def get_document_content(document_id: uuid.UUID, org_id: uuid.UUID = Depen
 @router.post("/{document_id}/retry", response_model=DocumentResponse, status_code=status.HTTP_202_ACCEPTED)
 async def retry_document(document_id: uuid.UUID, background_tasks: BackgroundTasks,
                          org_id: uuid.UUID = Depends(get_current_org_id),
+                         current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
                          db: AsyncSession = Depends(get_db)):
     service = DocumentService(db)
     document = await service.get_document(org_id, document_id)

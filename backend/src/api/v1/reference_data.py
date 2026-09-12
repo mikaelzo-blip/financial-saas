@@ -5,7 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.api.deps import get_current_org_id
-from src.models.enums import AccountType, CostCategory, ExpenseCategory
+from src.api.auth import require_roles
+from src.models.enums import AccountType, CostCategory, ExpenseCategory, UserRole
+from src.models.user import User
 from src.schemas.coa import (
     ChartOfAccountCreate,
     ChartOfAccountResponse,
@@ -42,6 +44,7 @@ async def list_coa(
 async def create_coa(
     data: ChartOfAccountCreate,
     org_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db)
 ):
     service = COAService(db)
@@ -75,6 +78,7 @@ async def list_payment_accounts(
 async def create_payment_account(
     data: PaymentAccountCreate,
     org_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db)
 ):
     service = PaymentAccountService(db)

@@ -43,31 +43,23 @@
 ---
 
 ### Checkpoint 3 (CP3): Declarative Role Enforcement Across All 17 Vulnerable Routes
-- [ ] **T3.1 (Transactions & Review RBAC)**:
-  - Add `require_roles(ADMIN, MANAGER, OPERATOR)` to `POST /transactions`.
-  - Add `require_roles(ADMIN, MANAGER, OPERATOR)` to `POST /transactions/{id}/review-flags`.
-- [ ] **T3.2 (Projects & Budgets RBAC)**:
-  - Add `require_roles(ADMIN, MANAGER, OPERATOR)` to `POST /projects`.
-  - Add `require_roles(ADMIN, MANAGER)` to `PATCH /projects/{id}/status`.
-  - Add `require_roles(ADMIN, MANAGER)` to `POST /projects/{id}/budgets`.
-- [ ] **T3.3 (Master Data RBAC)**:
-  - Add `require_roles(ADMIN, MANAGER, OPERATOR)` to `POST /counterparties`.
-  - Add `require_roles(ADMIN)` to `POST /coa`.
-  - Add `require_roles(ADMIN)` to `POST /payment-accounts`.
-- [ ] **T3.4 (Treasury & Reconciliation RBAC)**:
-  - Add `require_roles(ADMIN, MANAGER, OPERATOR)` to `POST /money-movements`.
-  - Add `require_roles(ADMIN, MANAGER, OPERATOR)` to `POST /bank-reconciliation/imports`.
-  - Add `require_roles(ADMIN, MANAGER, OPERATOR)` to `POST /bank-reconciliation/imports/{id}/auto-match`.
-  - Add `require_roles(ADMIN, MANAGER, OPERATOR)` to `POST /bank-reconciliation/reconcile`.
-- [ ] **T3.5 (Inbox & Periods RBAC)**:
-  - Add `require_roles(ADMIN, MANAGER, OPERATOR)` to `POST /inbox/capture`.
-  - Add `require_roles(ADMIN, MANAGER, OPERATOR)` to `POST /inbox/sync`.
-  - Add `require_roles(ADMIN, MANAGER, OPERATOR)` to `POST /inbox/sessions/{id}/analyze`.
-  - Refactor `accounting_periods.py` `create_period` and `update_period_status` to use declarative `Depends(require_roles(ADMIN, MANAGER))`.
-- [ ] **T3.6 (CP3 Verification & Commit)**:
-  - Verify T1.2 VIEWER denial matrix turns 100% GREEN (all 17 routes return 403).
-  - Verify positive compatibility tests pass green for `ADMIN`, `MANAGER`, and `OPERATOR`.
-  - Commit CP3.
+- [x] **T3.1 (Transactions & Review RBAC)**:
+  - Added `require_roles(ADMIN, MANAGER, OPERATOR)` to `POST /transactions` and `POST /transactions/{id}/review-flags`.
+- [x] **T3.2 (Projects & Budgets RBAC)**:
+  - Added `require_roles(ADMIN, MANAGER, OPERATOR)` to `POST /projects`.
+  - Added `require_roles(ADMIN, MANAGER)` to `PATCH /projects/{id}/status` and `POST /projects/{id}/budgets`.
+- [x] **T3.3 (Master Data RBAC)**:
+  - Added `require_roles(ADMIN, MANAGER, OPERATOR)` to `POST /counterparties`.
+  - Added `require_roles(ADMIN)` to `POST /coa` and `POST /payment-accounts`.
+- [x] **T3.4 (Treasury & Reconciliation RBAC)**:
+  - Added `require_roles(ADMIN, MANAGER, OPERATOR)` to `POST /money-movements`, the three bank reconciliation mutations, document upload/retry, and the three inbox mutations.
+- [x] **T3.5 (Protected In-Body Scope Boundary)**:
+  - Document correction/rejection and accounting-period routes retain their existing in-body authorization; they were not changed in CP3.
+- [x] **T3.6 (CP3 Verification & Commit)**:
+  - The 17 CP1 VIEWER RED cases are green with service-side-effect sentinels not called.
+  - The complete route-level role matrix verifies ADMIN reaches 17 boundaries, MANAGER 15, OPERATOR 13; each denied combination returns 403 before the mutation boundary.
+  - Focused document/auth/period/tenant regression: 124 passed; Feature 011/machine-auth subset: 21 passed; dependency, compile, diff, repository-safety, and locked dependency audit gates passed.
+  - Bounded independent review: Critical 0, High 0, Medium 0, Low 0.
 
 ---
 

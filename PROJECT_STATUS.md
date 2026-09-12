@@ -1,17 +1,24 @@
 # Project Status
 
 - **Last reconciled**: 2026-09-12
-- **Current origin/main baseline**: `dd42bad8e8d44fe1bab726cc530fa12d7d9ad642` (Feature 012 post-merge status reconciliation; Git verified)
-- **Active branch**: `hermes/fin-001-ar-ap-concurrency`
-- **Active feature**: FIN-001 — AR/AP concurrent payment over-allocation remediation. CP1 (reproduction/characterization), CP2 (source/payment locks & canonical ordering), CP3 (clean retry, SQLSTATE classification, exhaustion handling), and CP4 (PostgreSQL 16 CI service, full verification, 100% traceability) are COMPLETE and verified against PostgreSQL 16.
-- **FIN-001 CP1 evidence**: PostgreSQL 16 strict expected RED tests reproduced two independent `60.00` AR and AP allocations committing against one `100.00` source (`120.00` committed). Real endpoint characterizations proved Feature-012 sequence serialization.
-- **FIN-001 CP2 evidence**: Implemented authoritative parent payment/source locks, canonical UUID source-lock ordering, and fresh post-lock SQL aggregate validation. All 11 PostgreSQL integration tests in `test_fin001_ar_ap_concurrency_postgresql.py` pass green.
-- **FIN-001 CP3 evidence**: Implemented `run_in_clean_transaction` with explicit SQLSTATE classification (`40001`, `40P01`, and approved `55P03`), exponential jittered backoff, clean rollback, session expunge, and bounded exhaustion raising `TransactionContentionError` (HTTP 409). 15 PostgreSQL integration scenarios and 7 unit tests pass green.
-- **FIN-001 CP4 evidence**: Dedicated `postgres:16` GitHub Actions service container configured in `.github/workflows/quality-gates.yml` with fail-closed prerequisites, online Alembic migration check, single-head check (`023_historical_seq_bootstrap`), zero-drift verification (`alembic check`), and mandatory execution of all 33 FIN-001 PostgreSQL tests. Local backend passed 553 tests (2 pre-existing skips explained); frontend test (66/66), lint (oxlint 0 errors), typecheck (tsc -b clean), and build passed. 100% requirement traceability (14/14) confirmed.
-- **Feature 012 status**: COMPLETE and merged through PR #59 using squash merge; CP1-CP7 implementation, regression evidence, independent review, and delivery gates are verified.
-- **Feature 012 migration state**: Alembic current and sole head are `023_historical_seq_bootstrap`; Feature 012 final evidence recorded `alembic check` clean.
-- **Feature 012 PostgreSQL evidence**: Disposable PostgreSQL 16 matrix passed 88 tests with zero failures/skips; full backend suite passed 553 tests with zero failures/skips when `FIN_001_TEST_DATABASE_URL` was explicitly configured.
-- **Feature 012 scope result**: Accounting mappings, tax/capitalization/depreciation policy, visible business-code formats, historical business records, unrelated API contracts, frontend behavior, and protected storage remained unchanged.
-- **Feature 011 status**: COMPLETE and merged through PR #54 using squash merge.
-- **Protected data**: `backend/storage` and `backend/backend/storage` remain untouched. No `.env`, credentials, temporary logs, caches, or codebase-memory artifacts are tracked.
-- **Next action**: Commit CP4, push `hermes/fin-001-ar-ap-concurrency`, create PR against `main`, and monitor remote GitHub CI.
+- **Current local `main` / `origin/main` baseline**: `3d516096cc0085eb3e5e7273f6be57ec5c7d876c` (Git verified)
+- **AUTHZ-001 starting source head**: `c33112c1744e25d12ea1e30b9a133b6931c788b8`
+- **Active branch**: `hermes/authz-001-role-and-actor-hardening`
+- **Active feature**: AUTHZ-001 — role enforcement and actor hardening.
+- **Checkpoint**: CP4 local verification complete; branch ready for remote delivery (push + PR + real CI wait). STOP before merging per turn instructions.
+- **CP3 route inventory**: 38 human state mutations: 17 formerly vulnerable routes are now declaratively protected, 4 remain protected in-body by approved scope, and 17 were already declaratively protected. Current AUTHZ-001 covered vulnerable count: 0. Four POST reporting/query routes are non-mutating; machine, webhook, and public routes remain outside human RBAC scope.
+- **CP2 decisions**: `get_current_user_id` and its sentinel UUID are removed; human document actor identity now comes from the verified JWT-backed `current_user.id`; `require_roles` cannot reconstruct users from headers and fails closed with 401 without a principal. `X-User-ID` is optional compatibility metadata: if supplied it must match the JWT principal or returns 403; it never establishes identity. `X-Organization-ID` remains mandatory and principal-matched.
+- **Role-policy boundary**: The 17 Category A routes use `require_roles`: 13 routine operational routes allow ADMIN/MANAGER/OPERATOR; project status/budget allow ADMIN/MANAGER; COA/payment-account creation allow ADMIN only. Document correction/rejection retain in-body `require_reviewer` (ADMIN/MANAGER); accounting-period authorization remains unchanged.
+- **CP4 verification**:
+  - AUTHZ route suite: 103 passed (17 former RED cases, 68 four-role boundary combinations, 401/403, CP2 identity, and in-body characterizations).
+  - Security / Auth suites: 50 passed, 0 failed.
+  - Backend unit suite: 248 passed, 0 failed.
+  - Backend integration suite (SQLite-compatible): 169 passed, 0 failed.
+  - Full local backend regression: 520 passed, 0 failed, 78 pre-existing external skips (requiring external live PostgreSQL database).
+  - Frontend: 26 files passed, 66 tests passed, 0 lint errors, 0 typecheck errors, production build passed, 0 audit vulnerabilities.
+  - Alembic: head `023_historical_seq_bootstrap`, 0 migrations, 0 drift.
+  - Repository safety: passed (0 secret/token leaks, clean tree).
+  - Python compile, `pip check`, locked production dependency audit, repository-safety, and `git diff --check` passed. Ruff and mypy are not configured in the declared backend environment.
+- **CP4 independent security review**: Critical 0, High 0, Medium 0, Low 0; confirmed exact 17-route coverage, approved policies, side-effect ordering, CP2 identity preservation, tenant preservation, unchanged machine/webhook and protected in-body routes, and zero accounting/migration/frontend changes.
+- **Scope**: No migration, accounting logic, tenant ownership rule, frontend product code, machine/webhook authentication, protected storage, credentials, or historical data changed.
+- **Next action**: Push feature branch `hermes/authz-001-role-and-actor-hardening`, create PR against `main`, monitor GitHub CI checks to completion, and present final delivery readiness report. DO NOT merge.

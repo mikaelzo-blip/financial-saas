@@ -6,7 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.api.deps import get_current_org_id
-from src.api.auth import require_application_user
+from src.api.auth import require_application_user, require_roles
+from src.models.enums import UserRole
+from src.models.user import User
 from src.schemas.bank_reconciliation import (
     BankStatementImportResponse,
     BankStatementLineResponse,
@@ -28,7 +30,7 @@ async def upload_bank_statement(
     payment_account_id: uuid.UUID = Form(...),
     file: UploadFile = File(...),
     org_id: uuid.UUID = Depends(get_current_org_id),
-    _user=Depends(require_application_user),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db)
 ):
     service = BankReconciliationService(db)
@@ -60,7 +62,7 @@ async def upload_bank_statement(
 async def auto_match_statement(
     import_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org_id),
-    _user=Depends(require_application_user),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db)
 ):
     service = BankReconciliationService(db)
@@ -75,7 +77,7 @@ async def auto_match_statement(
 async def manual_reconcile(
     req: BankReconciliationMatchRequest,
     org_id: uuid.UUID = Depends(get_current_org_id),
-    user=Depends(require_application_user),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db)
 ):
     service = BankReconciliationService(db)

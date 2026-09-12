@@ -5,8 +5,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.deps import get_current_org_id
+from src.api.auth import require_roles
 from src.core.database import get_db
 from src.models.counterparty import Counterparty
+from src.models.enums import UserRole
+from src.models.user import User
 from src.schemas.counterparty import CounterpartyCreate, CounterpartyResponse
 
 
@@ -49,6 +52,7 @@ async def list_counterparties(
 async def create_counterparty(
     data: CounterpartyCreate,
     organization_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db),
 ):
     counterparty = Counterparty(

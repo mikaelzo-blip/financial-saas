@@ -5,8 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.api.deps import get_current_org_id
-from src.api.auth import require_application_user
-from src.models.enums import InboxMessageStatus, SessionMatchStatus
+from src.api.auth import require_application_user, require_roles
+from src.models.enums import InboxMessageStatus, SessionMatchStatus, UserRole
+from src.models.user import User
 from src.schemas.inbox import (
     InboxMessageResponse,
     RemoteInboxPayload,
@@ -27,6 +28,7 @@ router = APIRouter()
 async def capture_remote_message(
     payload: RemoteInboxPayload,
     org_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db)
 ):
     service = RemoteInboxService(db)
@@ -41,7 +43,7 @@ async def capture_remote_message(
 )
 async def sync_backlog(
     org_id: uuid.UUID = Depends(get_current_org_id),
-    _user=Depends(require_application_user),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db)
 ):
     service = RemoteInboxService(db)
@@ -115,7 +117,7 @@ async def get_document_session(
 async def analyze_document_session(
     session_id: uuid.UUID,
     org_id: uuid.UUID = Depends(get_current_org_id),
-    _user=Depends(require_application_user),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
     db: AsyncSession = Depends(get_db)
 ):
     service = DeferredAnalysisService(db)

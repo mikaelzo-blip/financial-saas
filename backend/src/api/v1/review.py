@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
-from src.api.deps import get_current_org_id, get_current_user_id
+from src.api.deps import get_current_org_id
 from src.api.auth import require_roles
 from src.models.enums import ReviewFlag, UserRole
 from src.models.user import User
@@ -65,7 +65,8 @@ async def add_review_flag(
     transaction_id: uuid.UUID,
     data: AddReviewFlagRequest,
     org_id: uuid.UUID = Depends(get_current_org_id),
-    db: AsyncSession = Depends(get_db)
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
+    db: AsyncSession = Depends(get_db),
 ):
     service = ReviewQueueService(db)
     flag = await service.add_review_flag(

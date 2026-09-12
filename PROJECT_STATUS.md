@@ -1,7 +1,8 @@
 # Project Status
 
 - **Last reconciled**: 2026-09-12
-- **Current origin/main baseline**: `c33112c1744e25d12ea1e30b9a133b6931c788b8` (Git verified)
+- **Current local `main` / `origin/main` baseline**: `3d516096cc0085eb3e5e7273f6be57ec5c7d876c` (Git verified)
+- **AUTHZ-001 starting source head**: `c33112c1744e25d12ea1e30b9a133b6931c788b8`
 - **Active branch**: `hermes/authz-001-role-and-actor-hardening`
 - **Active feature**: AUTHZ-001 — role enforcement and actor hardening.
 - **Checkpoint**: CP1 is verified and committed; CP2 and CP3 are not started.

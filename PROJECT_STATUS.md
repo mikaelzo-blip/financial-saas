@@ -1,24 +1,39 @@
 # Project Status
 
 - **Last reconciled**: 2026-09-12
-- **Current local `main` / `origin/main` baseline**: `3d516096cc0085eb3e5e7273f6be57ec5c7d876c` (Git verified)
-- **AUTHZ-001 starting source head**: `c33112c1744e25d12ea1e30b9a133b6931c788b8`
-- **Active branch**: `hermes/authz-001-role-and-actor-hardening`
-- **Active feature**: AUTHZ-001 — role enforcement and actor hardening.
-- **Checkpoint**: CP4 local verification complete; branch ready for remote delivery (push + PR + real CI wait). STOP before merging per turn instructions.
-- **CP3 route inventory**: 38 human state mutations: 17 formerly vulnerable routes are now declaratively protected, 4 remain protected in-body by approved scope, and 17 were already declaratively protected. Current AUTHZ-001 covered vulnerable count: 0. Four POST reporting/query routes are non-mutating; machine, webhook, and public routes remain outside human RBAC scope.
-- **CP2 decisions**: `get_current_user_id` and its sentinel UUID are removed; human document actor identity now comes from the verified JWT-backed `current_user.id`; `require_roles` cannot reconstruct users from headers and fails closed with 401 without a principal. `X-User-ID` is optional compatibility metadata: if supplied it must match the JWT principal or returns 403; it never establishes identity. `X-Organization-ID` remains mandatory and principal-matched.
-- **Role-policy boundary**: The 17 Category A routes use `require_roles`: 13 routine operational routes allow ADMIN/MANAGER/OPERATOR; project status/budget allow ADMIN/MANAGER; COA/payment-account creation allow ADMIN only. Document correction/rejection retain in-body `require_reviewer` (ADMIN/MANAGER); accounting-period authorization remains unchanged.
-- **CP4 verification**:
-  - AUTHZ route suite: 103 passed (17 former RED cases, 68 four-role boundary combinations, 401/403, CP2 identity, and in-body characterizations).
-  - Security / Auth suites: 50 passed, 0 failed.
-  - Backend unit suite: 248 passed, 0 failed.
-  - Backend integration suite (SQLite-compatible): 169 passed, 0 failed.
-  - Full local backend regression: 520 passed, 0 failed, 78 pre-existing external skips (requiring external live PostgreSQL database).
-  - Frontend: 26 files passed, 66 tests passed, 0 lint errors, 0 typecheck errors, production build passed, 0 audit vulnerabilities.
-  - Alembic: head `023_historical_seq_bootstrap`, 0 migrations, 0 drift.
-  - Repository safety: passed (0 secret/token leaks, clean tree).
-  - Python compile, `pip check`, locked production dependency audit, repository-safety, and `git diff --check` passed. Ruff and mypy are not configured in the declared backend environment.
-- **CP4 independent security review**: Critical 0, High 0, Medium 0, Low 0; confirmed exact 17-route coverage, approved policies, side-effect ordering, CP2 identity preservation, tenant preservation, unchanged machine/webhook and protected in-body routes, and zero accounting/migration/frontend changes.
-- **Scope**: No migration, accounting logic, tenant ownership rule, frontend product code, machine/webhook authentication, protected storage, credentials, or historical data changed.
-- **Next action**: Push feature branch `hermes/authz-001-role-and-actor-hardening`, create PR against `main`, monitor GitHub CI checks to completion, and present final delivery readiness report. DO NOT merge.
+- **Current branch**: `hermes/fin-p1-105-tenant-reference-hardening`
+- **Base commit**: `c15548abc8e1b0678b5ec14a96e48b2e8b68fc48`
+- **Active feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References
+- **Active checkpoint**: CP4 — Final Regression, Schema Safety & Delivery Readiness (LOCAL VERIFICATION COMPLETED; REMOTE DELIVERY PENDING)
+- **CP1 Deliverables**:
+  - Spec Kit tracked under `specs/fin-p1-105-tenant-reference-hardening/`
+  - Dedicated security regression test suite: `backend/tests/security/test_fin_p1_105_tenant_reference_hardening.py`
+  - Test results: 34 tests collected (24 passed, 10 xfailed, 0 unexpected failures)
+  - 7 vulnerable reference fields reproduced with executable RED tests (Project PIC create/update, FixedAsset vendor/document, Settlement transaction, BankReconciliation journal_line/money_movement/transaction + mixed atomicity)
+  - ProjectBudget characterized as DEFENSE-IN-DEPTH SERVICE CONTRACT GAP (API protected with 404, direct service lacks organization_id)
+  - Same-tenant positive controls, nullability controls, nonexistent fail-closed characterization, and AUTHZ-001 regression verified
+  - Authoritative PostgreSQL confirmation verified (`test_postgresql_cross_tenant_foreign_key_acceptance_confirmation`) proving global database FKs accept cross-tenant UUIDs without error
+  - Zero production code fixes, zero migrations, zero accounting changes, zero frontend changes
+- **CP2 verified deliverables:**
+  - `ProjectService.create_project` and `update_project` scope supplied `pic_user_id` to `User.organization_id`; update preserves omitted versus explicit-null semantics.
+  - `FixedAssetService.create_asset` scopes nullable `vendor_id` and `document_id` to their tenant before asset construction or flush.
+  - ProjectBudget service methods require `organization_id`, establish tenant-owned project existence, and all callers are migrated.
+  - Focused suite: 30 passed, 6 expected CP3 xfailed, 0 unexpected failures.
+- **CP3 verified deliverables:**
+  - `MoneyMovementService.create_money_movement` scopes all non-null `Settlement.transaction_id` values to the caller organization before code allocation, construction, or flush; mixed settlement requests are atomic.
+  - `BankReconciliationService.match_manual` scopes supplied journal lines through `JournalEntry`, and money movements/transactions directly; all optional IDs are validated before reconciliation construction or statement-line status mutation.
+  - Foreign and nonexistent CP3 references return the same HTTP 404 `NOT_FOUND` contract. Same-tenant and nullable flows remain accepted.
+  - Focused FIN-P1-105 suite: 36 passed, 0 xfailed, 0 failed. Targeted MoneyMovement/BankReconciliation/AUTHZ suite: 107 passed. PostgreSQL FK confirmation: 1 passed.
+  - Independent CP3 review: 0 Critical, 0 High, 0 Medium; one Low scope-hygiene issue was resolved.
+  - Remaining active FIN-P1-105 tenant-reference vulnerabilities: 0.
+- **Scope adherence**: No migration, accounting, AUTHZ policy, frontend, or historical-data change.
+- **CP3 implementation commit**: `80c9f8f9944c09d2224813d59dbef782d86cde64` (`fix(fin-p1-105): scope financial references to tenant (CP3)`).
+- **CP4 local verification**:
+  - Full backend: 694 passed, 0 failed, 0 skipped, 0 xfailed (explicit local PostgreSQL 16 disposable target).
+  - FIN-P1-105 focused suite: 36 passed, 0 failed, 0 skipped, 0 xfailed; AUTHZ-001: 103 passed.
+  - Relevant PostgreSQL regression: 84 passed, including FIN-001 concurrency/retry and the required global-FK acceptance confirmation.
+  - Alembic: current/head `023_historical_seq_bootstrap`, one expected head, zero drift, offline migration chain generated successfully; FIN-P1-105 migrations: 0.
+  - Frontend: 66 tests, lint, typecheck, production build, and production dependency audit passed (0 vulnerabilities).
+  - Python compilation, `pip check`, repository safety, dependency audit, and direct + independent tenant-security review passed; findings: 0 Critical, 0 High, 0 Medium, 0 Low.
+  - Required remaining delivery work: commit CP4 governance/diff-hygiene corrections, push the feature branch, open PR, and wait for GitHub CI. Do not merge without explicit authorization.
+- **Next checkpoint**: CP4 Remote Delivery — push, PR, CI verification, then await explicit squash-merge authorization.

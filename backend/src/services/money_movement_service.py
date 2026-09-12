@@ -261,6 +261,19 @@ class MoneyMovementService:
                     f"Total settlement amount ({total_settlements}) cannot exceed MoneyMovement amount ({data.amount})"
                 )
 
+            for settlement_data in data.settlements:
+                if settlement_data.transaction_id:
+                    transaction_id = await self.session.scalar(
+                        select(Transaction.id).where(
+                            and_(
+                                Transaction.id == settlement_data.transaction_id,
+                                Transaction.organization_id == organization_id,
+                            )
+                        )
+                    )
+                    if not transaction_id:
+                        raise EntityNotFoundException("Transaction", settlement_data.transaction_id)
+
             # Validate each settlement allocations
             for s in data.settlements:
                 if s.allocations:

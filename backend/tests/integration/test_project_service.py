@@ -188,7 +188,7 @@ async def test_project_budget_lines(db_session: AsyncSession):
     db_session.add_all([b_mat, b_sub])
     await db_session.commit()
 
-    budgets = await project_service.get_project_budgets(prj.id)
+    budgets = await project_service.get_project_budgets(org.id, prj.id)
     assert len(budgets) == 2
     categories = {b.cost_category for b in budgets}
     assert CostCategory.MAT in categories

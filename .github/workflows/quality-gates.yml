@@ -38,6 +38,7 @@ jobs:
     env:
       FIN_001_TEST_DATABASE_URL: postgresql+asyncpg://fin001_ci_user:fin001_ci_password@127.0.0.1:5432/fin001_ci_disposable
       FEATURE_012_TEST_DATABASE_URL: postgresql+asyncpg://fin001_ci_user:fin001_ci_password@127.0.0.1:5432/fin001_ci_disposable
+      LIVE_POSTGRES_URL: postgresql+asyncpg://fin001_ci_user:fin001_ci_password@127.0.0.1:5432/fin001_ci_disposable
       DATABASE_URL: postgresql+asyncpg://fin001_ci_user:fin001_ci_password@127.0.0.1:5432/fin001_ci_disposable
     steps:
       - name: Check out repository

@@ -103,9 +103,7 @@ async def get_project_budgets(
 ):
     """Lists all budget category allocations for a project."""
     service = ProjectService(db)
-    # Ensure project belongs to org
-    await service.get_project(org_id, project_id)
-    budgets = await service.get_project_budgets(project_id)
+    budgets = await service.get_project_budgets(org_id, project_id)
     return budgets
 
 
@@ -124,6 +122,5 @@ async def add_or_update_project_budget(
 ):
     """Sets a budget allocation for a specific cost category."""
     service = ProjectService(db)
-    await service.get_project(org_id, project_id)
-    budget = await service.add_or_update_project_budget(project_id, data)
+    budget = await service.add_or_update_project_budget(org_id, project_id, data)
     return budget

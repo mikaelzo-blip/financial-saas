@@ -10,9 +10,9 @@
 
 | Task ID | CP | Target File(s) | Description | Verification Gate | Status |
 |---|:---:|---|---|---|:---:|
-| **T-102-01** | CP1 | `backend/tests/security/test_fin_p1_102_transaction_type_contract.py` | Write executable characterization suite: STAGED dead-end baseline evidence & dedicated reversal preservation (passing tests). | Suite runs; 9 baseline tests PASS | PENDING |
-| **T-102-02** | CP1 | `backend/tests/security/test_fin_p1_102_transaction_type_contract.py` | Write executable RED tests (with strict XFAIL) for generic intake rejection of 16 unsupported types + REVERSAL, sequence preservation, PETTY_CASH_EXPENSE contradiction, and document correction/approval gates. | Suite runs; 37 strict XFAIL on future contracts | PENDING |
-| **T-102-03** | CP1 | Git & Spec Kit | Commit CP1 characterization suite with conventional commit message. | Clean worktree, test output verified | PENDING |
+| **T-102-01** | CP1 | `backend/tests/security/test_fin_p1_102_transaction_type_contract.py` | Write executable characterization suite: STAGED dead-end baseline evidence & dedicated reversal preservation (passing tests). | Suite runs; 9 baseline tests PASS | COMPLETED |
+| **T-102-02** | CP1 | `backend/tests/security/test_fin_p1_102_transaction_type_contract.py` | Write executable RED tests (with strict XFAIL) for generic intake rejection of 16 unsupported types + REVERSAL, sequence preservation, PETTY_CASH_EXPENSE contradiction, and document correction/approval gates. | Suite runs; 37 strict XFAIL on future contracts | COMPLETED |
+| **T-102-03** | CP1 | Git & Spec Kit | Commit CP1 characterization suite with conventional commit message. | Clean worktree, test output verified | COMPLETED |
 | **T-102-04** | CP2 | `backend/src/services/posting_rules.py` | Implement canonical capabilities on `PostingRuleRegistry` (`POSTING_RULE_SUPPORTED_TYPES`, `SPECIAL_WORKFLOW_TYPES`, `is_generic_ingestible`, `validate_generic_ingestion`). | Unit tests for registry methods pass | PENDING |
 | **T-102-05** | CP2 | `backend/src/services/transaction_service.py` | Enforce generic ingestion gate at the entrypoint of `create_transaction` before sequence allocation and model creation. | Generic intake tests flip from XFAIL to GREEN | PENDING |
 | **T-102-06** | CP2 | `backend/tests/security/test_authz001_role_enforcement.py` | Test fixture alignment: change `create_transaction` payload type in `mutation_request` from `OTHER_EXPENSE` to `DIRECT_PURCHASE`. | AUTHZ-001 suite passes 100% (103/103) | PENDING |

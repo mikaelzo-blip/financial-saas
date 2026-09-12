@@ -4,16 +4,21 @@
 - **Current branch**: `hermes/fin-p1-102-transaction-type-contract`
 - **Base commit**: `befb74a9b60ab746e8ac779accccc151c5552047` (`origin/main` aligned at branch creation)
 - **Active feature**: FIN-P1-102 — TransactionType Ingestion vs Executable Processing Contract
-- **Active checkpoint**: Specification, architecture, traceability, and checkpoint planning complete; CP1 has not started.
-- **Verified baseline**:
-  - `TransactionType`: 37 members.
-  - `PostingRuleRegistry`: 20 normal executable posting paths.
-  - Dedicated special workflow: `REVERSAL` only.
-  - Policy-blocked / no executable generic posting path: 16 types.
-  - Generic ingestion target: accept 20, reject 17 (16 unsupported + `REVERSAL`).
-  - `PETTY_CASH_EXPENSE` is incorrectly AUTO_SAFE in baseline and will be removed in CP3 without inventing accounting policy.
-- **Spec Kit**: `specs/fin-p1-102-transaction-type-contract/` contains `spec.md`, `research.md`, `plan.md`, `tasks.md`, `analysis.md`, `data-model.md`, `quickstart.md`, contract, and requirements checklist.
-- **Design decision**: `PostingRuleRegistry` will own the canonical normal generic-ingestion capability manifest and validation API; `TransactionService.create_transaction` is the primary pre-sequence/pre-persistence gate; document correction and approval receive targeted protections.
-- **Scope boundaries**: No posting rules, no accounting-policy decisions, no migration, no frontend product change, and no historical-row remediation.
-- **Design review**: Independent read-only review passed all 16 requested criteria; 0 Critical, 0 High, 0 Medium, 0 Low findings. Source corrections applied: document correction is an API-route boundary, and the dedicated reversal route returns 201 Created.
-- **Next action**: Begin FIN-P1-102 CP1 in a new turn: add only the executable characterization and strict-XFAIL RED suite, verify it, commit CP1, then stop.
+- **Active checkpoint**: CP1 — Baseline Characterization & Strict-XFAIL Regression Suite (COMPLETED). Ready for CP2.
+- **CP1 Deliverables**:
+  - Spec Kit tracked in Git commit `f2ca2b5` (`docs(fin-p1-102): define transaction processing capability contract`)
+  - Dedicated characterization & regression suite: `backend/tests/security/test_fin_p1_102_transaction_type_contract.py`
+  - Test results: 46 collected (9 passed, 37 xfailed, 0 unexpected failures, 0 errors)
+  - All 37 TransactionType members classified: 20 normal posting rule supported, 1 special workflow (REVERSAL), 16 unsupported
+  - Generic create rejection characterized: 17 strict-XFAIL cases (16 unsupported + REVERSAL)
+  - Document review correction characterized: 17 strict-XFAIL cases
+  - Tenant sequence preservation characterized: 1 strict-XFAIL case
+  - AUTO_SAFE subset invariant & PETTY_CASH_EXPENSE contradiction characterized: 2 strict-XFAIL cases
+  - Normal positive controls verified: DIRECT_PURCHASE and BANK_CHARGE pass intake, posting, and AUTO_SAFE evaluation
+  - Staged dead-end baseline verified: OTHER_EXPENSE intake succeeds (201 STAGED), downstream posting fails closed (422 INVARIANT_VIOLATION), 0 journal entries/lines written, no recovery path available
+  - Dedicated reversal workflow verified: valid POSTED transaction reverses successfully with 201 Created and offsetting journal entries
+  - Document approval safety verified: candidate with unsupported type rolls back cleanly with 422, leaving 0 transactions and 0 journal records
+  - AUTHZ-001 fixture line (test_authz001_role_enforcement.py:490) characterized and preserved intact
+  - Independent CP1 review: 0 Critical, 0 High, 0 Medium, 0 Low findings; PASS verdict
+  - Zero production code changes (backend/src untouched), zero posting rules added, zero migrations, zero frontend changes
+- **Next checkpoint**: CP2 — Canonical Processing Capabilities & TransactionService Ingestion Gate.

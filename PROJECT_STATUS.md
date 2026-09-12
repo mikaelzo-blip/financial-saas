@@ -4,21 +4,24 @@
 - **Current branch**: `hermes/fin-p1-102-transaction-type-contract`
 - **Base commit**: `befb74a9b60ab746e8ac779accccc151c5552047` (`origin/main` aligned at branch creation)
 - **Active feature**: FIN-P1-102 — TransactionType Ingestion vs Executable Processing Contract
-- **Active checkpoint**: CP1 — Baseline Characterization & Strict-XFAIL Regression Suite (COMPLETED). Ready for CP2.
-- **CP1 Deliverables**:
-  - Spec Kit tracked in Git commit `f2ca2b5` (`docs(fin-p1-102): define transaction processing capability contract`)
-  - Dedicated characterization & regression suite: `backend/tests/security/test_fin_p1_102_transaction_type_contract.py`
-  - Test results: 46 collected (9 passed, 37 xfailed, 0 unexpected failures, 0 errors)
-  - All 37 TransactionType members classified: 20 normal posting rule supported, 1 special workflow (REVERSAL), 16 unsupported
-  - Generic create rejection characterized: 17 strict-XFAIL cases (16 unsupported + REVERSAL)
-  - Document review correction characterized: 17 strict-XFAIL cases
-  - Tenant sequence preservation characterized: 1 strict-XFAIL case
-  - AUTO_SAFE subset invariant & PETTY_CASH_EXPENSE contradiction characterized: 2 strict-XFAIL cases
-  - Normal positive controls verified: DIRECT_PURCHASE and BANK_CHARGE pass intake, posting, and AUTO_SAFE evaluation
-  - Staged dead-end baseline verified: OTHER_EXPENSE intake succeeds (201 STAGED), downstream posting fails closed (422 INVARIANT_VIOLATION), 0 journal entries/lines written, no recovery path available
-  - Dedicated reversal workflow verified: valid POSTED transaction reverses successfully with 201 Created and offsetting journal entries
-  - Document approval safety verified: candidate with unsupported type rolls back cleanly with 422, leaving 0 transactions and 0 journal records
-  - AUTHZ-001 fixture line (test_authz001_role_enforcement.py:490) characterized and preserved intact
-  - Independent CP1 review: 0 Critical, 0 High, 0 Medium, 0 Low findings; PASS verdict
-  - Zero production code changes (backend/src untouched), zero posting rules added, zero migrations, zero frontend changes
-- **Next checkpoint**: CP2 — Canonical Processing Capabilities & TransactionService Ingestion Gate.
+- **Active checkpoint**: CP2 — Canonical Processing Capability & Generic Ingestion Gate (COMPLETED)
+- **CP2 starting HEAD**: `4c69aeb88e4bf9c5d443b366f3730836b5afd761` (verified CP1 commit)
+- **CP2 Deliverables**:
+  - `PostingRuleRegistry` owns the canonical 20-type normal dispatch map and derives `POSTING_RULE_SUPPORTED_TYPES` from its keys
+  - `SPECIAL_WORKFLOW_TYPES` explicitly classifies `REVERSAL`; generic rejection reasons distinguish `SPECIAL_WORKFLOW_ONLY` from `NO_POSTING_RULE`
+  - `TransactionService.create_transaction` validates capability before lookups, duplicate checks, sequence allocation, model construction, and flush
+  - Generic intake rejects all 16 unsupported types plus `REVERSAL` with HTTP 422 `INVARIANT_VIOLATION`, zero persisted transactions, and no sequence consumption
+  - All 20 normal types remain capability-supported; DIRECT_PURCHASE and BANK_CHARGE API controls pass
+  - Dedicated reversal remains independent of `create_transaction` and passes with 201 Created, POSTED inverse transaction, and original REVERSED
+  - Historical dead-end evidence remains in CP1 history/specification; regression fixtures now create historical STAGED rows directly rather than reopening generic intake
+  - AUTHZ-001 fixture aligned from `OTHER_EXPENSE` to `DIRECT_PURCHASE`; authorization behavior is unchanged
+- **CP2 Verification**:
+  - FIN-P1-102: 46 collected — 27 passed, 19 expected strict XFAIL, 0 failed, 0 errors
+  - Remaining CP3 RED: 17 document-correction XFAIL plus 2 AUTO_SAFE/PETTY_CASH XFAIL
+  - AUTHZ-001: 103 passed
+  - Reversal/accounting/transaction-validation/sequence unit slice: 22 passed
+  - Transaction-intake integration: 3 passed
+  - Python compile, repository safety, and diff checks: passed
+  - Independent CP2 review: PASS — 0 Critical, 0 High, 0 Medium, 0 Low
+- **Scope confirmation**: No document production changes, processing-policy changes, posting-leg/accounting changes, migrations, enum changes, frontend changes, or historical-data cleanup
+- **Next checkpoint**: CP3 — Document API Enforcement & AUTO_SAFE Contradiction Removal (not started)

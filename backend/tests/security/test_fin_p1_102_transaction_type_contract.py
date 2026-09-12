@@ -1,7 +1,7 @@
 """Security regression and characterization suite for FIN-P1-102.
 
 Remediation: FIN-P1-102 — TransactionType Ingestion vs Executable Processing Contract
-Checkpoint: CP1 — Baseline Characterization & Strict-XFAIL Regression Suite.
+Checkpoint: CP2 — Canonical Processing Capability & Generic Ingestion Gate.
 
 Invariants Covered:
 - TYPE-R01: Executable generic ingestion gate (PostingRuleRegistry 20 supported types)
@@ -17,7 +17,6 @@ Invariants Covered:
 - TYPE-R11: Full positive controls for supported transaction types
 - TYPE-R12: Zero speculative accounting policy invention
 
-ZERO PRODUCTION CODE CHANGES IN CP1.
 """
 
 from datetime import date, datetime
@@ -287,29 +286,29 @@ def test_capability_matrix_completeness():
     assert POSTING_RULE_SUPPORTED_TYPES | SPECIAL_WORKFLOW_TYPES | UNSUPPORTED_TYPES == all_enum_types
     assert GENERIC_INGESTIBLE_TYPES | set(GENERIC_REJECTED_TYPES) == all_enum_types
 
+    # Production capability exposure matches the independently classified contract.
+    assert PostingRuleRegistry.POSTING_RULE_SUPPORTED_TYPES == POSTING_RULE_SUPPORTED_TYPES
+    assert PostingRuleRegistry.SPECIAL_WORKFLOW_TYPES == SPECIAL_WORKFLOW_TYPES
+    for transaction_type in TransactionType:
+        assert PostingRuleRegistry.is_generic_ingestible(transaction_type) is (
+            transaction_type in GENERIC_INGESTIBLE_TYPES
+        )
+
 
 # ==============================================================================
-# 2. GENERIC CREATE REJECTION — STRICT RED (17 CASES)
+# 2. GENERIC CREATE REJECTION — GREEN (17 CASES)
 # ==============================================================================
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("trx_type", GENERIC_REJECTED_TYPES, ids=[t.value for t in GENERIC_REJECTED_TYPES])
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="TYPE-R01/TYPE-R02/TYPE-R05: Generic transaction ingestion must reject non-executable types before persistence",
-)
 async def test_generic_intake_rejects_unsupported_and_special_types(p1_102_env, trx_type: TransactionType):
-    """Assert future invariant: POST /transactions must reject all 16 unsupported types + REVERSAL.
+    """Reject all 16 unsupported types and REVERSAL at generic intake.
 
-    Future expected contract:
+    Contract:
     - HTTP 422 Unprocessable Content
     - error.code == 'INVARIANT_VIOLATION'
+    - Error details identify the rejected type and capability reason
     - Zero Transaction persistence in database
-
-    Current baseline behavior:
-    - Returns 201 Created and persists a STAGED transaction.
-    - Hence this test strictly XFAILs in CP1 until CP2 ingestion gating is implemented.
     """
     env = p1_102_env
     client: AsyncClient = env["client"]
@@ -328,12 +327,18 @@ async def test_generic_intake_rejects_unsupported_and_special_types(p1_102_env, 
 
     response = await client.post("/api/v1/transactions", headers=headers, json=payload)
 
-    # Future contract assertion (fails in current baseline with 201 != 422)
     assert response.status_code == 422
-    body = response.json()
-    assert body.get("error", {}).get("code") == "INVARIANT_VIOLATION"
+    error = response.json().get("error", {})
+    assert error.get("code") == "INVARIANT_VIOLATION"
+    assert error.get("details", {}).get("transaction_type") == trx_type.value
+    expected_reason = (
+        "SPECIAL_WORKFLOW_ONLY"
+        if trx_type in SPECIAL_WORKFLOW_TYPES
+        else "NO_POSTING_RULE"
+    )
+    assert error.get("details", {}).get("reason") == expected_reason
 
-    # Future persistence assertion: no transaction record persisted
+    # No transaction record is persisted.
     async with env["session_factory"]() as session:
         persisted = await session.scalar(
             select(func.count(Transaction.id)).where(
@@ -345,21 +350,12 @@ async def test_generic_intake_rejects_unsupported_and_special_types(p1_102_env, 
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="TYPE-R04: Ingestion rejection must occur prior to tenant sequence counter allocation",
-)
 async def test_generic_intake_preserves_tenant_sequence_on_rejection(p1_102_env):
-    """Assert future invariant: Rejected transaction attempts must not consume tenant sequence numbers.
+    """Rejected transaction attempts must not consume tenant sequence numbers.
 
-    Future expected contract:
+    Contract:
     - HTTP 422 INVARIANT_VIOLATION
-    - TenantSequence row for namespace 'TRX' and year '2026' is not created / incremented.
-
-    Current baseline behavior:
-    - Returns 201 Created and increments TenantSequence to 1.
-    - Hence this test strictly XFAILs in CP1.
+    - TenantSequence row for namespace 'TRX' and year '2026' is not created or incremented
     """
     env = p1_102_env
     client: AsyncClient = env["client"]
@@ -448,17 +444,12 @@ async def test_supported_generic_intake_positive_controls(p1_102_env, supported_
 # ==============================================================================
 
 @pytest.mark.asyncio
-async def test_staged_dead_end_baseline_characterization(p1_102_env):
-    """Characterize current baseline behavior: STAGED dead-end with zero ledger pollution.
+async def test_historical_staged_unsupported_transaction_remains_fail_closed(p1_102_env):
+    """Preserve CP1 evidence for historical unsupported STAGED rows.
 
-    Proves:
-    1. Generic intake currently accepts OTHER_EXPENSE -> HTTP 201 Created.
-    2. Durable transaction record is persisted in STAGED status.
-    3. Attempting to post/approve downstream raises InvariantViolationException -> HTTP 422.
-    4. Zero JournalEntry records are created for this transaction.
-    5. Zero JournalLine records are created.
-    6. Transaction remains in STAGED status.
-    7. Demonstrates that downstream posting is fail-closed, but intake dead-ends.
+    New unsupported rows cannot enter through generic intake after CP2. A direct
+    historical fixture proves that pre-existing rows still fail closed at posting,
+    create no journal records, and remain unchanged by this remediation.
     """
     env = p1_102_env
     client: AsyncClient = env["client"]
@@ -466,89 +457,87 @@ async def test_staged_dead_end_baseline_characterization(p1_102_env):
     admin_id = env["users"][UserRole.ADMIN]
     headers = make_auth_headers(org_id, admin_id)
 
-    # 1. Create unsupported transaction in current baseline
-    create_payload = {
-        "transaction_type": TransactionType.OTHER_EXPENSE.value,
-        "transaction_date": "2026-01-12",
-        "amount": "750000.00",
-        "description": "Baseline dead-end characterization",
-        "document_ids": [],
-    }
-    create_res = await client.post("/api/v1/transactions", headers=headers, json=create_payload)
-    assert create_res.status_code == 201
-    trx_data = create_res.json()
-    assert trx_data["workflow_status"] == "STAGED"
-    trx_id = uuid.UUID(trx_data["id"])
-
-    # 2. Attempt post / approve
-    post_res = await client.post(f"/api/v1/transactions/{trx_id}/post", headers=headers)
-    assert post_res.status_code == 422
-    err_body = post_res.json()
-    assert err_body["error"]["code"] == "INVARIANT_VIOLATION"
-    assert "No posting rule defined for transaction type: OTHER_EXPENSE" in err_body["error"]["message"]
-
-    # 3. Assert zero ledger impact and transaction remains STAGED
     async with env["session_factory"]() as session:
-        # Assert no journal entry
-        je_count = await session.scalar(
+        transaction = Transaction(
+            organization_id=org_id,
+            transaction_code="TRX-2026-HIST01",
+            transaction_type=TransactionType.OTHER_EXPENSE,
+            transaction_date=date(2026, 1, 12),
+            amount=Decimal("750000.00"),
+            currency="IDR",
+            workflow_status=WorkflowStatus.STAGED,
+            description="Historical dead-end characterization",
+        )
+        session.add(transaction)
+        await session.commit()
+        transaction_id = transaction.id
+
+    post_res = await client.post(
+        f"/api/v1/transactions/{transaction_id}/post",
+        headers=headers,
+    )
+    assert post_res.status_code == 422
+    error = post_res.json()["error"]
+    assert error["code"] == "INVARIANT_VIOLATION"
+    assert "No posting rule defined for transaction type: OTHER_EXPENSE" in error["message"]
+
+    async with env["session_factory"]() as session:
+        journal_entry_count = await session.scalar(
             select(func.count(JournalEntry.id)).where(
                 JournalEntry.organization_id == org_id,
-                JournalEntry.transaction_id == trx_id,
+                JournalEntry.transaction_id == transaction_id,
             )
         )
-        assert je_count == 0
-
-        # Assert no journal lines
-        jl_count = await session.scalar(
+        journal_line_count = await session.scalar(
             select(func.count(JournalLine.id)).where(
-                JournalLine.notes == "Baseline dead-end characterization"
+                JournalLine.notes == "Historical dead-end characterization"
             )
         )
-        assert jl_count == 0
-
-        # Assert transaction still STAGED
-        persisted_trx = await session.scalar(
+        persisted_transaction = await session.scalar(
             select(Transaction).where(
                 Transaction.organization_id == org_id,
-                Transaction.id == trx_id,
+                Transaction.id == transaction_id,
             )
         )
-        assert persisted_trx is not None
-        assert persisted_trx.workflow_status == WorkflowStatus.STAGED
+        assert journal_entry_count == 0
+        assert journal_line_count == 0
+        assert persisted_transaction is not None
+        assert persisted_transaction.workflow_status == WorkflowStatus.STAGED
 
 
 @pytest.mark.asyncio
 async def test_dead_end_recovery_reversal_rejected(p1_102_env):
-    """Characterize absence of recovery paths: STAGED transaction cannot be reversed.
-
-    Proves:
-    - Calling dedicated reversal on a STAGED transaction is rejected with HTTP 422.
-    - Error contract enforces: 'Only POSTED transactions can be reversed'.
-    - Confirms that currently, an unsupported transaction stuck in STAGED has no recovery path.
-    """
+    """A historical unsupported STAGED transaction cannot use the reversal workflow."""
     env = p1_102_env
     client: AsyncClient = env["client"]
     org_id = env["org_id"]
     admin_id = env["users"][UserRole.ADMIN]
     headers = make_auth_headers(org_id, admin_id)
 
-    # Create staged transaction
-    create_res = await client.post("/api/v1/transactions", headers=headers, json={
-        "transaction_type": TransactionType.OTHER_EXPENSE.value,
-        "transaction_date": "2026-01-14",
-        "amount": "300000.00",
-        "description": "Recovery characterization probe",
-    })
-    trx_id = create_res.json()["id"]
+    async with env["session_factory"]() as session:
+        transaction = Transaction(
+            organization_id=org_id,
+            transaction_code="TRX-2026-HIST02",
+            transaction_type=TransactionType.OTHER_EXPENSE,
+            transaction_date=date(2026, 1, 14),
+            amount=Decimal("300000.00"),
+            currency="IDR",
+            workflow_status=WorkflowStatus.STAGED,
+            description="Historical recovery characterization probe",
+        )
+        session.add(transaction)
+        await session.commit()
+        transaction_id = transaction.id
 
-    # Attempt reversal on STAGED transaction
-    rev_res = await client.post(f"/api/v1/transactions/{trx_id}/reverse", headers=headers, json={
-        "reason": "Attempting to reverse staged dead-end transaction",
-    })
+    rev_res = await client.post(
+        f"/api/v1/transactions/{transaction_id}/reverse",
+        headers=headers,
+        json={"reason": "Attempting to reverse historical staged transaction"},
+    )
     assert rev_res.status_code == 422
-    body = rev_res.json()
-    assert body["error"]["code"] == "INVARIANT_VIOLATION"
-    assert "Only POSTED transactions can be reversed" in body["error"]["message"]
+    error = rev_res.json()["error"]
+    assert error["code"] == "INVARIANT_VIOLATION"
+    assert "Only POSTED transactions can be reversed" in error["message"]
 
 
 # ==============================================================================
@@ -860,7 +849,8 @@ async def test_document_candidate_approval_unsupported_type_fails_closed(p1_102_
     assert response.status_code == 422
     body = response.json()
     assert body["error"]["code"] == "INVARIANT_VIOLATION"
-    assert "No posting rule defined for transaction type: OTHER_EXPENSE" in body["error"]["message"]
+    assert body["error"]["details"]["transaction_type"] == TransactionType.OTHER_EXPENSE.value
+    assert body["error"]["details"]["reason"] == "NO_POSTING_RULE"
 
     # Verify zero persistence in database
     async with env["session_factory"]() as session:

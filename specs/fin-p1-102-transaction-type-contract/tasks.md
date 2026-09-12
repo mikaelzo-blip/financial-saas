@@ -13,10 +13,10 @@
 | **T-102-01** | CP1 | `backend/tests/security/test_fin_p1_102_transaction_type_contract.py` | Write executable characterization suite: STAGED dead-end baseline evidence & dedicated reversal preservation (passing tests). | Suite runs; 9 baseline tests PASS | COMPLETED |
 | **T-102-02** | CP1 | `backend/tests/security/test_fin_p1_102_transaction_type_contract.py` | Write executable RED tests (with strict XFAIL) for generic intake rejection of 16 unsupported types + REVERSAL, sequence preservation, PETTY_CASH_EXPENSE contradiction, and document correction/approval gates. | Suite runs; 37 strict XFAIL on future contracts | COMPLETED |
 | **T-102-03** | CP1 | Git & Spec Kit | Commit CP1 characterization suite with conventional commit message. | Clean worktree, test output verified | COMPLETED |
-| **T-102-04** | CP2 | `backend/src/services/posting_rules.py` | Implement canonical capabilities on `PostingRuleRegistry` (`POSTING_RULE_SUPPORTED_TYPES`, `SPECIAL_WORKFLOW_TYPES`, `is_generic_ingestible`, `validate_generic_ingestion`). | Unit tests for registry methods pass | PENDING |
-| **T-102-05** | CP2 | `backend/src/services/transaction_service.py` | Enforce generic ingestion gate at the entrypoint of `create_transaction` before sequence allocation and model creation. | Generic intake tests flip from XFAIL to GREEN | PENDING |
-| **T-102-06** | CP2 | `backend/tests/security/test_authz001_role_enforcement.py` | Test fixture alignment: change `create_transaction` payload type in `mutation_request` from `OTHER_EXPENSE` to `DIRECT_PURCHASE`. | AUTHZ-001 suite passes 100% (103/103) | PENDING |
-| **T-102-07** | CP2 | Git & Spec Kit | Commit CP2 implementation and fixture alignment with conventional commit message. | Clean worktree, CP2 suite GREEN | PENDING |
+| **T-102-04** | CP2 | `backend/src/services/posting_rules.py` | Implement canonical dispatch-backed capabilities on `PostingRuleRegistry` (`POSTING_RULE_SUPPORTED_TYPES`, `SPECIAL_WORKFLOW_TYPES`, `is_generic_ingestible`, `validate_generic_ingestion`). | Registry classification and accounting regressions pass | COMPLETED |
+| **T-102-05** | CP2 | `backend/src/services/transaction_service.py` | Enforce generic ingestion gate at the entrypoint of `create_transaction` before sequence allocation and model creation. | 17 generic rejection cases and sequence preservation pass | COMPLETED |
+| **T-102-06** | CP2 | `backend/tests/security/test_authz001_role_enforcement.py` | Test fixture alignment: change `create_transaction` payload type in `mutation_request` from `OTHER_EXPENSE` to `DIRECT_PURCHASE`. | AUTHZ-001 suite passes 100% (103/103) | COMPLETED |
+| **T-102-07** | CP2 | Git & Spec Kit | Commit CP2 implementation and fixture alignment with conventional commit message. | CP2 focused suite GREEN; independent review PASS | COMPLETED |
 | **T-102-08** | CP3 | `backend/src/api/v1/documents.py` | Add generic ingestion validation to `correct_document` and defense-in-depth guard to `approve_document_candidate`. | Document correction & approval tests GREEN | PENDING |
 | **T-102-09** | CP3 | `backend/src/services/processing_policy_service.py` | Remove `PETTY_CASH_EXPENSE` from `AUTO_SAFE_TYPES`; add subset invariant validation. | Policy evaluation test GREEN | PENDING |
 | **T-102-10** | CP3 | `backend/tests/unit/test_fin_p1_102_transaction_capabilities.py` | Remove remaining XFAIL markers; add 37/37 classification completeness assertion. | 100% focused suite passes GREEN | PENDING |
@@ -55,12 +55,12 @@
 ### Checkpoint 2: Canonical Processing Capabilities & TransactionService Ingestion Gate
 
 #### T-102-04: Capabilities on PostingRuleRegistry
-- **Objective**: Add explicit capability APIs to `PostingRuleRegistry` in `backend/src/services/posting_rules.py`:
-  - `POSTING_RULE_SUPPORTED_TYPES`: frozenset of 20 types.
+- **Objective**: Add canonical capability APIs to `PostingRuleRegistry` in `backend/src/services/posting_rules.py`:
+  - `_RULE_TYPE_BY_TRANSACTION_TYPE`: single dispatch map for the 20 executable normal types.
+  - `POSTING_RULE_SUPPORTED_TYPES`: immutable view derived from the dispatch-map keys.
   - `SPECIAL_WORKFLOW_TYPES`: frozenset with `TransactionType.REVERSAL`.
   - `is_generic_ingestible(cls, transaction_type)`: returns boolean.
-  - `has_rule(cls, transaction_type)`: returns boolean.
-  - `validate_generic_ingestion(cls, transaction_type)`: raises `InvariantViolationException` if not ingestible.
+  - `validate_generic_ingestion(cls, transaction_type)`: raises `InvariantViolationException` with `NO_POSTING_RULE` or `SPECIAL_WORKFLOW_ONLY` if not ingestible.
 
 #### T-102-05: Ingestion Gate in TransactionService
 - **Objective**: In `backend/src/services/transaction_service.py` within `create_transaction`:

@@ -487,7 +487,7 @@ def mutation_request(case_name: str, env: dict) -> dict:
     coa_account_id = str(env["coa_account_id"])
 
     requests = {
-        "create_transaction": {"json": {"transaction_type": "OTHER_EXPENSE", "transaction_date": "2026-01-02", "amount": "100.00", "description": "Authorization boundary probe", "document_ids": []}},
+        "create_transaction": {"json": {"transaction_type": "DIRECT_PURCHASE", "transaction_date": "2026-01-02", "amount": "100.00", "description": "Authorization boundary probe", "document_ids": []}},
         "create_project": {"json": {"project_name": "Authorization Boundary Project", "customer_id": str(env["customer_id"]), "start_date": "2026-01-02", "original_contract_value": "100.00"}},
         "update_project_status": {"json": {"status": "ON_HOLD"}},
         "set_project_budget": {"json": {"cost_category": "MAT", "budget_amount": "100.00"}},

@@ -86,3 +86,35 @@
 - **Principle XVI (Open Policy Protection)**: Strictly respected. Unsupported types remain unpostable because their accounting policies have not been resolved. No synthetic debit/credit accounts are invented.
 - **Single Source of Truth**: Preserved. `PostingRuleRegistry` is the single source of capability truth; services do not maintain parallel hardcoded lists.
 - **Fail-Closed Security**: Preserved. Unsupported operations are blocked at the perimeter before persistence or state corruption.
+
+---
+
+## 4. CP2 Verified Implementation
+
+### Reversal Call Graph
+
+`POST /api/v1/transactions/{id}/reverse` invokes `ReversalService.reverse_transaction`, which allocates the shared transaction sequence and constructs the `REVERSAL` transaction directly. It does **not** invoke `TransactionService.create_transaction`. The generic ingestion gate therefore rejects public `REVERSAL` intake without introducing a bypass flag or changing the dedicated reversal path.
+
+### Canonical Capability and Ingestion Gate
+
+- `PostingRuleRegistry._RULE_TYPE_BY_TRANSACTION_TYPE` is the single dispatch map for all 20 executable normal transaction types.
+- `POSTING_RULE_SUPPORTED_TYPES` is derived from that map's keys; no second production 20-type allowlist exists.
+- `SPECIAL_WORKFLOW_TYPES` contains only `REVERSAL`.
+- `TransactionService.create_transaction` calls `validate_generic_ingestion` before allocation parsing, lookups, duplicate checks, sequence allocation, model construction, or flush.
+- The 16 policy-blocked types return reason `NO_POSTING_RULE`; `REVERSAL` returns `SPECIAL_WORKFLOW_ONLY`.
+- Rejections use HTTP 422 and `INVARIANT_VIOLATION`, persist zero transactions, and do not consume the tenant transaction sequence.
+
+### CP2 Verification
+
+- FIN-P1-102 focused suite: **27 passed, 19 strict xfailed, 0 failed, 0 errors**. The remaining XFAILs are exactly 17 document-correction cases and 2 AUTO_SAFE/PETTY_CASH cases assigned to CP3.
+- Generic-create transition: **17 XFAIL -> 17 PASS**.
+- Sequence-preservation transition: **1 XFAIL -> 1 PASS**.
+- AUTHZ-001: **103 passed** after fixture-only alignment from `OTHER_EXPENSE` to `DIRECT_PURCHASE`; role and route policy are unchanged.
+- Relevant reversal, accounting-engine, transaction-validation, and sequence unit tests: **22 passed**.
+- Transaction-intake integration tests: **3 passed**.
+- Python compilation, repository safety, and `git diff --check`: **PASS**.
+- Independent bounded read-only review: **PASS** with **0 Critical, 0 High, 0 Medium, 0 Low** findings.
+
+### Scope Confirmation
+
+No document production code, processing-policy code, posting-leg definitions, accounting amounts/accounts, migrations, enum values, frontend product code, or historical transaction data were changed. Historical STAGED dead-end evidence remains in CP1 Git history and the specification; CP2 tests now construct historical rows directly instead of requiring the remediated public API to reproduce the old defect.

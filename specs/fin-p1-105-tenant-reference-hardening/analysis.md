@@ -1,8 +1,8 @@
 # Design Consistency & Risk Analysis: FIN-P1-105
 
 **Feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References  
-**Status**: CP3 VERIFIED IN WORKTREE — AWAITING REVIEWED CHECKPOINT COMMIT
-**Review Gate**: CP3 implementation, targeted verification, and independent read-only review complete; checkpoint commit remains pending.
+**Status**: CP3 COMPLETE — CP4 FULL REGRESSION AND DELIVERY REMAINS OPEN
+**Review Gate**: CP3 implementation, targeted verification, independent read-only review, and checkpoint commit are complete.
 
 ---
 

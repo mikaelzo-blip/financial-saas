@@ -1,7 +1,7 @@
 # Task Breakdown: FIN-P1-105
 
 **Feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References  
-**Status**: CP3 VERIFIED IN WORKTREE — AWAITING REVIEWED CHECKPOINT COMMIT
+**Status**: CP3 COMPLETE — CP4 FULL REGRESSION AND DELIVERY REMAINS OPEN
 **Checkpoints**: 4 (CP1 -> CP2 -> CP3 -> CP4)  
 
 ---

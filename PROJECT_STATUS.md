@@ -4,7 +4,7 @@
 - **Current branch**: `hermes/fin-p1-105-tenant-reference-hardening`
 - **Base commit**: `c15548abc8e1b0678b5ec14a96e48b2e8b68fc48`
 - **Active feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References
-- **Active checkpoint**: CP3 — Financial Linkage Tenant Hardening (VERIFIED IN WORKTREE; AWAITING CHECKPOINT COMMIT)
+- **Active checkpoint**: CP3 — Financial Linkage Tenant Hardening (COMPLETED)
 - **CP1 Deliverables**:
   - Spec Kit tracked under `specs/fin-p1-105-tenant-reference-hardening/`
   - Dedicated security regression test suite: `backend/tests/security/test_fin_p1_105_tenant_reference_hardening.py`
@@ -27,4 +27,5 @@
   - Independent CP3 review: 0 Critical, 0 High, 0 Medium; one Low scope-hygiene issue was resolved.
   - Remaining active FIN-P1-105 tenant-reference vulnerabilities: 0.
 - **Scope adherence**: No migration, accounting, AUTHZ policy, frontend, or historical-data change.
-- **Next checkpoint**: Commit CP3, then stop; CP4 Full Regression, Schema Safety & Remote Delivery Readiness remains open.
+- **CP3 implementation commit**: `80c9f8f9944c09d2224813d59dbef782d86cde64` (`fix(fin-p1-105): scope financial references to tenant (CP3)`).
+- **Next checkpoint**: CP4 Full Regression, Schema Safety & Remote Delivery Readiness remains open.

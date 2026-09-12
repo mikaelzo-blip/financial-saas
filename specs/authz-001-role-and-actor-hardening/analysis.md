@@ -100,4 +100,4 @@
 - **IN-BODY SCOPE**: Document correction/rejection and accounting-period authorization remain unchanged and continue to be characterized as protected in-body. CP3 intentionally did not migrate them, per the approved CP3 scope boundary.
 - **REGRESSION EVIDENCE**: AUTHZ suite 103 passed; affected document/auth/period/tenant regression selection 124 passed; Feature 011 and machine-auth subset 21 passed. Python compile, `git diff --check`, dependency check, repository-safety check, and locked production dependency audit passed. Ruff and mypy are not configured in the declared backend environment.
 - **INDEPENDENT REVIEW**: Bounded read-only senior review passed with Critical 0, High 0, Medium 0, Low 0.
-- **CP3 STATUS**: Verified and ready for checkpoint commit. CP4 remains responsible for full backend/frontend verification, delivery, PR, CI, and merge.
+- **CP3 STATUS**: Verified and committed as `1481a5f6ebcb2eaefe2bafa0c99552a50e1461a6`. CP4 remains responsible for full backend/frontend verification, delivery, PR, CI, and merge.

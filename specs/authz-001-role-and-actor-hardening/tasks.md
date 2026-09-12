@@ -60,6 +60,7 @@
   - The complete route-level role matrix verifies ADMIN reaches 17 boundaries, MANAGER 15, OPERATOR 13; each denied combination returns 403 before the mutation boundary.
   - Focused document/auth/period/tenant regression: 124 passed; Feature 011/machine-auth subset: 21 passed; dependency, compile, diff, repository-safety, and locked dependency audit gates passed.
   - Bounded independent review: Critical 0, High 0, Medium 0, Low 0.
+  - CP3 implementation checkpoint committed as `1481a5f6ebcb2eaefe2bafa0c99552a50e1461a6`.
 
 ---
 

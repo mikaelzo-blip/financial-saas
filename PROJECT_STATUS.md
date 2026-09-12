@@ -4,7 +4,7 @@
 - **Current branch**: `hermes/fin-p1-105-tenant-reference-hardening`
 - **Base commit**: `c15548abc8e1b0678b5ec14a96e48b2e8b68fc48`
 - **Active feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References
-- **Active checkpoint**: CP3 — Financial Linkage Tenant Hardening (COMPLETED)
+- **Active checkpoint**: CP4 — Final Regression, Schema Safety & Delivery Readiness (LOCAL VERIFICATION COMPLETED; REMOTE DELIVERY PENDING)
 - **CP1 Deliverables**:
   - Spec Kit tracked under `specs/fin-p1-105-tenant-reference-hardening/`
   - Dedicated security regression test suite: `backend/tests/security/test_fin_p1_105_tenant_reference_hardening.py`
@@ -28,4 +28,12 @@
   - Remaining active FIN-P1-105 tenant-reference vulnerabilities: 0.
 - **Scope adherence**: No migration, accounting, AUTHZ policy, frontend, or historical-data change.
 - **CP3 implementation commit**: `80c9f8f9944c09d2224813d59dbef782d86cde64` (`fix(fin-p1-105): scope financial references to tenant (CP3)`).
-- **Next checkpoint**: CP4 Full Regression, Schema Safety & Remote Delivery Readiness remains open.
+- **CP4 local verification**:
+  - Full backend: 694 passed, 0 failed, 0 skipped, 0 xfailed (explicit local PostgreSQL 16 disposable target).
+  - FIN-P1-105 focused suite: 36 passed, 0 failed, 0 skipped, 0 xfailed; AUTHZ-001: 103 passed.
+  - Relevant PostgreSQL regression: 84 passed, including FIN-001 concurrency/retry and the required global-FK acceptance confirmation.
+  - Alembic: current/head `023_historical_seq_bootstrap`, one expected head, zero drift, offline migration chain generated successfully; FIN-P1-105 migrations: 0.
+  - Frontend: 66 tests, lint, typecheck, production build, and production dependency audit passed (0 vulnerabilities).
+  - Python compilation, `pip check`, repository safety, dependency audit, and direct + independent tenant-security review passed; findings: 0 Critical, 0 High, 0 Medium, 0 Low.
+  - Required remaining delivery work: commit CP4 governance/diff-hygiene corrections, push the feature branch, open PR, and wait for GitHub CI. Do not merge without explicit authorization.
+- **Next checkpoint**: CP4 Remote Delivery — push, PR, CI verification, then await explicit squash-merge authorization.

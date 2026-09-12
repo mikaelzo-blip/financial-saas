@@ -1,7 +1,7 @@
 # Requirements Checklist: FIN-P1-105
 
-**Feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References  
-**Status**: CP3 COMPLETE — CP4 REMAINS OPEN
+**Feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References
+**Status**: CP4 LOCAL VERIFICATION COMPLETE — REMOTE DELIVERY REMAINS OPEN
 
 ---
 
@@ -32,4 +32,5 @@
 - [x] **CP1 Nullable / Omission Controls**: All optional foreign reference fields (`pic_user_id`, `vendor_id`, `document_id`, `journal_line_id`, `money_movement_id`, `transaction_id`) accept `None` / omission.
 - [x] **CP2 Core Hardening**: `ProjectService` (`pic_user_id` create/update) and `FixedAssetService` (`vendor_id`, `document_id`), plus defense-in-depth `ProjectBudget` pass GREEN.
 - [x] **CP3 Financial Linkage Hardening**: `MoneyMovementService` (`Settlement.transaction_id`) and `BankReconciliationService` (`journal_line_id`, `money_movement_id`, `transaction_id`) pass GREEN. All remaining FIN-P1-105 tenant-reference vulnerabilities: 0.
-- [ ] **CP4 Full Regression & Delivery**: All unit, integration, PostgreSQL, and AUTHZ-001 suites pass cleanly with zero failures.
+- [x] **CP4 Local Regression**: Full backend (694 passed), FIN-P1-105 (36 passed), AUTHZ-001 (103 passed), and relevant PostgreSQL regression (84 passed) are clean with zero failures, skips, or xfails in the required FIN-P1-105 suite. Alembic has one expected head and zero drift; frontend CI-equivalent gates pass.
+- [ ] **CP4 Remote Delivery**: Feature branch is pushed, PR is open and mergeable, and all required GitHub CI checks pass.

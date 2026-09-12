@@ -1,11 +1,11 @@
 # Feature Specification: Tenant Foreign-Reference Ownership Hardening
 
-**Feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References  
-**Feature Branch**: `hermes/fin-p1-105-tenant-reference-hardening`  
-**Status**: SPECIFICATION & CHECKPOINT PLANNING  
-**Priority**: P1 (Security & Multi-Tenancy Hardening)  
-**Authority**: Constitution v2.0.0, Financial Concept v1, AGENTS.md, Security Audit 2026-09-09/2026-09-12  
-**Baseline Commit**: `c15548abc8e1b0678b5ec14a96e48b2e8b68fc48`  
+**Feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References
+**Feature Branch**: `hermes/fin-p1-105-tenant-reference-hardening`
+**Status**: SPECIFICATION & CHECKPOINT PLANNING
+**Priority**: P1 (Security & Multi-Tenancy Hardening)
+**Authority**: Constitution v2.0.0, Financial Concept v1, AGENTS.md, Security Audit 2026-09-09/2026-09-12
+**Baseline Commit**: `c15548abc8e1b0678b5ec14a96e48b2e8b68fc48`
 
 ---
 

@@ -1,8 +1,8 @@
 # Implementation Plan: Tenant Foreign-Reference Ownership Hardening (FIN-P1-105)
 
-**Feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References  
-**Status**: CHECKPOINT PLANNING  
-**Authority**: Constitution v2.0.0, AGENTS.md, Checkpoint-Driven Development Skill  
+**Feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References
+**Status**: CHECKPOINT PLANNING
+**Authority**: Constitution v2.0.0, AGENTS.md, Checkpoint-Driven Development Skill
 
 ---
 

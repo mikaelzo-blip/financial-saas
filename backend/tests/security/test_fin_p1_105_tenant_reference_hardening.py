@@ -1514,4 +1514,3 @@ async def test_postgresql_cross_tenant_foreign_key_acceptance_confirmation():
                 )
                 await cleanup_session.commit()
             await pg_engine.dispose()
-

@@ -1,8 +1,8 @@
 # Tenant Foreign-Reference Ownership Contract: FIN-P1-105
 
-**Feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References  
-**Authority**: Constitution v2.0.0, AGENTS.md, Security Audit 2026-09-09/2026-09-12  
-**Status**: DRAFT / SPECIFICATION  
+**Feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References
+**Authority**: Constitution v2.0.0, AGENTS.md, Security Audit 2026-09-09/2026-09-12
+**Status**: DRAFT / SPECIFICATION
 
 ---
 

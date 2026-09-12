@@ -1,7 +1,7 @@
 # Quickstart Guide: FIN-P1-105
 
-**Feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References  
-**Branch**: `hermes/fin-p1-105-tenant-reference-hardening`  
+**Feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References
+**Branch**: `hermes/fin-p1-105-tenant-reference-hardening`
 
 ---
 

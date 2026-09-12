@@ -1,8 +1,8 @@
 # Task Breakdown: FIN-P1-105
 
-**Feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References  
-**Status**: CP3 COMPLETE — CP4 FULL REGRESSION AND DELIVERY REMAINS OPEN
-**Checkpoints**: 4 (CP1 -> CP2 -> CP3 -> CP4)  
+**Feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References
+**Status**: CP4 LOCAL VERIFICATION COMPLETE — REMOTE DELIVERY REMAINS OPEN
+**Checkpoints**: 4 (CP1 -> CP2 -> CP3 -> CP4)
 
 ---
 
@@ -52,9 +52,9 @@
 
 ## Checkpoint 4: Full Regression, Schema Safety & Remote Delivery Readiness
 
-- [ ] **Task 4.1 (CP4-T1)**: Run full backend unit and integration test regression suites (`520+ tests`).
-- [ ] **Task 4.2 (CP4-T2)**: Run AUTHZ-001 role matrix regression suite (`test_authz001_role_enforcement.py`) to confirm zero permission regressions.
-- [ ] **Task 4.3 (CP4-T3)**: Verify Alembic database migrations (`alembic current`, `alembic check`) to confirm zero new migrations and zero schema drift.
-- [ ] **Task 4.4 (CP4-T4)**: Verify frontend build and test suites (`npm test`, `npm run build`).
+- [x] **Task 4.1 (CP4-T1)**: Full backend regression passed: 694 passed, 0 failed, 0 skipped, 0 xfailed (2026-09-12).
+- [x] **Task 4.2 (CP4-T2)**: AUTHZ-001 regression passed: 103 passed; FIN-P1-105 focused suite passed: 36 passed, 0 skipped, 0 xfailed.
+- [x] **Task 4.3 (CP4-T3)**: PostgreSQL 16 disposable test target verified at `023_historical_seq_bootstrap`; `alembic current`, `heads`, `check`, and offline chain passed with zero drift and zero FIN-P1-105 migrations. Relevant PostgreSQL regression passed: 84 passed.
+- [x] **Task 4.4 (CP4-T4)**: Frontend CI-equivalent gates passed: 66 tests, lint, typecheck, production build, and production dependency audit (0 vulnerabilities).
 - [ ] **Task 4.5 (CP4-T5)**: Push feature branch `hermes/fin-p1-105-tenant-reference-hardening`, open Pull Request with comprehensive PR body, and monitor GitHub CI checks.
 - [ ] **Task 4.6 (CP4-T6)**: Verify all GitHub CI checks succeed; prepare final delivery readiness summary.

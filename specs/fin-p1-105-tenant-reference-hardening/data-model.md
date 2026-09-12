@@ -1,8 +1,8 @@
 # Data Model & Tenancy Architecture: FIN-P1-105
 
-**Feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References  
-**Authority**: Constitution v2.0.0, AGENTS.md  
-**Status**: SPECIFICATION / PLANNING  
+**Feature**: FIN-P1-105 — Tenant Ownership Validation for Supplied Foreign UUID References
+**Authority**: Constitution v2.0.0, AGENTS.md
+**Status**: SPECIFICATION / PLANNING
 
 ---
 
@@ -86,10 +86,10 @@ The table below details the relational pathways connecting source entities to re
 * **Target**: `journal_lines.id`
 * **Tenant Resolution**: `journal_lines` table **does not store** `organization_id`. Ownership is established exclusively via `journal_entries`:
   ```sql
-  SELECT jl.id 
-  FROM journal_lines jl 
-  JOIN journal_entries je ON jl.journal_entry_id = je.id 
-  WHERE jl.id = :journal_line_id 
+  SELECT jl.id
+  FROM journal_lines jl
+  JOIN journal_entries je ON jl.journal_entry_id = je.id
+  WHERE jl.id = :journal_line_id
     AND je.organization_id = :organization_id;
   ```
 * **Traversal**: 1-hop join through `journal_entries`.

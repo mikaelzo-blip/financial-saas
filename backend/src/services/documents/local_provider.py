@@ -1,79 +1,50 @@
 import re
 import time
 from datetime import date
-from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 from statistics import mean
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+from PIL import Image
 
 from pypdf import PdfReader
 from rapidocr import RapidOCR
 
+from src.core.config import settings
 from src.models.enums import DocumentType
 from src.schemas.document import ConfidenceScores, ExtractedField, LineItem, StructuredExtraction
-from src.services.documents.extraction import ExtractionResult
-from src.services.documents.normalization import parse_candidate_date, parse_candidate_money
-
-
-@dataclass(frozen=True)
-class ClassificationResult:
-    document_type: DocumentType
-    confidence: Decimal
-    reasons: tuple[str, ...]
-    needs_review: bool
-
-
-_CLASSIFICATION_RULES = (
-    (DocumentType.TRANSFER_PROOF, r"bukti\s+transfer|transfer\s+bank|m-banking|internet\s+banking|rekening|struk\s+transfer", "payment-transfer signal"),
-    (DocumentType.CUSTOMER_INVOICE, r"customer\s+invoice|invoice\s+pelanggan|faktur\s+penjualan|tagihan\s+proyek", "customer-invoice signal"),
-    (DocumentType.VENDOR_INVOICE, r"vendor\s+invoice|invoice\s+vendor|faktur(?!\s+pajak)|tagihan\s+vendor|tagihan\s+pembelian|\btax\s+invoice\b", "vendor-invoice signal"),
-    (DocumentType.RECEIPT, r"struk\s+pembelian|purchase\s+receipt|kuitansi|nota\s+kontan|nota\s+pembelian|nota\s+toko", "purchase-receipt signal"),
-    (DocumentType.PURCHASE_ORDER, r"purchase\s+order|\bpo\b(?!\s+(?:customer|ref|reference|no|nomor))", "purchase-order signal"),
-    (DocumentType.PO_CUSTOMER, r"customer\s+po|po\s+customer|po\s+pelanggan|customer\s+order\s+ref", "customer-PO signal"),
-    (DocumentType.SURAT_JALAN, r"surat\s+jalan|delivery\s+order|\bdo\b", "delivery-note signal"),
-    (DocumentType.BAST, r"berita\s+acara\s+serah\s+terima|\bbast\b", "BAST signal"),
-    (DocumentType.SPK, r"surat\s+perintah\s+kerja|\bspk\b", "SPK signal"),
-    (DocumentType.CONTRACT, r"\bkontrak\b|\bcontract\b|perjanjian\s+kontrak", "contract signal"),
-    (DocumentType.TAX_INVOICE, r"faktur\s+pajak", "tax-invoice signal"),
+from src.services.documents.classification import classify_text, ClassificationResult
+from src.services.documents.exceptions import (
+    InvalidFileError,
+    OcrProcessingError,
+    PdfRenderError,
+    UnsupportedFileError,
 )
-
-
-def classify_text(text: str) -> ClassificationResult:
-    if not text or not text.strip():
-        return ClassificationResult(DocumentType.UNKNOWN, Decimal("0.00"), ("empty text",), True)
-
-    # Primary header check: if the document header prominently declares the document kind,
-    # respect the primary header instead of secondary reference fields (e.g. Delivery Order No, PO Ref on an invoice).
-    first_lines = "\n".join(text.splitlines()[:20])
-    if re.search(r"\b(?:tax\s+invoice|vendor\s+invoice|invoice\s+vendor|tagihan\s+vendor|tagihan\s+pembelian)\b", first_lines, re.I):
-        return ClassificationResult(DocumentType.VENDOR_INVOICE, Decimal("0.95"), ("vendor-invoice signal",), False)
-    if re.search(r"\b(?:faktur\s+pajak)\b", first_lines, re.I):
-        return ClassificationResult(DocumentType.TAX_INVOICE, Decimal("0.95"), ("tax-invoice signal",), False)
-    if re.search(r"\b(?:customer\s+invoice|invoice\s+pelanggan|faktur\s+penjualan)\b", first_lines, re.I):
-        return ClassificationResult(DocumentType.CUSTOMER_INVOICE, Decimal("0.95"), ("customer-invoice signal",), False)
-    if re.search(r"\b(?:bukti\s+transfer|transfer\s+bank|transfer\s+berhasil|m-banking|internet\s+banking)\b", first_lines, re.I):
-        return ClassificationResult(DocumentType.TRANSFER_PROOF, Decimal("0.95"), ("payment-transfer signal",), False)
-
-    matches = [(kind, reason) for kind, pattern, reason in _CLASSIFICATION_RULES if re.search(pattern, text, re.I)]
-    if len(matches) != 1:
-        reasons = tuple(reason for _, reason in matches) or ("no supported deterministic signal",)
-        return ClassificationResult(DocumentType.UNKNOWN, Decimal("0.30") if matches else Decimal("0.00"), reasons, True)
-    kind, reason = matches[0]
-    return ClassificationResult(kind, Decimal("0.95"), (reason,), False)
+from src.services.documents.extraction import ExtractionResult
+from src.services.documents.image_processing import run_ocr_with_orientation
+from src.services.documents.normalization import parse_candidate_date, parse_candidate_money
+from src.services.documents.quality_gate import evaluate_page_text_quality
+from src.services.documents.rasterizer import open_pdf_document, render_pdf_page_to_image
+from src.services.documents.table_extractor import extract_line_items_from_text
 
 
 def sanitize_raw_text(text: str) -> str:
-    """Isolate against prompt-injection instructions in extracted text."""
+    """Isolates against prompt-injection instructions and illegal control chars in extracted text."""
     return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text).strip()
 
 
 class LocalExtractionProvider:
-    """Credential-free evidence parser using pypdf and RapidOCR.
+    """Credential-free evidence parser combining pypdf native text extraction,
+    bounded PDF rasterization (pypdfium2), and RapidOCR.
 
-    Produces structured fields, field-level evidence, and transparent confidence metrics.
+    Implements a hybrid pipeline:
+    1. Digital PDF: Uses native embedded text when quality gate passes.
+    2. Scanned PDF: Rasterizes pages to images and runs RapidOCR.
+    3. Mixed PDF: Page-by-page fallback preserving page provenance and ordering.
+    4. Rotated documents: Supports EXIF and 90/180/270 orientation recovery.
+    5. Table extraction: Structured line items with construction units and arithmetic validation.
     """
-    _ocr: RapidOCR | None = None
+    _ocr: Optional[RapidOCR] = None
 
     @classmethod
     def ocr(cls) -> RapidOCR:
@@ -86,60 +57,170 @@ class LocalExtractionProvider:
             raise FileNotFoundError(f"Document file not found at: {path}")
 
         start_time = time.monotonic()
-        scores: list[float] = []
-        page_count = 1
-        text = ""
+        pages_evidence: List[Dict[str, Any]] = []
+        all_scores: List[float] = []
+        all_boxes: List[Any] = []
+        all_ocr_txts: List[str] = []
+        extraction_modes: set[str] = set()
 
         if mime_type == "application/pdf":
             try:
-                reader = PdfReader(path)
+                # 1. Inspect with pypdf
+                reader = PdfReader(str(path))
                 if reader.is_encrypted:
-                    raise ValueError("Password-protected PDF cannot be processed")
-                page_count = len(reader.pages)
-                text = "\n".join(page.extract_text() or "" for page in reader.pages)
+                    raise InvalidFileError("Password-protected PDF cannot be processed")
+                total_pages = len(reader.pages)
+            except InvalidFileError:
+                raise
             except Exception as exc:
-                if "Password-protected" in str(exc):
-                    raise
-                raise ValueError(f"Corrupted or unreadable PDF: {exc}") from exc
-        else:
-            try:
-                output = self.ocr()(str(path))
-                text = "\n".join(output.txts or ())
-                scores = list(output.scores or ())
-            except Exception as exc:
-                raise ValueError(f"Image OCR processing failure: {exc}") from exc
+                raise InvalidFileError(f"Corrupted or unreadable PDF: {exc}") from exc
 
-        text = sanitize_raw_text(text)
+            max_pages = min(total_pages, settings.DOCUMENT_OCR_MAX_PAGES)
+            pdfium_doc = None
+
+            try:
+                for idx in range(max_pages):
+                    page_num = idx + 1
+                    native_text = ""
+                    try:
+                        native_text = reader.pages[idx].extract_text() or ""
+                    except Exception:
+                        native_text = ""
+
+                    quality = evaluate_page_text_quality(native_text)
+
+                    if quality.is_sufficient:
+                        # Fast path: native digital page
+                        clean_native = sanitize_raw_text(native_text)
+                        pages_evidence.append({
+                            "page_number": page_num,
+                            "source": "native",
+                            "char_count": len(clean_native),
+                            "confidence": "0.95",
+                            "raw_text": clean_native,
+                        })
+                        extraction_modes.add("native")
+                    else:
+                        # Fallback path: rasterize scanned or low-quality page
+                        if pdfium_doc is None:
+                            pdfium_doc = open_pdf_document(path)
+
+                        try:
+                            pil_img = render_pdf_page_to_image(
+                                pdfium_doc, idx, dpi=settings.DOCUMENT_OCR_DPI
+                            )
+                        except Exception as exc:
+                            raise PdfRenderError(f"Failed to rasterize PDF page {page_num}: {exc}") from exc
+
+                        try:
+                            txts, scores, angle, raw_out = run_ocr_with_orientation(
+                                self.ocr(), pil_img, try_rotations_on_failure=True
+                            )
+                        except Exception as exc:
+                            raise OcrProcessingError(f"OCR processing failed on page {page_num}: {exc}") from exc
+                        finally:
+                            del pil_img
+
+                        page_text = "\n".join(txts)
+                        clean_ocr_text = sanitize_raw_text(page_text)
+                        page_conf = Decimal(str(round(mean(scores), 4))) if scores else Decimal("0.00")
+                        all_scores.extend(scores)
+                        if raw_out and hasattr(raw_out, "boxes") and raw_out.boxes is not None:
+                            all_boxes.extend(list(raw_out.boxes))
+                            all_ocr_txts.extend(txts)
+
+                        pages_evidence.append({
+                            "page_number": page_num,
+                            "source": "ocr",
+                            "detected_rotation": angle,
+                            "char_count": len(clean_ocr_text),
+                            "confidence": str(page_conf),
+                            "raw_text": clean_ocr_text,
+                        })
+                        extraction_modes.add("ocr")
+            finally:
+                if pdfium_doc is not None:
+                    pdfium_doc.close()
+
+            combined_raw_text = "\n\n".join(
+                p["raw_text"] for p in pages_evidence if p["raw_text"].strip()
+            )
+            page_count = len(pages_evidence)
+
+        elif mime_type.startswith("image/"):
+            try:
+                pil_image = Image.open(path)
+            except Exception as exc:
+                raise InvalidFileError(f"Corrupted or unreadable image file: {exc}") from exc
+
+            try:
+                txts, scores, angle, raw_out = run_ocr_with_orientation(
+                    self.ocr(), pil_image, try_rotations_on_failure=True
+                )
+            except Exception as exc:
+                raise OcrProcessingError(f"Image OCR processing failure: {exc}") from exc
+            finally:
+                pil_image.close()
+
+            page_text = "\n".join(txts)
+            clean_text = sanitize_raw_text(page_text)
+            page_conf = Decimal(str(round(mean(scores), 4))) if scores else Decimal("0.00")
+            all_scores.extend(scores)
+            if raw_out and hasattr(raw_out, "boxes") and raw_out.boxes is not None:
+                all_boxes.extend(list(raw_out.boxes))
+                all_ocr_txts.extend(txts)
+
+            pages_evidence.append({
+                "page_number": 1,
+                "source": "ocr",
+                "detected_rotation": angle,
+                "char_count": len(clean_text),
+                "confidence": str(page_conf),
+                "raw_text": clean_text,
+            })
+            combined_raw_text = clean_text
+            page_count = 1
+            extraction_modes.add("ocr")
+
+        else:
+            raise UnsupportedFileError(f"Unsupported MIME type for extraction: {mime_type}")
+
+        text = combined_raw_text
         latency_ms = int((time.monotonic() - start_time) * 1000)
 
-        # Classification
+        # Document Classification
         classification = classify_text(text)
         kind = classification.document_type
 
-        # OCR score calculation
-        if scores:
-            ocr_score = Decimal(str(round(mean(scores), 4)))
+        # Overall OCR confidence calculation
+        if all_scores:
+            ocr_score = Decimal(str(round(mean(all_scores), 4)))
+        elif "native" in extraction_modes and text:
+            ocr_score = Decimal("0.95")
         elif text:
-            ocr_score = Decimal("0.90")
+            ocr_score = Decimal("0.85")
         else:
             ocr_score = Decimal("0.00")
 
-        # Amount extraction: Find total, subtotal, VAT
-        total_amount = None
-        total_candidate = parse_candidate_money(None)
         field_evidence: Dict[str, ExtractedField] = {}
 
-        # Look for explicit Total pattern first
-        total_match = re.search(r"(?:total(?:\s+bayar|\s+transfer|\s+tagihan|\s+pembayaran|\s+amount)?|jumlah(?:\s+transfer|\s+tagihan)?|grand\s+total)\s*[:=]?\s*(?:Rp\.?|IDR)?\s*([\d.,]+)", text, re.I)
+        # 1. Total Amount extraction
+        total_amount = None
+        total_candidate = parse_candidate_money(None)
+
+        total_match = re.search(
+            r"\b(?:grand\s+total|total\s+bayar|total\s+tagihan|total\s+transfer|total\s+pembayaran|total\s+amount|jumlah\s+transfer|jumlah\s+tagihan|(?<!sub)total|jumlah)\s*[:=]?\s*(?:Rp\.?|IDR)?\s*([\d.,\-]+)",
+            text,
+            re.I,
+        )
         if not total_match:
-            # Fallback to general amount match
-            total_match = re.search(r"(?:Rp\.?|IDR)\s*([\d.,]+)", text, re.I)
+            total_match = re.search(r"(?:Rp\.?|IDR)\s*([\d.,\-]+)", text, re.I)
         if not total_match:
-            # Last resort: standalone large number formatted as money
+            # Standalone formatted currency
             total_match = re.search(r"\b\d{1,3}(?:\.\d{3})+(?:,\d{2})?\b|\b\d{1,3}(?:,\d{3})+(?:\.\d{2})?\b", text)
 
         if total_match:
-            raw_val = total_match.group(1) if total_match.groups() else total_match.group(0)
+            raw_val = total_match.group(0)
             total_candidate = parse_candidate_money(raw_val)
             total_amount = total_candidate.value
             field_evidence["total_amount"] = ExtractedField(
@@ -149,8 +230,8 @@ class LocalExtractionProvider:
                 validation_status=total_candidate.validation_status,
             )
 
-        # Look for VAT/PPN
-        vat_match = re.search(r"(?:ppn|vat|pajak)(?:\s+11%|\s+12%)?\s*[:=]?\s*(?:Rp\.?|IDR)?\s*([\d.,]+)", text, re.I)
+        # 2. VAT / PPN Amount extraction
+        vat_match = re.search(r"(?:ppn|vat|pajak)(?:\s*1[12]%)?\s*[:=]?\s*(?:Rp\.?|IDR)?\s*([\d.,\-]+)", text, re.I)
         vat_amount = None
         if vat_match:
             raw_vat = vat_match.group(0)
@@ -164,11 +245,11 @@ class LocalExtractionProvider:
                     validation_status=vat_cand.validation_status,
                 )
 
-        # Look for Subtotal
-        subtotal_match = re.search(r"(?:subtotal|sub\s+total|dpp|ex\s+tax)\s*[\s\S]{0,10}?([\d.,]+)", text, re.I)
+        # 3. Subtotal extraction
+        subtotal_match = re.search(r"(?:subtotal|sub\s+total|dpp|ex\s+tax)\s*[:=]?\s*[\s\S]{0,10}?([\d.,\-]+)", text, re.I)
         subtotal_amount = None
         if subtotal_match:
-            raw_sub = subtotal_match.group(1) if subtotal_match.groups() else subtotal_match.group(0)
+            raw_sub = subtotal_match.group(0)
             sub_cand = parse_candidate_money(raw_sub)
             subtotal_amount = sub_cand.value
             if subtotal_amount is not None:
@@ -179,83 +260,103 @@ class LocalExtractionProvider:
                     validation_status=sub_cand.validation_status,
                 )
 
-        # Dates extraction
-        tx_date = None
-        due_date = None
-        date_cand = parse_candidate_date(None)
-        due_cand = parse_candidate_date(None)
+        # 4. Dates extraction (transaction date and due date)
+        tx_date: Optional[date] = None
+        due_date: Optional[date] = None
 
-        months_map = {
-            "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
-            "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12,
-            "MEI": 5, "AGU": 8, "OKT": 10, "DES": 12
-        }
-
-        # Check alphanumeric dates first (e.g. 11 MAR 2026, Date: 11 MAR 2026)
-        date_pattern = r"\b(?:date|tanggal)?\s*[:=]?\s*(\d{1,2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|MEI|AGU|OKT|DES)[A-Z]*\s+(\d{4})\b"
-        for dm in re.finditer(date_pattern, text, re.I):
-            day, mon_str, yr = dm.group(1), dm.group(2).upper(), dm.group(3)
-            try:
-                parsed_d = date(int(yr), months_map[mon_str], int(day))
-                # Check if preceding text indicates due date
-                pre_span = text[max(0, dm.start()-15):dm.start()]
-                if re.search(r"due|jatuh\s+tempo", pre_span, re.I):
-                    if not due_date:
-                        due_date = parsed_d
-                        due_cand = parse_candidate_date(str(parsed_d))
-                else:
-                    if not tx_date:
-                        tx_date = parsed_d
-                        date_cand = parse_candidate_date(str(parsed_d))
-            except Exception:
-                pass
-
-        if not tx_date:
-            date_match = re.search(r"\b(?:\d{4}-\d{2}-\d{2}|\d{2}[/-]\d{2}[/-]\d{4})\b", text)
-            if date_match:
-                date_cand = parse_candidate_date(date_match.group(0))
-                tx_date = date_cand.value
-                field_evidence["transaction_date"] = ExtractedField(
-                    value=str(tx_date) if tx_date else None,
-                    confidence=ocr_score if tx_date else Decimal("0.5"),
-                    evidence=date_match.group(0),
-                    validation_status=date_cand.validation_status,
+        # Look for explicit due date patterns
+        due_match = re.search(
+            r"(?:jatuh\s+tempo|due\s+date|bayar\s+sebelum)\s*[:=]?\s*([^\r\n]+)",
+            text,
+            re.I,
+        )
+        if due_match:
+            cand = parse_candidate_date(due_match.group(1).strip())
+            if cand.value:
+                due_date = cand.value
+                field_evidence["due_date"] = ExtractedField(
+                    value=str(due_date),
+                    confidence=ocr_score,
+                    evidence=due_match.group(0).strip(),
+                    validation_status=cand.validation_status,
                 )
-        elif tx_date:
-            field_evidence["transaction_date"] = ExtractedField(
-                value=str(tx_date),
-                confidence=ocr_score,
-                evidence=str(tx_date),
-                validation_status="VALID",
-            )
 
-        if due_date:
-            field_evidence["due_date"] = ExtractedField(
-                value=str(due_date),
-                confidence=ocr_score,
-                evidence=str(due_date),
-                validation_status="VALID",
-            )
+        # Look for transaction date patterns
+        date_pattern = (
+            r"\b(?:tanggal|tgl|date)\s*[:=]?\s*"
+            r"(\d{1,2}[\s\-]+(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|MEI|AGU|OKT|DES)[A-Z]*[\s\-]+\d{4}"
+            r"|\d{4}-\d{2}-\d{2}"
+            r"|\d{2}[/-]\d{2}[/-]\d{4})\b"
+        )
+        for dm in re.finditer(date_pattern, text, re.I):
+            matched_date_str = dm.group(1)
+            cand = parse_candidate_date(matched_date_str)
+            if cand.value and not tx_date:
+                tx_date = cand.value
+                field_evidence["transaction_date"] = ExtractedField(
+                    value=str(tx_date),
+                    confidence=ocr_score,
+                    evidence=dm.group(0),
+                    validation_status=cand.validation_status,
+                )
+                break
 
-        # Reference numbers
-        tax_inv_match = re.search(r"\b(?:tax\s+invoice|faktur\s+pajak)\s*[:#]?\s*([A-Za-z0-9\-\/]+)", text, re.I)
+        # Fallback date search
+        if not tx_date:
+            generic_date = re.search(
+                r"\b(\d{1,2}\s+(?:JANUARI|FEBRUARI|MARET|APRIL|MEI|JUNI|JULI|AGUSTUS|SEPTEMBER|OKTOBER|NOVEMBER|DESEMBER|JAN|FEB|PEB|MAR|APR|MAY|JUN|JUL|AGU|AGS|AUG|SEP|OKT|OCT|NOV|NOP|DES|DEC)\s+\d{4}"
+                r"|\d{4}-\d{2}-\d{2}"
+                r"|\d{2}[/-]\d{2}[/-]\d{4})\b",
+                text,
+                re.I,
+            )
+            if generic_date:
+                cand = parse_candidate_date(generic_date.group(1))
+                if cand.value:
+                    tx_date = cand.value
+                    field_evidence["transaction_date"] = ExtractedField(
+                        value=str(tx_date),
+                        confidence=ocr_score,
+                        evidence=generic_date.group(0),
+                        validation_status=cand.validation_status,
+                    )
+                elif cand.validation_status == "AMBIGUOUS":
+                    field_evidence["transaction_date"] = ExtractedField(
+                        value=None,
+                        confidence=Decimal("0.50"),
+                        evidence=generic_date.group(0),
+                        validation_status="AMBIGUOUS",
+                    )
+
+        # 5. Reference Numbers
+        # Tax invoice number
+        tax_inv_match = re.search(r"\b(?:tax\s+invoice|faktur\s+pajak)\s*[:#]?\s*([A-Za-z0-9\-\/.]+)", text, re.I)
         tax_invoice_num = tax_inv_match.group(1) if tax_inv_match else None
 
+        # Standard invoice number
         inv_match = re.search(r"\b(?:INV|FAK|BILL)[-/][A-Z0-9-/]+", text, re.I)
-        invoice_number = (tax_inv_match.group(0) if tax_inv_match else None) or (inv_match.group(0) if inv_match else None)
+        if not inv_match:
+            inv_match = re.search(r"\b(?:no(?:mor)?\s*invoice|no(?:mor)?\s*faktur|invoice\s*no)\s*[:#]?\s*([A-Za-z0-9\-\/]+)", text, re.I)
+        invoice_number = tax_invoice_num or (inv_match.group(1) if (inv_match and inv_match.groups()) else (inv_match.group(0) if inv_match else None))
         if invoice_number:
             field_evidence["invoice_number"] = ExtractedField(
-                value=tax_invoice_num or invoice_number,
+                value=invoice_number,
                 confidence=Decimal("0.95"),
-                evidence=invoice_number,
+                evidence=inv_match.group(0) if inv_match else (tax_inv_match.group(0) if tax_inv_match else invoice_number),
                 validation_status="VALID",
             )
 
-        spk_match = re.search(r"\b(?:SPK|PO|PRJ)[-/][A-Z0-9-/]+", text, re.I)
-        spk_number = spk_match.group(0) if spk_match else None
+        # SPK / PO reference number
+        spk_match = re.search(r"\b(?:SPK|PRJ|WO)[-/][A-Z0-9-/]+", text, re.I)
+        po_match = re.search(r"\b(?:PO)[-/][A-Z0-9-/]+", text, re.I)
+        if not po_match:
+            po_match = re.search(r"\b(?:po\s*no|nomor\s*po|po\s*number)\s*[:#]?\s*([A-Za-z0-9\-\/]+)", text, re.I)
+
+        spk_number = spk_match.group(0) if spk_match else (po_match.group(1) if (po_match and po_match.groups()) else (po_match.group(0) if po_match else None))
         slash_ref = re.search(r"\b\d{3}/[A-Z0-9\-]+(?:/[A-Z0-9\-]+)+\b", text)
         if not spk_number and slash_ref:
             spk_number = slash_ref.group(0)
+
         if spk_number:
             field_evidence["spk_number"] = ExtractedField(
                 value=spk_number,
@@ -264,7 +365,8 @@ class LocalExtractionProvider:
                 validation_status="VALID",
             )
 
-        bast_match = re.search(r"\b(?:BAST)[-/][A-Z0-9-/]+", text, re.I)
+        # BAST number
+        bast_match = re.search(r"\b(?:BAST|BA)[-/][A-Z0-9-/]+", text, re.I)
         bast_number = bast_match.group(0) if bast_match else None
         if bast_number:
             field_evidence["bast_number"] = ExtractedField(
@@ -274,14 +376,52 @@ class LocalExtractionProvider:
                 validation_status="VALID",
             )
 
-        # Bank hints
-        bank_match = re.search(r"\b(BCA|MANDIRI|BRI|BNI|BSI|CIMB|PERMATA|DANAMON)\b", text, re.I)
+        # 6. Bank Hints & Transfer Metadata
+        bank_match = re.search(r"\b(BCA|MANDIRI|BRI|BNI|BSI|CIMB|PERMATA|DANAMON|JAGO|JENIUS|SEABANK|BTPN)\b", text, re.I)
         bank_name = bank_match.group(1).upper() if bank_match else None
 
-        # Counterparty name hints
+        # Transfer reference
+        transfer_ref = None
+        tref_match = re.search(r"\b(?:no(?:mor)?\s*referensi|ref\s*#?|reference\s*no|no\s*transaksi)\s*[:=]?\s*([A-Za-z0-9\-\/]+)", text, re.I)
+        if tref_match:
+            transfer_ref = tref_match.group(1)
+            field_evidence["transfer_reference"] = ExtractedField(
+                value=transfer_ref,
+                confidence=Decimal("0.95"),
+                evidence=tref_match.group(0),
+                validation_status="VALID",
+            )
+
+        # Destination account name & number
+        dest_account_no = None
+        dest_account_name = None
+        acc_no_match = re.search(r"\b(?:rekening\s+tujuan|no\s+rek|nomor\s+rekening)\s*[:=]?\s*(\d{7,16})\b", text, re.I)
+        if acc_no_match:
+            dest_account_no = acc_no_match.group(1)
+            field_evidence["destination_account_number"] = ExtractedField(
+                value=dest_account_no,
+                confidence=Decimal("0.95"),
+                evidence=acc_no_match.group(0),
+                validation_status="VALID",
+            )
+
+        acc_name_match = re.search(r"\b(?:nama\s+tujuan|nama\s+penerima|penerima)\s*[:=]?\s*([A-Za-z0-9\s.,\-]+)", text, re.I)
+        if acc_name_match:
+            first_line = acc_name_match.group(1).strip().splitlines()[0].strip()
+            if len(first_line) > 2:
+                dest_account_name = first_line
+                field_evidence["destination_account_name"] = ExtractedField(
+                    value=dest_account_name,
+                    confidence=Decimal("0.90"),
+                    evidence=first_line,
+                    validation_status="VALID",
+                )
+
+        # 7. Counterparty Entities (Issuer & Recipient)
         issuer_name = None
         recipient_name = None
-        for line in text.splitlines()[:5]:
+
+        for line in text.splitlines()[:8]:
             clean_l = line.strip()
             if re.match(r"^(?:PT|CV|UD|TOKO)\b", clean_l, re.I) and len(clean_l) > 3:
                 issuer_name = clean_l
@@ -293,10 +433,14 @@ class LocalExtractionProvider:
                 )
                 break
 
-        recip_match = re.search(r"\b(?:bill\s+to|deliver\s+to|customer|kepada|pembeli)\s*[:=]?\s*[\s\S]{0,10}?([A-Za-z0-9\s.,\-]+)", text, re.I)
+        recip_match = re.search(
+            r"\b(?:bill\s+to|deliver\s+to|customer|kepada|pembeli|kepada\s+yth)\s*[:=]?\s*[\s\S]{0,10}?([A-Za-z0-9\s.,\-]+)",
+            text,
+            re.I,
+        )
         if recip_match:
             cand_recipient = recip_match.group(1).strip().splitlines()[0].strip()
-            if re.match(r"^(?:PT|CV|UD|TOKO)\b", cand_recipient, re.I):
+            if len(cand_recipient) > 2 and (re.match(r"^(?:PT|CV|UD|TOKO)\b", cand_recipient, re.I) or not issuer_name):
                 recipient_name = cand_recipient
                 field_evidence["recipient_name"] = ExtractedField(
                     value=recipient_name,
@@ -305,30 +449,19 @@ class LocalExtractionProvider:
                     validation_status="VALID",
                 )
 
-        # Line items summary
-        line_items: List[LineItem] = []
-        for line in text.splitlines():
-            line = line.strip()
-            item_match = re.match(r"^([A-Za-z0-9\s/.,\-]+?)\s+(\d+)\s*(?:x|@)?\s*(?:Rp\.?|IDR)?\s*([\d.,]+)\s*[:=]?\s*(?:Rp\.?|IDR)?\s*([\d.,]+)$", line, re.I)
-            if item_match:
-                desc, qty_str, price_str, amt_str = item_match.groups()
-                q_c = parse_candidate_money(qty_str)
-                p_c = parse_candidate_money(price_str)
-                a_c = parse_candidate_money(amt_str)
-                if desc and a_c.value is not None:
-                    line_items.append(LineItem(
-                        description=desc.strip(),
-                        quantity=q_c.value,
-                        unit_price=p_c.value,
-                        amount=a_c.value,
-                    ))
+        # 8. Line Items Table Extraction
+        line_items = extract_line_items_from_text(
+            raw_text=text,
+            ocr_boxes=all_boxes if all_boxes else None,
+            ocr_txts=all_ocr_txts if all_ocr_txts else None,
+        )
 
-        # Project reference
+        # 9. Project Reference
         project_ref = spk_number or (re.search(r"\bPRJ[-/][A-Z0-9-/]+", text, re.I).group(0) if re.search(r"\bPRJ[-/][A-Z0-9-/]+", text, re.I) else None)
 
-        # Structured data
+        # 10. Structured Extraction Schema
         data = StructuredExtraction(
-            document_number=invoice_number or spk_number or bast_number,
+            document_number=invoice_number or spk_number or bast_number or transfer_ref,
             invoice_number=invoice_number,
             spk_number=spk_number,
             bast_number=bast_number,
@@ -342,24 +475,30 @@ class LocalExtractionProvider:
             currency_code="IDR" if total_amount is not None else None,
             origin_bank=bank_name if kind == DocumentType.TRANSFER_PROOF else None,
             destination_bank=bank_name if kind == DocumentType.TRANSFER_PROOF else None,
+            destination_account_number=dest_account_no,
+            destination_account_name=dest_account_name,
+            transfer_reference=transfer_ref,
             project_reference=project_ref,
             line_items=line_items,
             raw_text=text or None,
             field_evidence=field_evidence,
         )
 
-        amount_conf = (ocr_score if total_amount is not None and total_candidate.validation_status == "VALID"
-                       else Decimal("0.50") if total_candidate.validation_status == "AMBIGUOUS"
-                       else Decimal("0.00"))
+        amount_conf = (
+            ocr_score if total_amount is not None and total_candidate.validation_status == "VALID"
+            else Decimal("0.50") if total_candidate.validation_status == "AMBIGUOUS"
+            else Decimal("0.00")
+        )
 
         confidence = ConfidenceScores(
             ocr_confidence=ocr_score,
             document_type_confidence=classification.confidence,
-            entity_confidence=Decimal("0.80") if (invoice_number or bank_name) else Decimal("0.00"),
+            entity_confidence=Decimal("0.85") if (invoice_number or bank_name or issuer_name) else Decimal("0.00"),
             project_confidence=Decimal("0.90") if project_ref else Decimal("0.00"),
             amount_confidence=amount_conf,
         )
 
+        mode_desc = "hybrid" if len(extraction_modes) > 1 else (list(extraction_modes)[0] if extraction_modes else "empty")
         telemetry = {
             "provider": "local",
             "mime_type": mime_type,
@@ -367,6 +506,8 @@ class LocalExtractionProvider:
             "char_count": len(text),
             "latency_ms": latency_ms,
             "ocr_score": str(ocr_score),
+            "extraction_mode": mode_desc,
+            "pages": pages_evidence,
             "success": True,
         }
 
@@ -375,6 +516,6 @@ class LocalExtractionProvider:
             data=data,
             confidence=confidence,
             provider_name="local",
-            provider_version="1.1.0",
+            provider_version="2.0.0",
             raw_payload=telemetry,
         )

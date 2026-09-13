@@ -2,7 +2,7 @@ import uuid
 from typing import Optional, Dict, Any, List
 from datetime import date, datetime
 from decimal import Decimal
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.models.enums import (DocumentType, DocumentProcessingStatus, TransactionType,
                               CostCategory, ExpenseCategory, CandidateStatus)
@@ -21,8 +21,19 @@ class LineItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
     description: str
     quantity: Optional[Decimal] = None
+    unit: Optional[str] = None
     unit_price: Optional[Decimal] = None
+    tax: Optional[Decimal] = None
     amount: Optional[Decimal] = None
+    line_total: Optional[Decimal] = None
+
+    @model_validator(mode="after")
+    def sync_amount_and_line_total(self) -> "LineItem":
+        if self.line_total is None and self.amount is not None:
+            object.__setattr__(self, "line_total", self.amount)
+        elif self.amount is None and self.line_total is not None:
+            object.__setattr__(self, "amount", self.line_total)
+        return self
 
 
 class ExtractedField(BaseModel):

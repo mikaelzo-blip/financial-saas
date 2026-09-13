@@ -7,7 +7,15 @@ from sqlalchemy import select
 
 from src.models.organization import Organization
 from src.models.coa import ChartOfAccount, PaymentAccount
-from src.models.enums import AccountType, NormalBalance, ReconciliationStatus
+from src.models.enums import (
+    AccountType,
+    NormalBalance,
+    ReconciliationStatus,
+    TransactionType,
+    WorkflowStatus,
+)
+from src.models.journal import JournalEntry, JournalLine
+from src.models.transaction import Transaction
 from src.services.bank_reconciliation_service import BankReconciliationService
 from src.schemas.bank_reconciliation import BankReconciliationMatchRequest
 from src.core.exceptions import DuplicateEntityException
@@ -119,6 +127,46 @@ async def test_cash_completeness_dashboard_and_reconciliation(db_session: AsyncS
     )
 
     line = stmt_import.lines[0]
+    transaction = Transaction(
+        organization_id=org.id,
+        transaction_code="TX-RECON-DASH-001",
+        transaction_type=TransactionType.CUSTOMER_INVOICE,
+        transaction_date=date(2026, 3, 5),
+        amount=Decimal("20000000.00"),
+        workflow_status=WorkflowStatus.APPROVED,
+        description="Customer receipt for reconciliation test",
+    )
+    db_session.add(transaction)
+    await db_session.flush()
+    journal_entry = JournalEntry(
+        organization_id=org.id,
+        entry_number="JE-RECON-DASH-001",
+        transaction_id=transaction.id,
+        posting_date=date(2026, 3, 5),
+        description="Cash receipt reconciliation test",
+        total_debit=Decimal("20000000.00"),
+        total_credit=Decimal("20000000.00"),
+        is_balanced=True,
+    )
+    db_session.add(journal_entry)
+    await db_session.flush()
+    journal_line = JournalLine(
+        journal_entry_id=journal_entry.id,
+        line_number=1,
+        account_id=coa_1101.id,
+        debit_amount=Decimal("20000000.00"),
+        credit_amount=Decimal("0.00"),
+        payment_account_id=bank_acc.id,
+    )
+    offset_line = JournalLine(
+        journal_entry_id=journal_entry.id,
+        line_number=2,
+        account_id=coa_1101.id,
+        debit_amount=Decimal("0.00"),
+        credit_amount=Decimal("20000000.00"),
+    )
+    db_session.add_all([journal_line, offset_line])
+    await db_session.flush()
 
     # Check dashboard before match
     dash_before = await service.get_cash_completeness_dashboard(org.id, payment_account_id=bank_acc.id)
@@ -131,6 +179,7 @@ async def test_cash_completeness_dashboard_and_reconciliation(db_session: AsyncS
         organization_id=org.id,
         req=BankReconciliationMatchRequest(
             statement_line_id=line.id,
+            journal_line_id=journal_line.id,
             matched_amount=Decimal("20000000.00"),
             notes="Matched with client transfer"
         )

@@ -1,21 +1,28 @@
 # Project Status
 
 - **Last reconciled**: 2026-09-13
-- **Current branch**: `hermes/fin-p1-102-transaction-type-contract`
-- **Base commit**: `befb74a9b60ab746e8ac779accccc151c5552047` (`origin/main` aligned at branch creation)
-- **Active feature**: FIN-P1-102 — TransactionType Ingestion vs Executable Processing Contract
-- **Active checkpoint**: CP4 — Final Regression, Safety Review, and Delivery (COMPLETED; PR open and green)
-- **CP3 starting HEAD**: `2e87be5c1f7b27c4aecbd791d26846ea5fc9d724` (verified CP2 commit)
-- **CP3 implementation commit**: `d39520e080b6b9568ca5e8763a211cda24362641` (`fix(fin-p1-102): enforce document processing capability (CP3)`)
-- **CP4 starting HEAD**: `6344da44240160d567c3473100ecfa3b0aa8e3c1` (CP3 closure metadata)
-- **CP4 Local Verification**:
-  - FIN-P1-102: 46 collected — 46 passed, 0 xfailed, 0 failed, 0 errors.
-  - Local backend suite excluding fail-closed FIN-001 PostgreSQL integration groups: 635 passed, 79 skipped, 0 failed, 0 errors. The full local invocation reported 26 setup errors solely because `FIN_001_TEST_DATABASE_URL` was absent; no local PostgreSQL service, Docker daemon, or `psql` client was available. CI provisions PostgreSQL 16 and is the remaining authoritative mandatory PostgreSQL gate.
-  - AUTHZ-001: 103 passed. FIN-P1-105: 35 passed, 1 skipped because the live PostgreSQL service was unavailable. FIN-001 retry classification: 7 passed. Feature 012 sequence/bootstrap: 28 passed.
-  - Accounting/reversal/document-posting regression slice: 18 passed. `ProcessingPolicyService` and focused contract tests preserve AUTO_SAFE, reversal, approval, sequence, and ledger boundaries.
-  - Frontend: 66 tests passed; lint passed with 8 pre-existing warnings; typecheck and production build passed; production dependency audit found 0 vulnerabilities.
-  - Backend: `compileall`, `pip check`, and locked-production `pip-audit` passed; Ruff and mypy are not configured/available. Diff security pattern scan found no hardcoded secrets, unsafe shell/eval/pickle, or formatted SQL patterns.
-  - Alembic: one head `023_historical_seq_bootstrap`; offline chain generated successfully. Local `alembic current` and `alembic check` require PostgreSQL and remain pending CI.
-  - Independent CP4 review: PASS — 0 Critical, 0 High, 0 Medium, 0 Low.
-- **CP4 Scope confirmation**: No new posting rules or accounting policy, TransactionType enum, database schema/migrations, frontend product code, authorization policy, or historical data changes. Generic unsupported input behavior changes from 201 STAGED to 422 `INVARIANT_VIOLATION`; schemas, routes, and response models do not change.
-- **Next checkpoint**: Commit CP4 verification metadata, push branch, create PR, and require green GitHub CI before marking delivery complete.
+- **Current branch**: `hermes/recon-001-reconciliation-integrity`
+- **Base commit**: `e3c33ec3432ecff81c64be02012eaf51b55c5269` (`fix(accounting): reject unsupported transaction processing types (#64)`)
+- **Active feature**: RECON-001 — Bank Reconciliation Integrity (Cardinality, Amount Integrity, and Dashboard Correctness)
+- **Status**: CHECKPOINT 4 VERIFIED LOCALLY — awaiting final independent review and remote delivery.
+- **Scope Confirmation**:
+  - CP2's canonical `_validate_and_resolve_match` service boundary rejects `WorkflowStatus.REJECTED` transaction targets before matching.
+  - CP3 adds migration `024_recon_integrity_invariants`, named check constraints, and four active-state partial unique indexes for statement lines and reconciliation targets.
+  - CP4 adds migration `025_transaction_rejected`, which makes the approved terminal transaction rejection state representable in PostgreSQL.
+  - CP3 corrects unmatched-book aggregation to sum cash journal lines that lack an active reconciliation reference; no synthetic subtraction remains.
+  - CP4 updates PostgreSQL head assertions and CI enforcement for the forward migration; accounting posting, ledger balance, tenant/RBAC behavior, and frontend code remain unchanged.
+- **Verification**:
+  - CP3 is committed at `120e2a490b69934e4d91abf7e0bbb8184f151641` (`feat(recon-001): enforce reconciliation database invariants (CP3)`).
+  - Fresh disposable PostgreSQL 16: migration upgrade/downgrade/re-upgrade, offline SQL, live catalog checks, `alembic check`, and 20-worker statement-line and target-reuse races passed.
+  - Prior CP4 validation through migration `024`: 801 backend tests and 36 mandatory PostgreSQL tests passed; frontend recorded 66 passing tests plus lint, typecheck, build, and audit.
+  - Final `025_transaction_rejected` candidate: 802 backend tests passed with no failures or skips; 66 frontend tests passed; frontend lint, typecheck, build, and production dependency audit passed.
+  - Fresh disposable PostgreSQL 16 reached `025_transaction_rejected`; RECON catalog/enum and 20-worker concurrency suite passed (3 tests), and Alembic head/current, drift, and offline-chain checks passed.
+  - Backend `pip check`, locked production `pip-audit`, `compileall`, and repository safety passed.
+  - Independent CP3 reviews: first PASS (0/0/0/3); final staged-tree PASS (0/0/0/0). The three earlier Low coverage findings were remediated and verified.
+  - Final CP4 independent delivery review: PASS (0 Critical, 0 High, 0 Medium, 0 Low); it reproduced RECON security, PostgreSQL 16 catalog/races, Alembic, sibling security, and frontend checks.
+- **Checkpoints Defined**:
+  - CP1: Executable RED reproduction & characterization suite [COMPLETED].
+  - CP2: Canonical reconciliation integrity service boundary & auto-match unification [COMPLETED].
+  - CP3: Database constraints, fail-closed historical preflight migration, PostgreSQL concurrency proof, and dashboard metric correction [COMMITTED: `120e2a4`].
+  - CP4: Full regression, CI fail-closed PostgreSQL configuration, final review, and remote delivery [LOCAL GATES VERIFIED].
+- **Next action**: Commit the verified CP4 reconciliation, then push and open a pull request.

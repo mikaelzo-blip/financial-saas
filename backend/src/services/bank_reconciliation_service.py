@@ -19,7 +19,7 @@ from src.models.journal import JournalLine, JournalEntry
 from src.models.money_movement import MoneyMovement, Settlement
 from src.models.transaction import Transaction
 
-from src.models.enums import ReconciliationStatus, StatementImportStatus, MovementDirection
+from src.models.enums import ReconciliationStatus, StatementImportStatus, MovementDirection, WorkflowStatus
 from src.schemas.bank_reconciliation import (
     BankStatementLineCreate,
     BankReconciliationMatchRequest,
@@ -152,6 +152,191 @@ class BankReconciliationService:
             )
         return lines
 
+    async def _validate_and_resolve_match(
+        self,
+        organization_id: uuid.UUID,
+        statement_line_id: uuid.UUID,
+        journal_line_id: Optional[uuid.UUID] = None,
+        money_movement_id: Optional[uuid.UUID] = None,
+        transaction_id: Optional[uuid.UUID] = None,
+        matched_amount: Optional[Decimal] = None,
+    ) -> Tuple[BankStatementLine, Optional[JournalLine], Optional[MoneyMovement], Optional[Transaction], Decimal]:
+        """Resolve and validate one reconciliation target before persistence."""
+        # Resolve every supplied target before cardinality checks to preserve 404 anti-oracle semantics.
+        target_jl: Optional[JournalLine] = None
+        target_mm: Optional[MoneyMovement] = None
+        target_tx: Optional[Transaction] = None
+
+        if journal_line_id is not None:
+            target_jl = await self.session.scalar(
+                select(JournalLine)
+                .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
+                .where(
+                    JournalLine.id == journal_line_id,
+                    JournalEntry.organization_id == organization_id,
+                )
+            )
+            if not target_jl:
+                raise EntityNotFoundException("JournalLine", journal_line_id)
+
+        if money_movement_id is not None:
+            target_mm = await self.session.scalar(
+                select(MoneyMovement).where(
+                    MoneyMovement.id == money_movement_id,
+                    MoneyMovement.organization_id == organization_id,
+                )
+            )
+            if not target_mm:
+                raise EntityNotFoundException("MoneyMovement", money_movement_id)
+
+        if transaction_id is not None:
+            target_tx = await self.session.scalar(
+                select(Transaction).where(
+                    Transaction.id == transaction_id,
+                    Transaction.organization_id == organization_id,
+                )
+            )
+            if not target_tx:
+                raise EntityNotFoundException("Transaction", transaction_id)
+
+        # Precedence 2: Single-target discriminator (exactly one target)
+        supplied_targets = sum(1 for t in (journal_line_id, money_movement_id, transaction_id) if t is not None)
+        if supplied_targets != 1:
+            raise InvariantViolationException(
+                "Reconciliation match must specify exactly one target (journal_line_id, money_movement_id, or transaction_id)"
+            )
+
+        # Locking: Lock BankStatementLine first, then the selected target
+        line = await self.session.scalar(
+            select(BankStatementLine)
+            .where(
+                BankStatementLine.id == statement_line_id,
+                BankStatementLine.organization_id == organization_id,
+            )
+            .with_for_update()
+        )
+        if not line:
+            raise EntityNotFoundException("BankStatementLine", statement_line_id)
+
+        stmt_import = await self.session.scalar(
+            select(BankStatementImport).where(
+                BankStatementImport.id == line.import_id,
+                BankStatementImport.organization_id == organization_id,
+            )
+        )
+        if not stmt_import:
+            raise EntityNotFoundException("BankStatementImport", line.import_id)
+
+        if target_jl is not None:
+            target_jl = await self.session.scalar(
+                select(JournalLine).where(JournalLine.id == target_jl.id).with_for_update()
+            )
+        elif target_mm is not None:
+            target_mm = await self.session.scalar(
+                select(MoneyMovement).where(MoneyMovement.id == target_mm.id).with_for_update()
+            )
+        elif target_tx is not None:
+            target_tx = await self.session.scalar(
+                select(Transaction).where(Transaction.id == target_tx.id).with_for_update()
+            )
+
+        # Precedence 3: Statement-line and target active reconciliation checks (409)
+        if line.reconciliation_status == ReconciliationStatus.MATCHED:
+            raise DuplicateEntityException(f"Bank statement line {line.id} is already reconciled")
+
+        existing_line_recon = await self.session.scalar(
+            select(BankReconciliation.id).where(
+                BankReconciliation.statement_line_id == line.id,
+                BankReconciliation.status == ReconciliationStatus.MATCHED,
+            )
+        )
+        if existing_line_recon:
+            raise DuplicateEntityException(f"Bank statement line {line.id} already has an active reconciliation")
+
+        if target_jl is not None:
+            existing_target_recon = await self.session.scalar(
+                select(BankReconciliation.id).where(
+                    BankReconciliation.journal_line_id == target_jl.id,
+                    BankReconciliation.status == ReconciliationStatus.MATCHED,
+                )
+            )
+            if existing_target_recon:
+                raise DuplicateEntityException(f"Journal line {target_jl.id} is already reconciled to another statement line")
+
+        elif target_mm is not None:
+            existing_target_recon = await self.session.scalar(
+                select(BankReconciliation.id).where(
+                    BankReconciliation.money_movement_id == target_mm.id,
+                    BankReconciliation.status == ReconciliationStatus.MATCHED,
+                )
+            )
+            if existing_target_recon:
+                raise DuplicateEntityException(f"Money movement {target_mm.id} is already reconciled to another statement line")
+
+        elif target_tx is not None:
+            existing_target_recon = await self.session.scalar(
+                select(BankReconciliation.id).where(
+                    BankReconciliation.transaction_id == target_tx.id,
+                    BankReconciliation.status == ReconciliationStatus.MATCHED,
+                )
+            )
+            if existing_target_recon:
+                raise DuplicateEntityException(f"Transaction {target_tx.id} is already reconciled to another statement line")
+
+        # Precedence 4: Bank-line amount, target amount, and directional consistency (422)
+        bank_amount = line.credit if line.credit > Decimal("0.00") else line.debit
+
+        if matched_amount is not None and matched_amount != bank_amount:
+            raise InvariantViolationException(
+                f"Matched amount ({matched_amount}) does not match statement line amount ({bank_amount})"
+            )
+
+        if target_jl is not None:
+            if target_jl.payment_account_id != stmt_import.payment_account_id:
+                raise InvariantViolationException("Journal line payment account does not match the statement import")
+            if line.credit > Decimal("0.00"):
+                if target_jl.debit_amount <= Decimal("0.00") or target_jl.credit_amount > Decimal("0.00"):
+                    raise InvariantViolationException("Directional mismatch: bank inflow requires cash debit journal line")
+                if target_jl.debit_amount != bank_amount:
+                    raise InvariantViolationException(
+                        f"Target amount ({target_jl.debit_amount}) does not match bank line amount ({bank_amount})"
+                    )
+            elif line.debit > Decimal("0.00"):
+                if target_jl.credit_amount <= Decimal("0.00") or target_jl.debit_amount > Decimal("0.00"):
+                    raise InvariantViolationException("Directional mismatch: bank outflow requires cash credit journal line")
+                if target_jl.credit_amount != bank_amount:
+                    raise InvariantViolationException(
+                        f"Target amount ({target_jl.credit_amount}) does not match bank line amount ({bank_amount})"
+                    )
+
+        elif target_mm is not None:
+            if target_mm.payment_account_id != stmt_import.payment_account_id:
+                raise InvariantViolationException("Money movement payment account does not match the statement import")
+            if line.credit > Decimal("0.00"):
+                if target_mm.direction != MovementDirection.IN:
+                    raise InvariantViolationException(
+                        f"Directional mismatch: bank inflow cannot match MoneyMovement direction {target_mm.direction}"
+                    )
+            elif line.debit > Decimal("0.00"):
+                if target_mm.direction != MovementDirection.OUT:
+                    raise InvariantViolationException(
+                        f"Directional mismatch: bank outflow cannot match MoneyMovement direction {target_mm.direction}"
+                    )
+            if target_mm.amount != bank_amount:
+                raise InvariantViolationException(
+                    f"Target amount ({target_mm.amount}) does not match bank line amount ({bank_amount})"
+                )
+
+        elif target_tx is not None:
+            if target_tx.workflow_status == WorkflowStatus.REJECTED:
+                raise InvariantViolationException("Rejected transaction cannot be reconciled")
+            if target_tx.amount != bank_amount:
+                raise InvariantViolationException(
+                    f"Target amount ({target_tx.amount}) does not match bank line amount ({bank_amount})"
+                )
+
+        return line, target_jl, target_mm, target_tx, bank_amount
+
     async def auto_match_statement(
         self,
         organization_id: uuid.UUID,
@@ -176,69 +361,129 @@ class BankReconciliationService:
         lines = (await self.session.scalars(
             select(BankStatementLine).where(
                 BankStatementLine.import_id == import_id,
+                BankStatementLine.organization_id == organization_id,
                 BankStatementLine.reconciliation_status == ReconciliationStatus.UNMATCHED_BANK
-            )
+            ).order_by(BankStatementLine.line_number)
         )).all()
 
         stats = {"matched": 0, "review_required": 0, "unmatched": 0}
+        claimed_mm_ids: set[uuid.UUID] = set()
+        claimed_jl_ids: set[uuid.UUID] = set()
 
         for line in lines:
-            # 1. Match by reference if present
             matched = False
-            line_amount = line.credit if line.credit > 0 else line.debit
+            line_amount = line.credit if line.credit > Decimal("0.00") else line.debit
 
+            # 1. Match by reference if present
             if line.reference:
-                # Look for matching money movement
-                mm = await self.session.scalar(
+                active_mm_subquery = (
+                    select(BankReconciliation.money_movement_id)
+                    .where(
+                        BankReconciliation.organization_id == organization_id,
+                        BankReconciliation.money_movement_id.is_not(None),
+                        BankReconciliation.status == ReconciliationStatus.MATCHED,
+                    )
+                )
+                candidate_mms = (await self.session.scalars(
                     select(MoneyMovement).where(
                         MoneyMovement.organization_id == organization_id,
                         MoneyMovement.payment_account_id == stmt_import.payment_account_id,
                         MoneyMovement.reference_no == line.reference,
-                        MoneyMovement.amount == line_amount
+                        MoneyMovement.amount == line_amount,
+                        MoneyMovement.id.not_in(active_mm_subquery),
                     )
-                )
-                if mm:
-                    reconcil = BankReconciliation(
-                        organization_id=organization_id,
-                        statement_line_id=line.id,
-                        money_movement_id=mm.id,
-                        status=ReconciliationStatus.MATCHED,
-                        matched_amount=line_amount,
-                        match_rule="EXACT_REFERENCE_AND_AMOUNT"
-                    )
-                    self.session.add(reconcil)
-                    line.reconciliation_status = ReconciliationStatus.MATCHED
-                    stats["matched"] += 1
-                    matched = True
+                )).all()
+
+                for cand_mm in candidate_mms:
+                    if cand_mm.id in claimed_mm_ids:
+                        continue
+                    try:
+                        (
+                            validated_line,
+                            target_jl,
+                            target_mm,
+                            target_tx,
+                            bank_amount,
+                        ) = await self._validate_and_resolve_match(
+                            organization_id=organization_id,
+                            statement_line_id=line.id,
+                            money_movement_id=cand_mm.id,
+                            matched_amount=line_amount,
+                        )
+                        reconcil = BankReconciliation(
+                            organization_id=organization_id,
+                            statement_line_id=validated_line.id,
+                            money_movement_id=target_mm.id,
+                            status=ReconciliationStatus.MATCHED,
+                            matched_amount=bank_amount,
+                            match_rule="EXACT_REFERENCE_AND_AMOUNT",
+                        )
+                        validated_line.reconciliation_status = ReconciliationStatus.MATCHED
+                        self.session.add(reconcil)
+                        claimed_mm_ids.add(target_mm.id)
+                        stats["matched"] += 1
+                        matched = True
+                        break
+                    except (InvariantViolationException, DuplicateEntityException, EntityNotFoundException):
+                        continue
 
             # 2. Match by exact amount and date
             if not matched:
-                jl = await self.session.scalar(
+                active_jl_subquery = (
+                    select(BankReconciliation.journal_line_id)
+                    .where(
+                        BankReconciliation.organization_id == organization_id,
+                        BankReconciliation.journal_line_id.is_not(None),
+                        BankReconciliation.status == ReconciliationStatus.MATCHED,
+                    )
+                )
+                candidate_jls = (await self.session.scalars(
                     select(JournalLine)
-                    .join(JournalEntry)
+                    .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
                     .where(
                         JournalLine.payment_account_id == stmt_import.payment_account_id,
                         JournalEntry.organization_id == organization_id,
                         JournalEntry.posting_date == line.transaction_date,
                         or_(
-                            and_(line.credit > 0, JournalLine.debit_amount == line.credit),
-                            and_(line.debit > 0, JournalLine.credit_amount == line.debit)
+                            and_(line.credit > Decimal("0.00"), JournalLine.debit_amount == line.credit, JournalLine.credit_amount == Decimal("0.00")),
+                            and_(line.debit > Decimal("0.00"), JournalLine.credit_amount == line.debit, JournalLine.debit_amount == Decimal("0.00")),
+                        ),
+                        JournalLine.id.not_in(active_jl_subquery),
+                    )
+                )).all()
+
+                for cand_jl in candidate_jls:
+                    if cand_jl.id in claimed_jl_ids:
+                        continue
+                    try:
+                        (
+                            validated_line,
+                            target_jl,
+                            target_mm,
+                            target_tx,
+                            bank_amount,
+                        ) = await self._validate_and_resolve_match(
+                            organization_id=organization_id,
+                            statement_line_id=line.id,
+                            journal_line_id=cand_jl.id,
+                            matched_amount=line_amount,
                         )
-                    )
-                )
-                if jl:
-                    reconcil = BankReconciliation(
-                        organization_id=organization_id,
-                        statement_line_id=line.id,
-                        journal_line_id=jl.id,
-                        status=ReconciliationStatus.MATCHED,
-                        matched_amount=line_amount,
-                        match_rule="EXACT_DATE_AND_AMOUNT"
-                    )
-                    self.session.add(reconcil)
-                    line.reconciliation_status = ReconciliationStatus.MATCHED
-                    stats["matched"] += 1
-                    matched = True
+                        reconcil = BankReconciliation(
+                            organization_id=organization_id,
+                            statement_line_id=validated_line.id,
+                            journal_line_id=target_jl.id,
+                            status=ReconciliationStatus.MATCHED,
+                            matched_amount=bank_amount,
+                            match_rule="EXACT_DATE_AND_AMOUNT",
+                        )
+                        validated_line.reconciliation_status = ReconciliationStatus.MATCHED
+                        self.session.add(reconcil)
+                        claimed_jl_ids.add(target_jl.id)
+                        stats["matched"] += 1
+                        matched = True
+                        break
+                    except (InvariantViolationException, DuplicateEntityException, EntityNotFoundException):
+                        continue
 
             if not matched:
                 stats["unmatched"] += 1
@@ -255,55 +500,29 @@ class BankReconciliationService:
         """
         Manual user match from Web App.
         """
-        line = await self.session.scalar(
-            select(BankStatementLine).where(
-                BankStatementLine.id == req.statement_line_id,
-                BankStatementLine.organization_id == organization_id
-            )
+        (
+            line,
+            target_jl,
+            target_mm,
+            target_tx,
+            bank_amount,
+        ) = await self._validate_and_resolve_match(
+            organization_id=organization_id,
+            statement_line_id=req.statement_line_id,
+            journal_line_id=req.journal_line_id,
+            money_movement_id=req.money_movement_id,
+            transaction_id=req.transaction_id,
+            matched_amount=req.matched_amount,
         )
-        if not line:
-            raise EntityNotFoundException("BankStatementLine", req.statement_line_id)
-
-        if req.journal_line_id:
-            journal_line_id = await self.session.scalar(
-                select(JournalLine.id)
-                .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
-                .where(
-                    JournalLine.id == req.journal_line_id,
-                    JournalEntry.organization_id == organization_id,
-                )
-            )
-            if not journal_line_id:
-                raise EntityNotFoundException("JournalLine", req.journal_line_id)
-
-        if req.money_movement_id:
-            money_movement_id = await self.session.scalar(
-                select(MoneyMovement.id).where(
-                    MoneyMovement.id == req.money_movement_id,
-                    MoneyMovement.organization_id == organization_id,
-                )
-            )
-            if not money_movement_id:
-                raise EntityNotFoundException("MoneyMovement", req.money_movement_id)
-
-        if req.transaction_id:
-            transaction_id = await self.session.scalar(
-                select(Transaction.id).where(
-                    Transaction.id == req.transaction_id,
-                    Transaction.organization_id == organization_id,
-                )
-            )
-            if not transaction_id:
-                raise EntityNotFoundException("Transaction", req.transaction_id)
 
         reconcil = BankReconciliation(
             organization_id=organization_id,
             statement_line_id=line.id,
-            journal_line_id=req.journal_line_id,
-            money_movement_id=req.money_movement_id,
-            transaction_id=req.transaction_id,
+            journal_line_id=target_jl.id if target_jl else None,
+            money_movement_id=target_mm.id if target_mm else None,
+            transaction_id=target_tx.id if target_tx else None,
             status=ReconciliationStatus.MATCHED,
-            matched_amount=req.matched_amount,
+            matched_amount=bank_amount,
             match_rule="MANUAL_WEB_MATCH",
             notes=req.notes,
             matched_by=matched_by
@@ -340,20 +559,28 @@ class BankReconciliationService:
         matched_amount = sum(l.credit + l.debit for l in all_lines if l.reconciliation_status == ReconciliationStatus.MATCHED)
         unmatched_bank = sum(l.credit + l.debit for l in all_lines if l.reconciliation_status == ReconciliationStatus.UNMATCHED_BANK)
 
-        # Unmatched book lines (Cash journal lines not referenced in bank_reconciliations)
-        jl_query = (
+        # Unmatched book lines: direct aggregation of cash JournalLines not referenced in active bank_reconciliations
+        matched_jl_subquery = (
+            select(BankReconciliation.journal_line_id)
+            .where(
+                BankReconciliation.organization_id == organization_id,
+                BankReconciliation.journal_line_id.is_not(None),
+                BankReconciliation.status == ReconciliationStatus.MATCHED,
+            )
+        )
+        unmatched_jl_query = (
             select(func.coalesce(func.sum(JournalLine.debit_amount + JournalLine.credit_amount), Decimal("0.00")))
-            .join(JournalEntry)
+            .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
             .where(
                 JournalEntry.organization_id == organization_id,
-                JournalLine.payment_account_id.is_not(None)
+                JournalLine.payment_account_id.is_not(None),
+                JournalLine.id.not_in(matched_jl_subquery),
             )
         )
         if payment_account_id:
-            jl_query = jl_query.where(JournalLine.payment_account_id == payment_account_id)
+            unmatched_jl_query = unmatched_jl_query.where(JournalLine.payment_account_id == payment_account_id)
 
-        total_book_cash = await self.session.scalar(jl_query) or Decimal("0.00")
-        unmatched_book = max(Decimal("0.00"), total_book_cash - matched_amount)
+        unmatched_book = await self.session.scalar(unmatched_jl_query) or Decimal("0.00")
 
         # Unallocated cash movements via money movement service logic
         in_stmt = select(func.coalesce(func.sum(MoneyMovement.amount), Decimal("0.00"))).where(

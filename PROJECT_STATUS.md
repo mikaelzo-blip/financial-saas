@@ -4,8 +4,9 @@
 - **Current branch**: `hermes/fin-p1-102-transaction-type-contract`
 - **Base commit**: `befb74a9b60ab746e8ac779accccc151c5552047` (`origin/main` aligned at branch creation)
 - **Active feature**: FIN-P1-102 — TransactionType Ingestion vs Executable Processing Contract
-- **Active checkpoint**: CP3 — Document API Enforcement & AUTO_SAFE Contradiction Removal (VERIFIED; atomic checkpoint commit pending)
+- **Active checkpoint**: CP3 — Document API Enforcement & AUTO_SAFE Contradiction Removal (COMPLETED)
 - **CP3 starting HEAD**: `2e87be5c1f7b27c4aecbd791d26846ea5fc9d724` (verified CP2 commit)
+- **CP3 implementation commit**: `d39520e080b6b9568ca5e8763a211cda24362641` (`fix(fin-p1-102): enforce document processing capability (CP3)`)
 - **CP3 Deliverables**:
   - `correct_document` validates corrected candidate types with the canonical `PostingRuleRegistry.validate_generic_ingestion` before any durable candidate mutation, correction record, or audit event.
   - Document correction rejects all 16 unsupported types plus `REVERSAL` with HTTP 422 `INVARIANT_VIOLATION`; no rejected correction changes the persisted candidate type.

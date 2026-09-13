@@ -54,4 +54,4 @@
 - [x] **TASK-CP4-03**: Fresh PostgreSQL 16 reached `025_transaction_rejected`; Alembic single head/current, zero drift, and offline chain generation passed. CI asserts that head and requires the RECON-001 PostgreSQL group.
 - [x] **TASK-CP4-04**: Final independent read-only design and code review passed (0 Critical, 0 High, 0 Medium, 0 Low findings).
 - [x] **TASK-CP4-05**: Verify zero Constitution violations and zero ledger modifications.
-- [ ] **TASK-CP4-06**: Commit CP4 reconciliation, push branch `hermes/recon-001-reconciliation-integrity`, create PR, monitor GitHub CI to terminal green state, and execute squash merge.
+- [x] **TASK-CP4-06**: Commit CP4 reconciliation, push branch `hermes/recon-001-reconciliation-integrity`, create PR #65, monitor GitHub CI to terminal green state, and execute squash merge (`ec94b66`).

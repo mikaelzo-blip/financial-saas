@@ -1,10 +1,10 @@
 # Project Status
 
 - **Last reconciled**: 2026-09-13
-- **Current branch**: `hermes/recon-001-reconciliation-integrity`
-- **Base commit**: `e3c33ec3432ecff81c64be02012eaf51b55c5269` (`fix(accounting): reject unsupported transaction processing types (#64)`)
-- **Active feature**: RECON-001 — Bank Reconciliation Integrity (Cardinality, Amount Integrity, and Dashboard Correctness)
-- **Status**: CHECKPOINT 4 VERIFIED LOCALLY — awaiting final independent review and remote delivery.
+- **Current branch**: `main`
+- **Base commit**: `ec94b66cf08c887ba0f43c593ece04fb322cea30` (`fix(recon-001): enforce reconciliation cardinality, amount integrity, and dashboard correctness (#65)`)
+- **Active feature**: RECON-001 — Bank Reconciliation Integrity (Cardinality, Amount Integrity, and Dashboard Correctness) [COMPLETED]
+- **Status**: RECON-001 COMPLETED AND MERGED TO MAIN via PR #65 (`ec94b66`). All gates green in GitHub Actions.
 - **Scope Confirmation**:
   - CP2's canonical `_validate_and_resolve_match` service boundary rejects `WorkflowStatus.REJECTED` transaction targets before matching.
   - CP3 adds migration `024_recon_integrity_invariants`, named check constraints, and four active-state partial unique indexes for statement lines and reconciliation targets.
@@ -23,6 +23,6 @@
 - **Checkpoints Defined**:
   - CP1: Executable RED reproduction & characterization suite [COMPLETED].
   - CP2: Canonical reconciliation integrity service boundary & auto-match unification [COMPLETED].
-  - CP3: Database constraints, fail-closed historical preflight migration, PostgreSQL concurrency proof, and dashboard metric correction [COMMITTED: `120e2a4`].
-  - CP4: Full regression, CI fail-closed PostgreSQL configuration, final review, and remote delivery [LOCAL GATES VERIFIED].
-- **Next action**: Commit the verified CP4 reconciliation, then push and open a pull request.
+  - CP3: Database constraints, fail-closed historical preflight migration, PostgreSQL concurrency proof, and dashboard metric correction [COMMITTED & MERGED: `120e2a4`].
+  - CP4: Full regression, CI fail-closed PostgreSQL configuration, final review, and remote delivery [MERGED: PR #65 / `ec94b66`].
+- **Next action**: Perform post-merge discovery audit and backlog candidate selection.

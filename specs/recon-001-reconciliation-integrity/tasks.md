@@ -8,15 +8,15 @@
 
 ## Checkpoint 1: RED Reproduction & Characterization Suite
 
-- [ ] **TASK-CP1-01**: Verify baseline environment, git clean worktree, and test dependencies.
-- [ ] **TASK-CP1-02**: Implement executable characterization test for duplicate statement line matching in `backend/tests/security/test_recon_001_reconciliation_integrity.py` (`@pytest.mark.xfail(strict=True, raises=AssertionError)`).
-- [ ] **TASK-CP1-03**: Implement executable characterization tests for target reuse across `JournalLine`, `MoneyMovement`, and `Transaction` (strict xfail).
-- [ ] **TASK-CP1-04**: Implement executable characterization tests for single-target discriminator (zero targets and multiple targets in single request, strict xfail).
-- [ ] **TASK-CP1-05**: Implement executable characterization tests for amount integrity and directional matching (strict xfail).
-- [ ] **TASK-CP1-06**: Implement executable characterization tests for auto-match target exclusion and intra-batch collisions (strict xfail).
-- [ ] **TASK-CP1-07**: Implement executable characterization tests for dashboard `unmatched_book_amount` distortion (strict xfail).
-- [ ] **TASK-CP1-08**: Implement characterization tests for concurrent matching race conditions and historical preflight query validation.
-- [ ] **TASK-CP1-09**: Run CP1 test suite; assert all xfail tests fail for expected reason; verify 0 production changes, 0 migrations; commit CP1.
+- [x] **TASK-CP1-01**: Verify baseline environment, git clean worktree, and test dependencies.
+- [x] **TASK-CP1-02**: Implement executable characterization test for duplicate statement line matching in `backend/tests/security/test_recon_001_reconciliation_integrity.py` (`@pytest.mark.xfail(strict=True, raises=AssertionError)`).
+- [x] **TASK-CP1-03**: Implement executable characterization tests for target reuse across `JournalLine`, `MoneyMovement`, and `Transaction` (strict xfail).
+- [x] **TASK-CP1-04**: Implement executable characterization tests for single-target discriminator (zero targets and multiple targets in single request, strict xfail).
+- [x] **TASK-CP1-05**: Implement executable characterization tests for amount integrity and directional matching (strict xfail).
+- [x] **TASK-CP1-06**: Implement executable characterization tests for auto-match target exclusion and intra-batch collisions (strict xfail).
+- [x] **TASK-CP1-07**: Implement executable characterization tests for dashboard `unmatched_book_amount` distortion (strict xfail).
+- [x] **TASK-CP1-08**: Implement characterization tests for concurrent matching race conditions and historical preflight query validation.
+- [x] **TASK-CP1-09**: Run CP1 test suite; assert all xfail tests fail for expected reason; verify 0 production changes, 0 migrations; commit CP1.
 
 ---
 

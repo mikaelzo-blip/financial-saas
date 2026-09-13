@@ -23,6 +23,7 @@ from src.schemas.transaction import (
     TransactionAllocationInput,
 )
 from src.services.duplicate_service import DuplicateDetectionService
+from src.services.posting_rules import PostingRuleRegistry
 from src.services.tenant_sequence_allocator import allocate_next
 from src.core.exceptions import EntityNotFoundException, InvariantViolationException
 
@@ -122,6 +123,8 @@ class TransactionService:
         Creates candidate financial transaction, validates allocations, checks heuristic duplicates,
         and links evidentiary documents.
         """
+        PostingRuleRegistry.validate_generic_ingestion(data.transaction_type)
+
         # Resolve allocations
         resolved_allocations: List[TransactionAllocationInput] = []
         if data.allocations:

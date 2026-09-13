@@ -47,15 +47,67 @@ class PostingRuleRegistry:
     Enforces double-entry equality (Debit == Credit).
     """
 
+    _RULE_TYPE_BY_TRANSACTION_TYPE: Dict[TransactionType, TransactionType] = {
+        TransactionType.DIRECT_PURCHASE: TransactionType.DIRECT_PURCHASE,
+        TransactionType.VENDOR_BILL: TransactionType.VENDOR_BILL,
+        TransactionType.SUBCONTRACTOR_BILL: TransactionType.VENDOR_BILL,
+        TransactionType.PAY_VENDOR_BILL: TransactionType.PAY_VENDOR_BILL,
+        TransactionType.PAY_SUBCONTRACTOR: TransactionType.PAY_VENDOR_BILL,
+        TransactionType.VENDOR_ADVANCE: TransactionType.VENDOR_ADVANCE,
+        TransactionType.SETTLE_VENDOR_ADVANCE: TransactionType.SETTLE_VENDOR_ADVANCE,
+        TransactionType.CUSTOMER_INVOICE: TransactionType.CUSTOMER_INVOICE,
+        TransactionType.RETENTION_RELEASE: TransactionType.RETENTION_RELEASE,
+        TransactionType.CUSTOMER_PAYMENT: TransactionType.CUSTOMER_PAYMENT,
+        TransactionType.CUSTOMER_ADVANCE: TransactionType.CUSTOMER_ADVANCE,
+        TransactionType.BANK_TO_CASH: TransactionType.INTERBANK_TRANSFER,
+        TransactionType.CASH_TO_BANK: TransactionType.INTERBANK_TRANSFER,
+        TransactionType.INTERBANK_TRANSFER: TransactionType.INTERBANK_TRANSFER,
+        TransactionType.JOURNAL_ADJUSTMENT: TransactionType.JOURNAL_ADJUSTMENT,
+        TransactionType.OWNER_CONTRIBUTION: TransactionType.OWNER_CONTRIBUTION,
+        TransactionType.OWNER_WITHDRAWAL: TransactionType.OWNER_WITHDRAWAL,
+        TransactionType.BANK_CHARGE: TransactionType.BANK_CHARGE,
+        TransactionType.FIXED_ASSET_DEPRECIATION: TransactionType.FIXED_ASSET_DEPRECIATION,
+        TransactionType.ASSET_PURCHASE: TransactionType.ASSET_PURCHASE,
+    }
+    POSTING_RULE_SUPPORTED_TYPES: frozenset[TransactionType] = frozenset(
+        _RULE_TYPE_BY_TRANSACTION_TYPE
+    )
+    SPECIAL_WORKFLOW_TYPES: frozenset[TransactionType] = frozenset({
+        TransactionType.REVERSAL,
+    })
+
+    @classmethod
+    def is_generic_ingestible(cls, transaction_type: TransactionType) -> bool:
+        return transaction_type in cls.POSTING_RULE_SUPPORTED_TYPES
+
+    @classmethod
+    def validate_generic_ingestion(cls, transaction_type: TransactionType) -> None:
+        if cls.is_generic_ingestible(transaction_type):
+            return
+
+        reason = (
+            "SPECIAL_WORKFLOW_ONLY"
+            if transaction_type in cls.SPECIAL_WORKFLOW_TYPES
+            else "NO_POSTING_RULE"
+        )
+        raise InvariantViolationException(
+            f"Transaction type '{transaction_type.value}' is not supported by the generic transaction workflow.",
+            details={
+                "transaction_type": transaction_type.value,
+                "reason": reason,
+            },
+        )
+
     @classmethod
     def generate_journal_legs(cls, transaction: Transaction) -> List[GeneratedJournalLeg]:
         t_type = transaction.transaction_type
+        rule_type = cls._RULE_TYPE_BY_TRANSACTION_TYPE.get(t_type)
         amount = transaction.amount
         allocations = transaction.allocations or []
 
         legs: List[GeneratedJournalLeg] = []
 
-        if t_type == TransactionType.DIRECT_PURCHASE:
+        if rule_type == TransactionType.DIRECT_PURCHASE:
             # Debit Project Cost (5101) or Operational Expense (610x / 6199) per allocation
             if allocations:
                 for alloc in allocations:
@@ -96,7 +148,7 @@ class PostingRuleRegistry:
             )
 
 
-        elif t_type in (TransactionType.VENDOR_BILL, TransactionType.SUBCONTRACTOR_BILL):
+        elif rule_type == TransactionType.VENDOR_BILL:
             # Debit Project Cost (5101) or Operational Expense (610x / 6199)
             if allocations:
                 for alloc in allocations:
@@ -134,7 +186,7 @@ class PostingRuleRegistry:
                 )
             )
 
-        elif t_type in (TransactionType.PAY_VENDOR_BILL, TransactionType.PAY_SUBCONTRACTOR):
+        elif rule_type == TransactionType.PAY_VENDOR_BILL:
             # Debit Accounts Payable (2101)
             project_id = None
             if transaction.allocations and len(transaction.allocations) > 0:
@@ -162,7 +214,7 @@ class PostingRuleRegistry:
                 )
             )
 
-        elif t_type == TransactionType.VENDOR_ADVANCE:
+        elif rule_type == TransactionType.VENDOR_ADVANCE:
             # Debit Vendor Advance Asset (1301)
             legs.append(
                 GeneratedJournalLeg(
@@ -186,7 +238,7 @@ class PostingRuleRegistry:
             )
 
 
-        elif t_type == TransactionType.SETTLE_VENDOR_ADVANCE:
+        elif rule_type == TransactionType.SETTLE_VENDOR_ADVANCE:
             # Debit Project Cost (5101) or Operational Expense (610x / 6199)
             if allocations:
                 for alloc in allocations:
@@ -224,7 +276,7 @@ class PostingRuleRegistry:
                 )
             )
 
-        elif t_type == TransactionType.CUSTOMER_INVOICE:
+        elif rule_type == TransactionType.CUSTOMER_INVOICE:
             ret_amt = getattr(transaction, "retention_amount", Decimal("0.00")) or Decimal("0.00")
             collectible_amt = amount - ret_amt
 
@@ -276,7 +328,7 @@ class PostingRuleRegistry:
                     )
                 )
 
-        elif t_type == TransactionType.RETENTION_RELEASE:
+        elif rule_type == TransactionType.RETENTION_RELEASE:
             # Debit Accounts Receivable (1201)
             legs.append(
                 GeneratedJournalLeg(
@@ -298,7 +350,7 @@ class PostingRuleRegistry:
                 )
             )
 
-        elif t_type == TransactionType.CUSTOMER_PAYMENT:
+        elif rule_type == TransactionType.CUSTOMER_PAYMENT:
             # Debit Cash/Bank (1101)
             legs.append(
                 GeneratedJournalLeg(
@@ -321,7 +373,7 @@ class PostingRuleRegistry:
                 )
             )
 
-        elif t_type == TransactionType.CUSTOMER_ADVANCE:
+        elif rule_type == TransactionType.CUSTOMER_ADVANCE:
             # Debit Cash/Bank (1101)
             legs.append(
                 GeneratedJournalLeg(
@@ -344,7 +396,7 @@ class PostingRuleRegistry:
                 )
             )
 
-        elif t_type in (TransactionType.BANK_TO_CASH, TransactionType.CASH_TO_BANK, TransactionType.INTERBANK_TRANSFER):
+        elif rule_type == TransactionType.INTERBANK_TRANSFER:
             # Cash/Bank -> Cash/Bank (1101 -> 1101)
             # Debit destination payment account (or generic 1101)
             legs.append(
@@ -367,7 +419,7 @@ class PostingRuleRegistry:
                 )
             )
 
-        elif t_type == TransactionType.JOURNAL_ADJUSTMENT:
+        elif rule_type == TransactionType.JOURNAL_ADJUSTMENT:
             # Multi-leg journal adjustment or opening balance from allocations
             if not allocations:
                 raise InvariantViolationException("JOURNAL_ADJUSTMENT requires explicit allocations.")
@@ -399,7 +451,7 @@ class PostingRuleRegistry:
                         )
                     )
 
-        elif t_type == TransactionType.OWNER_CONTRIBUTION:
+        elif rule_type == TransactionType.OWNER_CONTRIBUTION:
             # Debit Cash/Bank (1101)
             legs.append(
                 GeneratedJournalLeg(
@@ -420,7 +472,7 @@ class PostingRuleRegistry:
                 )
             )
 
-        elif t_type == TransactionType.OWNER_WITHDRAWAL:
+        elif rule_type == TransactionType.OWNER_WITHDRAWAL:
             # Debit Prive Pemilik (3301)
             legs.append(
                 GeneratedJournalLeg(
@@ -441,7 +493,7 @@ class PostingRuleRegistry:
                 )
             )
 
-        elif t_type == TransactionType.BANK_CHARGE:
+        elif rule_type == TransactionType.BANK_CHARGE:
             # Debit Beban Administrasi Bank (6107)
             legs.append(
                 GeneratedJournalLeg(
@@ -462,7 +514,7 @@ class PostingRuleRegistry:
                 )
             )
 
-        elif t_type == TransactionType.FIXED_ASSET_DEPRECIATION:
+        elif rule_type == TransactionType.FIXED_ASSET_DEPRECIATION:
             # Debit Beban Penyusutan Aset Tetap (6108)
             legs.append(
                 GeneratedJournalLeg(
@@ -482,7 +534,7 @@ class PostingRuleRegistry:
                 )
             )
 
-        elif t_type == TransactionType.ASSET_PURCHASE:
+        elif rule_type == TransactionType.ASSET_PURCHASE:
             # Debit Aset Tetap Operasional (1501)
             legs.append(
                 GeneratedJournalLeg(

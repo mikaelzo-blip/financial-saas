@@ -4,21 +4,18 @@
 - **Current branch**: `hermes/fin-p1-102-transaction-type-contract`
 - **Base commit**: `befb74a9b60ab746e8ac779accccc151c5552047` (`origin/main` aligned at branch creation)
 - **Active feature**: FIN-P1-102 — TransactionType Ingestion vs Executable Processing Contract
-- **Active checkpoint**: CP3 — Document API Enforcement & AUTO_SAFE Contradiction Removal (COMPLETED)
+- **Active checkpoint**: CP4 — Final Regression, Safety Review, and Delivery (local verification completed; remote CI pending)
 - **CP3 starting HEAD**: `2e87be5c1f7b27c4aecbd791d26846ea5fc9d724` (verified CP2 commit)
 - **CP3 implementation commit**: `d39520e080b6b9568ca5e8763a211cda24362641` (`fix(fin-p1-102): enforce document processing capability (CP3)`)
-- **CP3 Deliverables**:
-  - `correct_document` validates corrected candidate types with the canonical `PostingRuleRegistry.validate_generic_ingestion` before any durable candidate mutation, correction record, or audit event.
-  - Document correction rejects all 16 unsupported types plus `REVERSAL` with HTTP 422 `INVARIANT_VIOLATION`; no rejected correction changes the persisted candidate type.
-  - `approve_document_candidate` reaches `TransactionService.create_transaction`, preserving the CP2 central pre-persistence gate without a redundant route-level approval guard.
-  - Historical candidates with unsupported types retain CP2 fail-closed approval behavior: no durable transaction, journal, journal line, or candidate state transition.
-  - `PETTY_CASH_EXPENSE` was removed from `ProcessingPolicyService.AUTO_SAFE_TYPES`; the remaining AUTO_SAFE set is `{DIRECT_PURCHASE, BANK_CHARGE}` and is a subset of canonical normal executable capability.
-- **CP3 Verification**:
+- **CP4 starting HEAD**: `6344da44240160d567c3473100ecfa3b0aa8e3c1` (CP3 closure metadata)
+- **CP4 Local Verification**:
   - FIN-P1-102: 46 collected — 46 passed, 0 xfailed, 0 failed, 0 errors.
-  - Relevant document intelligence suite: 46 passed.
-  - CP2/reversal/accounting/transaction-validation/sequence regression slice: 86 passed.
-  - AUTHZ-001: 103 passed.
-  - Python compilation, `git diff --check`, and repository safety: passed.
-  - Independent CP3 review: PASS — 0 Critical, 0 High, 0 Medium, 0 Low.
-- **Scope confirmation**: No posting-rule implementation changes, TransactionService changes, accounting logic changes, migrations, enum changes, frontend changes, authorization-policy changes, or historical-data cleanup.
-- **Next checkpoint**: CP4 — Full Regression, Migration/Frontend Gates, and Delivery (not started).
+  - Local backend suite excluding fail-closed FIN-001 PostgreSQL integration groups: 635 passed, 79 skipped, 0 failed, 0 errors. The full local invocation reported 26 setup errors solely because `FIN_001_TEST_DATABASE_URL` was absent; no local PostgreSQL service, Docker daemon, or `psql` client was available. CI provisions PostgreSQL 16 and is the remaining authoritative mandatory PostgreSQL gate.
+  - AUTHZ-001: 103 passed. FIN-P1-105: 35 passed, 1 skipped because the live PostgreSQL service was unavailable. FIN-001 retry classification: 7 passed. Feature 012 sequence/bootstrap: 28 passed.
+  - Accounting/reversal/document-posting regression slice: 18 passed. `ProcessingPolicyService` and focused contract tests preserve AUTO_SAFE, reversal, approval, sequence, and ledger boundaries.
+  - Frontend: 66 tests passed; lint passed with 8 pre-existing warnings; typecheck and production build passed; production dependency audit found 0 vulnerabilities.
+  - Backend: `compileall`, `pip check`, and locked-production `pip-audit` passed; Ruff and mypy are not configured/available. Diff security pattern scan found no hardcoded secrets, unsafe shell/eval/pickle, or formatted SQL patterns.
+  - Alembic: one head `023_historical_seq_bootstrap`; offline chain generated successfully. Local `alembic current` and `alembic check` require PostgreSQL and remain pending CI.
+  - Independent CP4 review: PASS — 0 Critical, 0 High, 0 Medium, 0 Low.
+- **CP4 Scope confirmation**: No new posting rules or accounting policy, TransactionType enum, database schema/migrations, frontend product code, authorization policy, or historical data changes. Generic unsupported input behavior changes from 201 STAGED to 422 `INVARIANT_VIOLATION`; schemas, routes, and response models do not change.
+- **Next checkpoint**: Commit CP4 verification metadata, push branch, create PR, and require green GitHub CI before marking delivery complete.

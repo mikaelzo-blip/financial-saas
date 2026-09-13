@@ -21,9 +21,9 @@
 | **T-102-09** | CP3 | `backend/src/services/processing_policy_service.py` | Remove `PETTY_CASH_EXPENSE` from `AUTO_SAFE_TYPES`; verify the set remains a subset of the canonical executable capability. | Policy evaluation test GREEN | COMPLETED |
 | **T-102-10** | CP3 | `backend/tests/security/test_fin_p1_102_transaction_type_contract.py` | Remove remaining XFAIL markers; assert all 37 classifications and rejected-correction state preservation. | 100% focused suite passes GREEN | COMPLETED |
 | **T-102-11** | CP3 | Git & Spec Kit | Commit CP3 implementation with conventional commit message. | Clean worktree, CP3 suite GREEN, independent review PASS | COMPLETED |
-| **T-102-12** | CP4 | Full repository | Run complete backend test suite, Alembic drift check, and frontend build/test gates. | 690+ tests PASS, 0 drift, build passes | PENDING |
-| **T-102-13** | CP4 | Spec Kit & Codebase | Conduct independent review against 16 review criteria; resolve any findings. | 0 Critical, 0 High, 0 Medium findings | PENDING |
-| **T-102-14** | CP4 | `PROJECT_STATUS.md` & Git | Reconcile operational status and prepare PR for CI verification. | PR ready, CI gate monitored | PENDING |
+| **T-102-12** | CP4 | Full repository | Run complete backend test suite, Alembic drift check, and frontend build/test gates. | Local non-PostgreSQL regression: 635 passed / 79 prerequisite skips; FIN-P1-102: 46 passed; frontend test/lint/types/build passed; locked dependency audits passed. Mandatory PostgreSQL suite, online migration, and drift gates deferred fail-closed to CI because no local disposable PostgreSQL service was available. | LOCAL COMPLETE / CI PENDING |
+| **T-102-13** | CP4 | Spec Kit & Codebase | Conduct independent review against 16 review criteria; resolve any findings. | PASS — 0 Critical, 0 High, 0 Medium, 0 Low | COMPLETED |
+| **T-102-14** | CP4 | `PROJECT_STATUS.md` & Git | Reconcile operational status and prepare PR for CI verification. | CP4 local metadata reconciled; commit/push/PR/CI monitoring pending | IN PROGRESS |
 
 ---
 

@@ -152,3 +152,22 @@ No document production code, processing-policy code, posting-leg definitions, ac
 ### CP3 Scope Confirmation
 
 CP3 changed only document correction capability validation, `AUTO_SAFE_TYPES`, FIN-P1-102 contract tests, and governance artifacts. It did not change posting-rule implementations, `TransactionService`, accounting logic, `TransactionType`, database migrations, frontend product code, authorization policies, or historical data.
+
+---
+
+## 6. CP4 Final Local Verification
+
+### Result
+
+- Canonical-source probe verified **37** `TransactionType` members: **20** normal dispatch-backed posting-rule types, **1** special-workflow-only `REVERSAL`, and **16** policy-blocked types. The three sets are pairwise disjoint and their union equals the enum.
+- Generic creation and document correction reject the same **17** values with `422 INVARIANT_VIOLATION`; the service gate occurs before lookups, sequence allocation, model construction, flush, and persistence. Dedicated reversal still bypasses generic creation through `ReversalService` only.
+- `AUTO_SAFE_TYPES == {DIRECT_PURCHASE, BANK_CHARGE}` and is a strict subset of canonical normal capability; `PETTY_CASH_EXPENSE` is `HUMAN_REVIEW`.
+- FIN-P1-102 focused suite: **46 passed, 0 xfailed, 0 failed, 0 errors**. AUTHZ-001: **103 passed**. FIN-P1-105: **35 passed, 1 PostgreSQL-prerequisite skip**. FIN-001 retry classification: **7 passed**. Feature 012 sequence/bootstrap: **28 passed**. Accounting/reversal/document-posting slice: **18 passed**.
+- Full backend local invocation failed only at **26** FIN-001 PostgreSQL setup fixtures because `FIN_001_TEST_DATABASE_URL` was intentionally absent. A non-PostgreSQL complete run passed **635** tests with **79** explicit prerequisite skips. No local PostgreSQL service, Docker daemon, or `psql` client was available. The mandatory PostgreSQL 16 migration/drift/concurrency/retry suite remains CI-owned and fail-closed.
+- Frontend: **66 passed**; lint passed with eight existing warnings; typecheck and production build passed; production dependency audit found zero vulnerabilities. Backend `compileall`, `pip check`, locked production `pip-audit`, diff security-pattern scan, and `git diff --check` passed. Ruff and mypy are not configured/available.
+- Alembic static evidence: one head `023_historical_seq_bootstrap`; complete offline migration SQL chain generated. `alembic current` and `alembic check` require the unavailable local PostgreSQL service and must complete in CI.
+- Independent bounded CP4 review: **PASS — 0 Critical, 0 High, 0 Medium, 0 Low**.
+
+### Delivery Boundary
+
+No migrations, enum changes, posting rules, accounting policy, frontend product code, authorization role policy, or historical data changes were introduced. API schemas, routes, and response models are unchanged; behavior intentionally changes from `201 STAGED` to `422 INVARIANT_VIOLATION` for unsupported generic input. Push/PR creation and actual GitHub CI are the remaining CP4 delivery gates.

@@ -1,8 +1,8 @@
 # Contract Specification: Reconciliation Integrity & Invariants
 
-**Document Reference**: `contracts/reconciliation-integrity.md`  
-**Feature**: RECON-001  
-**Status**: APPROVED CONTRACT  
+**Document Reference**: `contracts/reconciliation-integrity.md`
+**Feature**: RECON-001
+**Status**: APPROVED CONTRACT
 
 ---
 

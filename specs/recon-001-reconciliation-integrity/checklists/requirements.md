@@ -1,7 +1,7 @@
 # Requirements Traceability Checklist: RECON-001
 
-**Feature**: RECON-001 — Enforce Reconciliation Cardinality, Amount Integrity, and Dashboard Correctness  
-**Status**: SPECIFICATION & CHECKPOINT PLANNING  
+**Feature**: RECON-001 — Enforce Reconciliation Cardinality, Amount Integrity, and Dashboard Correctness
+**Status**: SPECIFICATION & CHECKPOINT PLANNING
 
 ---
 
@@ -48,7 +48,7 @@
 - [ ] Clean worktree and atomic git commit.
 
 ### Checkpoint 3 (CP3) Gate:
-- [ ] Alembic migration `024_reconciliation_integrity_constraints.py` created with fail-closed preflight check.
+- [ ] Alembic migration `024_recon_integrity_invariants.py` created with fail-closed preflight check.
 - [ ] Partial unique indexes and check constraints applied to `bank_reconciliations`.
 - [ ] `BankReconciliation` SQLAlchemy model updated with matching constraints.
 - [ ] `get_cash_completeness_dashboard` updated to calculate `unmatched_book` via direct unreconciled query.

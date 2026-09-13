@@ -2,23 +2,27 @@
 
 - **Last reconciled**: 2026-09-13
 - **Current branch**: `hermes/recon-001-reconciliation-integrity`
-- **Base commit**: `89ba046950f588718148bf8e7e831debc954086b` (`docs(recon-001): define reconciliation integrity contract`)
+- **Base commit**: `e3c33ec3432ecff81c64be02012eaf51b55c5269` (`fix(accounting): reject unsupported transaction processing types (#64)`)
 - **Active feature**: RECON-001 — Bank Reconciliation Integrity (Cardinality, Amount Integrity, and Dashboard Correctness)
-- **Status**: CHECKPOINT 3 VERIFIED — awaiting checkpoint commit (database integrity, fail-closed migration, PostgreSQL concurrency, and dashboard correction).
+- **Status**: CHECKPOINT 4 VERIFIED LOCALLY — awaiting final independent review and remote delivery.
 - **Scope Confirmation**:
-  - CP2's canonical `_validate_and_resolve_match` service boundary and validation precedence remain unchanged.
+  - CP2's canonical `_validate_and_resolve_match` service boundary rejects `WorkflowStatus.REJECTED` transaction targets before matching.
   - CP3 adds migration `024_recon_integrity_invariants`, named check constraints, and four active-state partial unique indexes for statement lines and reconciliation targets.
+  - CP4 adds migration `025_transaction_rejected`, which makes the approved terminal transaction rejection state representable in PostgreSQL.
   - CP3 corrects unmatched-book aggregation to sum cash journal lines that lack an active reconciliation reference; no synthetic subtraction remains.
-  - CP3 updates only Alembic-head assertions in shared PostgreSQL test helpers; accounting posting, ledger balance, tenant/RBAC behavior, and frontend code remain unchanged.
+  - CP4 updates PostgreSQL head assertions and CI enforcement for the forward migration; accounting posting, ledger balance, tenant/RBAC behavior, and frontend code remain unchanged.
 - **Verification**:
-  - Focused RECON-001 suite: 59 passed, 1 environment-gated security skip.
-  - Unit/migration coverage after review follow-up: 20 passed.
-  - Fresh disposable PostgreSQL 16: 3 passed, including 20-worker statement-line and target-reuse races; one commit and 19 `IntegrityError` rejections in each race.
-  - PostgreSQL migration chain: upgrade, downgrade to `023_historical_seq_bootstrap`, re-upgrade to `024_recon_integrity_invariants`, offline SQL generation, and `alembic check` all passed.
-  - Independent read-only CP3 review: PASS; Critical/High/Medium/Low = 0/0/0/3. All three Low coverage findings were remediated and verified.
+  - CP3 is committed at `120e2a490b69934e4d91abf7e0bbb8184f151641` (`feat(recon-001): enforce reconciliation database invariants (CP3)`).
+  - Fresh disposable PostgreSQL 16: migration upgrade/downgrade/re-upgrade, offline SQL, live catalog checks, `alembic check`, and 20-worker statement-line and target-reuse races passed.
+  - Prior CP4 validation through migration `024`: 801 backend tests and 36 mandatory PostgreSQL tests passed; frontend recorded 66 passing tests plus lint, typecheck, build, and audit.
+  - Final `025_transaction_rejected` candidate: 802 backend tests passed with no failures or skips; 66 frontend tests passed; frontend lint, typecheck, build, and production dependency audit passed.
+  - Fresh disposable PostgreSQL 16 reached `025_transaction_rejected`; RECON catalog/enum and 20-worker concurrency suite passed (3 tests), and Alembic head/current, drift, and offline-chain checks passed.
+  - Backend `pip check`, locked production `pip-audit`, `compileall`, and repository safety passed.
+  - Independent CP3 reviews: first PASS (0/0/0/3); final staged-tree PASS (0/0/0/0). The three earlier Low coverage findings were remediated and verified.
+  - Final CP4 independent delivery review: PASS (0 Critical, 0 High, 0 Medium, 0 Low); it reproduced RECON security, PostgreSQL 16 catalog/races, Alembic, sibling security, and frontend checks.
 - **Checkpoints Defined**:
   - CP1: Executable RED reproduction & characterization suite [COMPLETED].
   - CP2: Canonical reconciliation integrity service boundary & auto-match unification [COMPLETED].
-  - CP3: Database constraints, fail-closed historical preflight migration, PostgreSQL concurrency proof, and dashboard metric correction [VERIFIED — pending commit].
-  - CP4: Full regression, security review, and remote delivery [PENDING].
-- **Next action**: Commit CP3, then run CP4 regression and delivery gates.
+  - CP3: Database constraints, fail-closed historical preflight migration, PostgreSQL concurrency proof, and dashboard metric correction [COMMITTED: `120e2a4`].
+  - CP4: Full regression, CI fail-closed PostgreSQL configuration, final review, and remote delivery [LOCAL GATES VERIFIED].
+- **Next action**: Commit the verified CP4 reconciliation, then push and open a pull request.

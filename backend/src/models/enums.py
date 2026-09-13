@@ -39,6 +39,7 @@ class WorkflowStatus(str, Enum):
     POSTED = "POSTED"
     RECONCILED = "RECONCILED"
     REVERSED = "REVERSED"
+    REJECTED = "REJECTED"
 
 
 class ReviewFlag(str, Enum):

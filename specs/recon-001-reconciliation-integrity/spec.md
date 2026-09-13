@@ -1,12 +1,12 @@
 # Feature Specification: Bank Reconciliation Integrity (RECON-001)
 
-**Feature**: RECON-001 — Enforce Reconciliation Cardinality, Amount Integrity, and Dashboard Correctness  
-**Feature Branch**: `hermes/recon-001-reconciliation-integrity`  
-**Status**: SPECIFICATION & ARCHITECTURAL PLANNING  
-**Priority**: P1 (Financial Control & Data Integrity)  
-**Confidence**: HIGH (Root causes verified by source code and executable probes)  
-**Authority**: `.specify/memory/constitution.md`, `docs/Sistem_Keuangan_Kontraktor_Final_Concept_v1.md`, `AGENTS.md`  
-**Baseline Commit**: `e3c33ec3432ecff81c64be02012eaf51b55c5269` (`origin/main`)  
+**Feature**: RECON-001 — Enforce Reconciliation Cardinality, Amount Integrity, and Dashboard Correctness
+**Feature Branch**: `hermes/recon-001-reconciliation-integrity`
+**Status**: SPECIFICATION & ARCHITECTURAL PLANNING
+**Priority**: P1 (Financial Control & Data Integrity)
+**Confidence**: HIGH (Root causes verified by source code and executable probes)
+**Authority**: `.specify/memory/constitution.md`, `docs/Sistem_Keuangan_Kontraktor_Final_Concept_v1.md`, `AGENTS.md`
+**Baseline Commit**: `e3c33ec3432ecff81c64be02012eaf51b55c5269` (`origin/main`)
 
 ---
 

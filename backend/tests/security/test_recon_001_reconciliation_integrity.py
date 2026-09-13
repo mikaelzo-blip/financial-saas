@@ -726,6 +726,44 @@ async def test_contract_target_reuse_transaction_rejected(recon_env: Dict[str, A
     assert resp_b.json().get("error", {}).get("code") == "DUPLICATE_ENTITY"
 
 
+@pytest.mark.asyncio
+async def test_rejected_transaction_target_is_ineligible_and_creates_no_match(
+    recon_env: Dict[str, Any],
+):
+    """A rejected transaction cannot become a reconciliation target."""
+    client: AsyncClient = recon_env["client"]
+    headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
+    statement_line = recon_env["stmt_line_5m_1"]
+    transaction = recon_env["tx_5m"]
+
+    async with recon_env["session_factory"]() as session:
+        persisted_transaction = await session.get(Transaction, transaction.id)
+        assert persisted_transaction is not None
+        persisted_transaction.workflow_status = WorkflowStatus.REJECTED
+        await session.commit()
+
+    response = await client.post(
+        "/api/v1/bank-reconciliation/reconcile",
+        json={
+            "statement_line_id": str(statement_line.id),
+            "transaction_id": str(transaction.id),
+            "matched_amount": "5000000.00",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+    assert response.json().get("error", {}).get("code") == "INVARIANT_VIOLATION"
+
+    async with recon_env["session_factory"]() as session:
+        reconciliation_count = await session.scalar(
+            select(func.count(BankReconciliation.id)).where(
+                BankReconciliation.transaction_id == transaction.id
+            )
+        )
+        assert reconciliation_count == 0
+
+
 # =============================================================================
 # 3. SINGLE-TARGET DISCRIMINATOR (ZERO / MULTIPLE TARGETS)
 # =============================================================================

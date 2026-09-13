@@ -28,7 +28,7 @@ from src.models.organization import Organization
 from src.models.transaction import Transaction
 
 POSTGRES_URL_ENV = "RECON_001_TEST_DATABASE_URL"
-EXPECTED_ALEMBIC_HEAD = "024_recon_integrity_invariants"
+EXPECTED_ALEMBIC_HEAD = "025_transaction_rejected"
 
 pytestmark = pytest.mark.postgresql
 
@@ -230,6 +230,18 @@ async def test_postgresql_recon_constraints_and_partial_indexes_are_applied(
         assert "transaction_id IS NOT NULL" in exactly_one_target
         assert "= 1" in exactly_one_target
         assert "matched_amount >" in constraints["ck_bank_recon_matched_amount_positive"]
+
+        workflow_status_labels = set(
+            (
+                await session.execute(
+                    text(
+                        "SELECT enumlabel FROM pg_enum "
+                        "WHERE enumtypid = 'workflow_status'::regtype"
+                    )
+                )
+            ).scalars()
+        )
+        assert "REJECTED" in workflow_status_labels
 
 
 async def test_postgresql_concurrent_duplicate_statement_match_fails_closed(

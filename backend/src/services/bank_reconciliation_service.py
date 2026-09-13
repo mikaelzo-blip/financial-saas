@@ -19,7 +19,7 @@ from src.models.journal import JournalLine, JournalEntry
 from src.models.money_movement import MoneyMovement, Settlement
 from src.models.transaction import Transaction
 
-from src.models.enums import ReconciliationStatus, StatementImportStatus, MovementDirection
+from src.models.enums import ReconciliationStatus, StatementImportStatus, MovementDirection, WorkflowStatus
 from src.schemas.bank_reconciliation import (
     BankStatementLineCreate,
     BankReconciliationMatchRequest,
@@ -328,6 +328,8 @@ class BankReconciliationService:
                 )
 
         elif target_tx is not None:
+            if target_tx.workflow_status == WorkflowStatus.REJECTED:
+                raise InvariantViolationException("Rejected transaction cannot be reconciled")
             if target_tx.amount != bank_amount:
                 raise InvariantViolationException(
                     f"Target amount ({target_tx.amount}) does not match bank line amount ({bank_amount})"

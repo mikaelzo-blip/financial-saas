@@ -1,8 +1,8 @@
 # Implementation Plan: Bank Reconciliation Integrity (RECON-001)
 
-**Feature**: RECON-001 — Enforce Reconciliation Cardinality, Amount Integrity, and Dashboard Correctness  
-**Status**: SPECIFICATION & CHECKPOINT PLANNING  
-**Authority**: Constitution v2.0.0, Financial Concept v1, AGENTS.md, Checkpoint-Driven Development Skill  
+**Feature**: RECON-001 — Enforce Reconciliation Cardinality, Amount Integrity, and Dashboard Correctness
+**Status**: SPECIFICATION & CHECKPOINT PLANNING
+**Authority**: Constitution v2.0.0, Financial Concept v1, AGENTS.md, Checkpoint-Driven Development Skill
 
 ---
 
@@ -49,7 +49,7 @@
                                          v
 +-----------------------------------------------------------------------------------+
 | CP3: Database Constraints, Fail-Closed Migration & Dashboard Correction          |
-| - Implement Alembic migration 024_reconciliation_integrity_constraints.py:        |
+| - Implement Alembic migration 024_recon_integrity_invariants.py:        |
 |   * Fail-closed preflight historical check                                        |
 |   * Partial unique index on statement_line_id (or unique constraint)              |
 |   * Partial unique indexes on journal_line_id, money_movement_id, transaction_id  |
@@ -116,7 +116,7 @@
 ### Checkpoint 3: Database Constraints, Fail-Closed Migration & Dashboard Correction
 - **Goal**: Add database schema invariants, fail-closed preflight migration, and fix dashboard metrics.
 - **Target Files**:
-  - `backend/alembic/versions/024_reconciliation_integrity_constraints.py`
+  - `backend/alembic/versions/024_recon_integrity_invariants.py`
   - `backend/src/models/bank_reconciliation.py`
   - `backend/src/services/bank_reconciliation_service.py`
   - `backend/tests/security/test_fin_p1_105_tenant_reference_hardening.py`

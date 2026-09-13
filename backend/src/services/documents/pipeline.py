@@ -46,7 +46,21 @@ class DocumentPipeline:
             document.raw_extraction = result.raw_payload if hasattr(result, "raw_payload") else {}
             document.processing_status = DocumentProcessingStatus.MATCHING
 
-            matches = await match_entities(self.session, document.organization_id, data)
+            try:
+                matches = await match_entities(self.session, document.organization_id, data, document_type=effective_type)
+            except Exception as match_err:
+                matches = {
+                    "counterparty_id": None,
+                    "project_id": None,
+                    "payment_account_id": None,
+                    "allocation_target_id": None,
+                    "alternatives": [],
+                    "match_candidates": [],
+                    "primary_candidate": None,
+                    "ambiguous": False,
+                    "requires_review": True,
+                    "matching_error": str(match_err)[:500],
+                }
             document.matching_results = matches
             required = ("ocr_confidence", "amount_confidence")
             flags = derive_flags(effective_type, data, matches, below_threshold(result.confidence, required))

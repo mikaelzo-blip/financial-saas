@@ -8,6 +8,22 @@ from pydantic import BaseModel, ConfigDict
 T = TypeVar("T")
 ValidationStatus = Literal["VALID", "AMBIGUOUS", "INVALID", "MISSING"]
 
+_MONTH_MAP = {
+    # Indonesian & English month names / abbreviations
+    "JAN": 1, "JANUARI": 1, "JANUARY": 1,
+    "FEB": 2, "FEBRUARI": 2, "FEBRUARY": 2, "PEB": 2, "PEBRUARI": 2,
+    "MAR": 3, "MARET": 3, "MARCH": 3,
+    "APR": 4, "APRIL": 4,
+    "MEI": 5, "MAY": 5,
+    "JUN": 6, "JUNI": 6, "JUNE": 6,
+    "JUL": 7, "JULI": 7, "JULY": 7,
+    "AGU": 8, "AGUSTUS": 8, "AGS": 8, "AUG": 8, "AUGUST": 8,
+    "SEP": 9, "SEPT": 9, "SEPTEMBER": 9,
+    "OKT": 10, "OKTOBER": 10, "OCT": 10, "OCTOBER": 10,
+    "NOV": 11, "NOVEMBER": 11, "NOP": 11, "NOPEMBER": 11,
+    "DES": 12, "DESEMBER": 12, "DEC": 12, "DECEMBER": 12,
+}
+
 
 class NormalizedCandidate(BaseModel, Generic[T]):
     model_config = ConfigDict(extra="forbid")
@@ -20,11 +36,17 @@ class NormalizedCandidate(BaseModel, Generic[T]):
 def parse_candidate_money(raw: str | None) -> NormalizedCandidate[Decimal]:
     if not raw or not raw.strip():
         return NormalizedCandidate(value=None, confidence=Decimal("0"), evidence=raw, validation_status="MISSING")
-    token = re.sub(r"(?i)^(?:.*?(?:rp|idr))?\s*|\s", "", raw.strip())
+
+    clean_raw = raw.strip()
+    # Strip common Indonesian trailing notation like ",-" or ".-" (e.g. Rp 1.250.000,-)
+    clean_raw = re.sub(r"[,.]\s*[-–—]$", "", clean_raw)
+
+    token = re.sub(r"(?i)^(?:.*?(?:rp\.?|idr))\s*|\s", "", clean_raw)
     # If there's still non-numeric prefix like "PPN:", strip non-digits at the beginning
     token = re.sub(r"^[^\d]+", "", token)
     if not re.fullmatch(r"\d[\d.,]*", token):
         return NormalizedCandidate(value=None, confidence=Decimal("0"), evidence=raw, validation_status="INVALID")
+
     comma, dot = token.count(","), token.count(".")
     if comma and dot:
         decimal_mark = "," if token.rfind(",") > token.rfind(".") else "."
@@ -42,7 +64,7 @@ def parse_candidate_money(raw: str | None) -> NormalizedCandidate[Decimal]:
         elif len(parts) == 2 and len(parts[1]) == 3:
             # When context is Indonesian currency with prefix Rp / IDR or exactly 3 digits (e.g. 125.000),
             # if the prefix or token had Rp/IDR, it is unambiguous Indonesian Rupiah thousand separator.
-            if re.search(r"(?i)\b(?:rp|idr)\b", raw or ""):
+            if re.search(r"(?i)\b(?:rp\.?|idr)(?:\b|(?=\d))", raw or ""):
                 normalized = "".join(parts)
             else:
                 return NormalizedCandidate(value=None, confidence=Decimal("0.5"), evidence=raw, validation_status="AMBIGUOUS")
@@ -61,16 +83,44 @@ def parse_candidate_date(raw: str | None) -> NormalizedCandidate[date]:
     if not raw or not raw.strip():
         return NormalizedCandidate(value=None, confidence=Decimal("0"), evidence=raw, validation_status="MISSING")
     value = raw.strip()
-    try:
-        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+
+    # 1. ISO format: YYYY-MM-DD
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        try:
             parsed = date.fromisoformat(value)
-        elif match := re.fullmatch(r"(\d{2})([/\-])(\d{2})\2(\d{4})", value):
-            first, second, year = int(match[1]), int(match[3]), int(match[4])
-            if first <= 12 and second <= 12:
-                return NormalizedCandidate(value=None, confidence=Decimal("0.5"), evidence=raw, validation_status="AMBIGUOUS")
-            parsed = date(year, second, first)
-        else:
+            return NormalizedCandidate(value=parsed, confidence=Decimal("1"), evidence=raw, validation_status="VALID")
+        except ValueError:
             return NormalizedCandidate(value=None, confidence=Decimal("0"), evidence=raw, validation_status="INVALID")
-    except ValueError:
-        return NormalizedCandidate(value=None, confidence=Decimal("0"), evidence=raw, validation_status="INVALID")
-    return NormalizedCandidate(value=parsed, confidence=Decimal("1"), evidence=raw, validation_status="VALID")
+
+    # 2. Named month format: e.g. "13 September 2026", "13-Sep-2026", "13 Sep 2026", "September 13, 2026"
+    named_pattern = r"(?i)^\s*(?:tanggal|tgl|date)?\s*[:=]?\s*(\d{1,2})[\s\-]+([a-zA-Z]+)[\s\-]+(\d{4})\s*$"
+    if m := re.match(named_pattern, value):
+        day_str, month_str, year_str = m.group(1), m.group(2).upper(), m.group(3)
+        month_num = _MONTH_MAP.get(month_str)
+        if month_num:
+            try:
+                parsed = date(int(year_str), month_num, int(day_str))
+                return NormalizedCandidate(value=parsed, confidence=Decimal("1"), evidence=raw, validation_status="VALID")
+            except ValueError:
+                return NormalizedCandidate(value=None, confidence=Decimal("0"), evidence=raw, validation_status="INVALID")
+
+    # 3. Numeric formats: DD/MM/YYYY, DD-MM-YYYY
+    if match := re.fullmatch(r"(\d{2})([/\-])(\d{2})\2(\d{4})", value):
+        first, second, year = int(match[1]), int(match[3]), int(match[4])
+        # If both are <= 12 and ambiguous without day > 12 context, flag AMBIGUOUS to avoid silent guessing
+        if first <= 12 and second <= 12:
+            return NormalizedCandidate(value=None, confidence=Decimal("0.5"), evidence=raw, validation_status="AMBIGUOUS")
+        try:
+            if first > 12 and second <= 12:
+                # Unambiguously DD/MM/YYYY
+                parsed = date(year, second, first)
+            elif first <= 12 and second > 12:
+                # Unambiguously MM/DD/YYYY
+                parsed = date(year, first, second)
+            else:
+                return NormalizedCandidate(value=None, confidence=Decimal("0"), evidence=raw, validation_status="INVALID")
+            return NormalizedCandidate(value=parsed, confidence=Decimal("1"), evidence=raw, validation_status="VALID")
+        except ValueError:
+            return NormalizedCandidate(value=None, confidence=Decimal("0"), evidence=raw, validation_status="INVALID")
+
+    return NormalizedCandidate(value=None, confidence=Decimal("0"), evidence=raw, validation_status="INVALID")

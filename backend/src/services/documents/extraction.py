@@ -34,6 +34,64 @@ def register_extraction_provider(name: str, factory: ExtractionProviderFactory) 
     _provider_factories[normalized_name] = factory
 
 
+class FallbackExtractionProvider:
+    """Combines local extraction with optional cloud vision fallback.
+
+    Adheres strictly to the principle: local extraction first.
+    Cloud fallback is only triggered if:
+    1. settings.DOCUMENT_CLOUD_FALLBACK_ENABLED is True;
+    2. Cloud credentials are configured;
+    3. Local extraction fails or produces confidence below threshold.
+    """
+    def __init__(
+        self,
+        primary_provider: ExtractionProvider,
+        fallback_threshold: float = 0.70,
+    ):
+        self.primary = primary_provider
+        self.fallback_threshold = Decimal(str(fallback_threshold))
+
+    async def extract(self, path: Path, mime_type: str) -> ExtractionResult:
+        primary_result: ExtractionResult | None = None
+        primary_error: Exception | None = None
+
+        try:
+            primary_result = await self.primary.extract(path, mime_type)
+        except Exception as exc:
+            primary_error = exc
+
+        # Check if fallback is warranted and possible
+        needs_fallback = False
+        if primary_error is not None:
+            needs_fallback = True
+        elif primary_result is not None:
+            overall_conf = primary_result.confidence.ocr_confidence
+            if overall_conf < self.fallback_threshold:
+                needs_fallback = True
+
+        can_fallback = (
+            settings.DOCUMENT_CLOUD_FALLBACK_ENABLED
+            and bool(settings.DOCUMENT_EXTRACTION_API_KEY)
+        )
+
+        if needs_fallback and can_fallback:
+            try:
+                from src.services.documents.cloud_vision_provider import CloudVisionExtractionProvider
+                cloud = CloudVisionExtractionProvider()
+                cloud_result = await cloud.extract(path, mime_type)
+                # Annotate that fallback succeeded
+                cloud_result.raw_payload["cloud_fallback_triggered"] = True
+                cloud_result.raw_payload["primary_provider"] = "local"
+                return cloud_result
+            except Exception:
+                # If cloud fails, fall back to returning primary result or raising primary error
+                pass
+
+        if primary_error is not None:
+            raise primary_error
+        return primary_result
+
+
 def get_extraction_provider(name: str | None = None) -> ExtractionProvider:
     """Create the configured provider at the processing boundary."""
     provider_name = (name or settings.DOCUMENT_EXTRACTION_PROVIDER).strip().lower()
@@ -42,7 +100,13 @@ def get_extraction_provider(name: str | None = None) -> ExtractionProvider:
         # contracts remain independent of OCR/LLM implementation details.
         from src.services.documents.local_provider import LocalExtractionProvider
 
-        return LocalExtractionProvider()
+        local = LocalExtractionProvider()
+        if settings.DOCUMENT_CLOUD_FALLBACK_ENABLED:
+            return FallbackExtractionProvider(
+                primary_provider=local,
+                fallback_threshold=settings.DOCUMENT_CLOUD_FALLBACK_THRESHOLD,
+            )
+        return local
     if provider_name in {"openai_vision", "gemini_vision", "cloud_vision"}:
         from src.services.documents.cloud_vision_provider import CloudVisionExtractionProvider
 

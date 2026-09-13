@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     DOCUMENT_EXTRACTION_MODEL: Optional[str] = None
     DOCUMENT_EXTRACTION_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0, le=120.0)
     DOCUMENT_EXTRACTION_MAX_TOKENS: int = Field(default=2000, ge=100, le=8000)
+    DOCUMENT_OCR_MAX_PAGES: int = Field(default=50, ge=1, le=200)
+    DOCUMENT_OCR_DPI: int = Field(default=200, ge=72, le=600)
+    DOCUMENT_CLOUD_FALLBACK_ENABLED: bool = Field(default=False)
+    DOCUMENT_CLOUD_FALLBACK_THRESHOLD: float = Field(default=0.70, ge=0.0, le=1.0)
 
     # Hermes is an external operational client. Secrets are supplied only at runtime.
     HERMES_AGENT_TOKEN: Optional[str] = None

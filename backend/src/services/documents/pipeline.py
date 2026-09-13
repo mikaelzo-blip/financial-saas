@@ -87,7 +87,7 @@ class DocumentPipeline:
                 )
         except Exception as exc:
             document.processing_status = DocumentProcessingStatus.FAILED
-            document.failure_code = type(exc).__name__
+            document.failure_code = getattr(exc, "failure_code", type(exc).__name__)
             document.failure_message = str(exc)[:1000]
         await self.session.flush()
         return document

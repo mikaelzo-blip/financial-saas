@@ -16,10 +16,10 @@
 | **TYPE-R04** | Rejected generic transaction creation consumes no tenant sequence number. | `TenantSequence` assertion after rejected call. | VERIFIED CP2 |
 | **TYPE-R05** | `REVERSAL` cannot enter generic transaction creation. | Intake test attempting `create_transaction` with `REVERSAL`. | VERIFIED CP2 |
 | **TYPE-R06** | Dedicated `ReversalService` remains functional and unchanged. | `test_reversals.py` and dedicated reversal test pass. | VERIFIED CP2 REGRESSION |
-| **TYPE-R07** | Document candidate correction cannot assign non-executable type. | Document correction API test attempting unsupported type. | PENDING IMPLEMENTATION |
-| **TYPE-R08** | Document approval cannot create an unpostable Transaction. | Document candidate approval defense-in-depth test. | PENDING IMPLEMENTATION |
-| **TYPE-R09** | `PETTY_CASH_EXPENSE` removed from `AUTO_SAFE_TYPES`. | `ProcessingPolicyService` evaluation test. | PENDING IMPLEMENTATION |
-| **TYPE-R10** | Every `AUTO_SAFE` type must be `GENERIC_INGESTIBLE` and executable. | Mathematical set subset assertion test. | PENDING IMPLEMENTATION |
+| **TYPE-R07** | Document candidate correction cannot assign non-executable type. | Parameterized correction test rejects 16 unsupported types plus `REVERSAL`, asserting unchanged persisted candidate type. | VERIFIED CP3 |
+| **TYPE-R08** | Document approval cannot create an unpostable Transaction. | Historical unsupported candidate approval reaches `TransactionService.create_transaction` and fails atomically with zero durable financial records. | VERIFIED CP2/CP3 REGRESSION |
+| **TYPE-R09** | `PETTY_CASH_EXPENSE` removed from `AUTO_SAFE_TYPES`. | `ProcessingPolicyService` evaluation returns existing `HUMAN_REVIEW` fallback. | VERIFIED CP3 |
+| **TYPE-R10** | Every `AUTO_SAFE` type must be `GENERIC_INGESTIBLE` and executable. | Mathematical subset assertion against `PostingRuleRegistry.POSTING_RULE_SUPPORTED_TYPES`. | VERIFIED CP3 |
 | **TYPE-R11** | All 20 `PostingRuleRegistry` types remain generic-capable. | Exact 20-type capability membership plus representative DIRECT_PURCHASE and BANK_CHARGE API controls. | VERIFIED CP2 |
 | **TYPE-R12** | No new debit/credit or posting policy is introduced. | Diff inspection and accounting-engine regression: journal leg definitions unchanged. | VERIFIED CP2 |
 | **TYPE-R13** | Existing unsupported historical rows are not migrated or rewritten. | Historical data boundary inspection: 0 data migrations. | CONFIRMED IN SPEC |
@@ -78,5 +78,5 @@
 
 - [x] **CP1 Gate**: Executable RED / characterization tests committed; 0 production code changes.
 - [x] **CP2 Gate**: Dispatch-backed `PostingRuleRegistry` capabilities and pre-sequence `TransactionService` gate implemented; AUTHZ fixture aligned; 27 passed / 19 expected XFAIL; independent review PASS.
-- [ ] **CP3 Gate**: Document correction & approval protected; `PETTY_CASH_EXPENSE` removed from `AUTO_SAFE_TYPES`; all focused tests GREEN.
+- [x] **CP3 Gate**: Document correction reuses canonical capability before persistence; approval inherits the CP2 `TransactionService` gate; `PETTY_CASH_EXPENSE` removed from `AUTO_SAFE_TYPES`; focused suite is 46 passed / 0 XFAIL; independent review PASS.
 - [ ] **CP4 Gate**: Full backend regression (690+ tests), Alembic zero drift, frontend build passing, independent review completed.

@@ -605,35 +605,23 @@ async def test_dedicated_reversal_flow_success(p1_102_env):
 # 6. AUTO_SAFE CONTRADICTION & POSITIVE CONTROLS
 # ==============================================================================
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="TYPE-R09/TYPE-R10: PETTY_CASH_EXPENSE in AUTO_SAFE_TYPES contradicts lack of executable posting rule",
-)
 def test_auto_safe_types_must_be_subset_of_posting_rule_supported():
-    """Assert future invariant: AUTO_SAFE_TYPES must be a strict subset of POSTING_RULE_SUPPORTED_TYPES.
+    """Assert invariant: AUTO_SAFE_TYPES must be a strict subset of POSTING_RULE_SUPPORTED_TYPES.
 
-    Current baseline flaw:
-    - ProcessingPolicyService.AUTO_SAFE_TYPES includes PETTY_CASH_EXPENSE.
-    - PostingRuleRegistry has no rule for PETTY_CASH_EXPENSE.
-    - Hence this test strictly XFAILs in CP1 until CP3 removes the contradiction.
+    Verified contract (CP3):
+    - ProcessingPolicyService.AUTO_SAFE_TYPES does NOT include PETTY_CASH_EXPENSE.
+    - AUTO_SAFE_TYPES is a strict subset of POSTING_RULE_SUPPORTED_TYPES.
     """
     assert TransactionType.PETTY_CASH_EXPENSE not in ProcessingPolicyService.AUTO_SAFE_TYPES
     assert ProcessingPolicyService.AUTO_SAFE_TYPES.issubset(POSTING_RULE_SUPPORTED_TYPES)
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="TYPE-R09: evaluate_processing_policy must return HUMAN_REVIEW for PETTY_CASH_EXPENSE",
-)
 async def test_petty_cash_expense_policy_evaluation_requires_human_review(p1_102_env):
-    """Assert future invariant: Candidate transaction with PETTY_CASH_EXPENSE must evaluate to HUMAN_REVIEW.
+    """Assert invariant: Candidate transaction with PETTY_CASH_EXPENSE must evaluate to HUMAN_REVIEW.
 
-    Current baseline behavior:
-    - Returns 'AUTO_SAFE' because PETTY_CASH_EXPENSE is in AUTO_SAFE_TYPES.
-    - Hence this test strictly XFAILs in CP1.
+    Verified contract (CP3):
+    - Returns 'HUMAN_REVIEW' because PETTY_CASH_EXPENSE is not in AUTO_SAFE_TYPES.
     """
     env = p1_102_env
     async with env["session_factory"]() as session:
@@ -673,22 +661,14 @@ def test_auto_safe_positive_controls():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("trx_type", GENERIC_REJECTED_TYPES, ids=[t.value for t in GENERIC_REJECTED_TYPES])
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="TYPE-R07: Document review correction must reject non-executable transaction types",
-)
 async def test_document_correction_rejects_non_generic_types(p1_102_env, trx_type: TransactionType):
-    """Assert future invariant: POST /documents/{id}/corrections must reject assigning non-generic types.
+    """Assert invariant: POST /documents/{id}/corrections must reject assigning non-generic types.
 
-    Future expected contract:
+    Verified contract (CP3):
     - HTTP 422 Unprocessable Content
     - error.code == 'INVARIANT_VIOLATION'
-    - Candidate proposed_transaction_type remains unchanged.
-
-    Current baseline behavior:
-    - Returns 200 OK and updates proposed_transaction_type to the rejected type.
-    - Hence this test strictly XFAILs in CP1 across all 17 rejected types.
+    - error.details['reason'] == 'NO_POSTING_RULE' or 'SPECIAL_WORKFLOW_ONLY'
+    - Candidate proposed_transaction_type remains unchanged (mutation prevention).
     """
     env = p1_102_env
     client: AsyncClient = env["client"]
@@ -733,10 +713,23 @@ async def test_document_correction_rejects_non_generic_types(p1_102_env, trx_typ
 
     response = await client.post(f"/api/v1/documents/{doc_id}/corrections", headers=headers, json=correction_payload)
 
-    # Future contract assertion (fails with 200 != 422 in baseline)
     assert response.status_code == 422
     body = response.json()
     assert body.get("error", {}).get("code") == "INVARIANT_VIOLATION"
+    expected_reason = "SPECIAL_WORKFLOW_ONLY" if trx_type == TransactionType.REVERSAL else "NO_POSTING_RULE"
+    assert body.get("error", {}).get("details", {}).get("reason") == expected_reason
+    assert body.get("error", {}).get("details", {}).get("transaction_type") == trx_type.value
+
+    # Verify candidate proposed_transaction_type was NOT mutated in database
+    async with env["session_factory"]() as session:
+        persisted_doc = await session.scalar(
+            select(Document).where(
+                Document.organization_id == org_id,
+                Document.id == doc_id,
+            )
+        )
+        assert persisted_doc is not None
+        assert persisted_doc.candidate_transaction["proposed_transaction_type"] == "DIRECT_PURCHASE"
 
 
 @pytest.mark.asyncio

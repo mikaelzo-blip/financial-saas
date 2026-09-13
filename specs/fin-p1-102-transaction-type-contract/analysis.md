@@ -67,8 +67,8 @@
 |---|---|:---:|---|
 | `PostingRuleRegistry` | `backend/src/services/posting_rules.py` | **Direct (Low)** | Expose capability sets and validation methods (`POSTING_RULE_SUPPORTED_TYPES`, `SPECIAL_WORKFLOW_TYPES`, `is_generic_ingestible`, `validate_generic_ingestion`). Zero changes to existing 20 posting rules. |
 | `TransactionService` | `backend/src/services/transaction_service.py` | **Direct (Low)** | Add fail-closed validation check as first line of `create_transaction`. |
-| `Document API Routes` | `backend/src/api/v1/documents.py` | **Direct (Low)** | Add capability check in `correct_document` when proposed type is modified; add defense-in-depth in `approve_document_candidate`. |
-| `ProcessingPolicyService` | `backend/src/services/processing_policy_service.py` | **Direct (Low)** | Remove `PETTY_CASH_EXPENSE` from `AUTO_SAFE_TYPES`; assert subset invariant. |
+| `Document API Routes` | `backend/src/api/v1/documents.py` | **Direct (Low)** | Validate corrected candidate types with canonical `PostingRuleRegistry`; approval inherits the central `TransactionService.create_transaction` gate. |
+| `ProcessingPolicyService` | `backend/src/services/processing_policy_service.py` | **Direct (Low)** | Remove `PETTY_CASH_EXPENSE` from `AUTO_SAFE_TYPES`; verify the subset invariant against canonical capability in the focused contract test. |
 | `Test Fixture` | `backend/tests/security/test_authz001_role_enforcement.py` | **Direct (Low)** | Change mutation probe transaction type from `OTHER_EXPENSE` to `DIRECT_PURCHASE` to preserve role testing focus. |
 | `AccountingEngine` | `backend/src/services/accounting_engine.py` | **None (Zero)** | No changes. Existing posting logic calls `PostingRuleRegistry.generate_journal_legs` unchanged. |
 | `ReversalService` | `backend/src/services/reversal_service.py` | **None (Zero)** | No changes. Dedicated reversal construction remains intact. |
@@ -118,3 +118,37 @@
 ### Scope Confirmation
 
 No document production code, processing-policy code, posting-leg definitions, accounting amounts/accounts, migrations, enum values, frontend product code, or historical transaction data were changed. Historical STAGED dead-end evidence remains in CP1 Git history and the specification; CP2 tests now construct historical rows directly instead of requiring the remediated public API to reproduce the old defect.
+
+---
+
+## 5. CP3 Verified Implementation
+
+### Document Correction Boundary
+
+- `correct_document` builds and schema-validates a local candidate copy, then invokes `PostingRuleRegistry.validate_generic_ingestion` before updating `document.candidate_transaction` or creating correction/audit records.
+- All 16 policy-blocked types return `HTTP 422 INVARIANT_VIOLATION` with `NO_POSTING_RULE`; `REVERSAL` returns the same public status/code with `SPECIAL_WORKFLOW_ONLY`.
+- Failed corrections leave the persisted `proposed_transaction_type` unchanged. The focused test verifies this for all 17 rejected types.
+- Valid normal generic corrections, including `DIRECT_PURCHASE`, remain accepted.
+
+### Approval Call Graph and Historical Safety
+
+`approve_document_candidate` calls `TransactionService.create_transaction`. The CP2 service entrypoint invokes the canonical capability gate before allocation, lookup, sequence allocation, model construction, or flush. CP3 therefore adds no duplicate route-level approval check. Historical `READY_FOR_APPROVAL` candidates containing unsupported types still fail atomically through this actual path, with zero durable transactions/journals and unchanged candidate state.
+
+### AUTO_SAFE Consistency
+
+- `AUTO_SAFE_TYPES` is now `{DIRECT_PURCHASE, BANK_CHARGE}`.
+- `PETTY_CASH_EXPENSE` uses the existing `HUMAN_REVIEW` fallback and receives no new accounting treatment.
+- The focused contract suite verifies `AUTO_SAFE_TYPES` is a subset of `POSTING_RULE_SUPPORTED_TYPES`, the canonical CP2 capability set.
+
+### CP3 Verification
+
+- FIN-P1-102 focused suite: **46 passed, 0 xfailed, 0 failed, 0 errors**.
+- Relevant document intelligence suite: **46 passed**.
+- CP2/reversal/accounting/transaction-validation/sequence regression slice: **86 passed**.
+- AUTHZ-001: **103 passed**.
+- Python compilation, `git diff --check`, and repository safety: **PASS**.
+- Independent bounded read-only review: **PASS** with **0 Critical, 0 High, 0 Medium, 0 Low** findings.
+
+### CP3 Scope Confirmation
+
+CP3 changed only document correction capability validation, `AUTO_SAFE_TYPES`, FIN-P1-102 contract tests, and governance artifacts. It did not change posting-rule implementations, `TransactionService`, accounting logic, `TransactionType`, database migrations, frontend product code, authorization policies, or historical data.

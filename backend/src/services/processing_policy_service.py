@@ -35,7 +35,6 @@ class ProcessingPolicyService:
 
     AUTO_SAFE_TYPES: Set[TransactionType] = {
         TransactionType.DIRECT_PURCHASE,
-        TransactionType.PETTY_CASH_EXPENSE,
         TransactionType.BANK_CHARGE,
     }
 

@@ -22,6 +22,7 @@ from src.schemas.document import (DocumentResponse, DocumentCorrectionRequest,
 from src.schemas.transaction import TransactionCreate, TransactionResponse
 from src.services.document_service import DocumentService
 from src.services.documents.pipeline import process_document_background
+from src.services.posting_rules import PostingRuleRegistry
 from src.services.transaction_service import TransactionService
 from src.services.accounting_engine import AccountingEngine
 from src.services.audit_service import AuditService
@@ -138,6 +139,8 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
     old = {key: candidate.get(key) for key in data.changes}
     candidate.update(data.changes)
     validated = TransactionCandidate.model_validate(candidate)
+    if validated.proposed_transaction_type is not None:
+        PostingRuleRegistry.validate_generic_ingestion(validated.proposed_transaction_type)
     if validated.project_id:
         project = await db.scalar(select(Project).where(and_(
             Project.id == validated.project_id, Project.organization_id == org_id,

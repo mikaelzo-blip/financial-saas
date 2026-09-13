@@ -1223,11 +1223,6 @@ async def test_invalid_match_does_not_distort_dashboard(recon_env: Dict[str, Any
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="RECON-001 CP1: Current dashboard derives unmatched_book via synthetic subtraction. Future contract requires direct aggregation of unlinked book lines.",
-)
 async def test_future_invariant_dashboard_unmatched_book_authoritative(recon_env: Dict[str, Any]):
     """Regression: When a bank line is reconciled to a non-journal target (e.g. Transaction),
 
@@ -1270,6 +1265,13 @@ async def test_historical_anomaly_detection_queries(recon_env: Dict[str, Any]):
     in historical data without mutating any records.
     """
     async with recon_env["session_factory"]() as session:
+        # Simulate unconstrained historical table before migration 024
+        await session.execute(text("DROP INDEX IF EXISTS uq_bank_reconciliations_statement_line"))
+        await session.execute(text("DROP INDEX IF EXISTS uq_bank_reconciliations_journal_line"))
+        await session.execute(text("DROP INDEX IF EXISTS uq_bank_reconciliations_money_movement"))
+        await session.execute(text("DROP INDEX IF EXISTS uq_bank_reconciliations_transaction"))
+        await session.execute(text("PRAGMA ignore_check_constraints = ON"))
+
         org_id = recon_env["org_a"].id
         stmt_line_10m = recon_env["stmt_line_10m"]
         jl = recon_env["jl_bank_debit_10m"]

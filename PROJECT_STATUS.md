@@ -4,22 +4,21 @@
 - **Current branch**: `hermes/recon-001-reconciliation-integrity`
 - **Base commit**: `89ba046950f588718148bf8e7e831debc954086b` (`docs(recon-001): define reconciliation integrity contract`)
 - **Active feature**: RECON-001 — Bank Reconciliation Integrity (Cardinality, Amount Integrity, and Dashboard Correctness)
-- **Status**: CHECKPOINT 2 COMPLETED (canonical reconciliation integrity service boundary).
+- **Status**: CHECKPOINT 3 VERIFIED — awaiting checkpoint commit (database integrity, fail-closed migration, PostgreSQL concurrency, and dashboard correction).
 - **Scope Confirmation**:
-  - CP2 adds the canonical `BankReconciliationService._validate_and_resolve_match` boundary shared by manual and auto-match persistence.
-  - Validation precedence is tenant/existence 404, exactly-one target 422, statement/target reuse 409, then payment-account, amount, and directional integrity 422.
-  - CP2 locks the statement line and selected target with `SELECT ... FOR UPDATE`; database constraints and PostgreSQL race validation remain CP3 work.
-  - CP2 transitions 14 integrity regressions to PASS. Dashboard aggregation remains one intentional strict-XFAIL; PostgreSQL concurrency remains prerequisite-skipped without a configured database.
-  - Zero changes to accounting posting rules, ledger balance invariants, JournalEntry debit/credit behavior, tenant/RBAC handlers, frontend, migrations, or schema constraints.
+  - CP2's canonical `_validate_and_resolve_match` service boundary and validation precedence remain unchanged.
+  - CP3 adds migration `024_recon_integrity_invariants`, named check constraints, and four active-state partial unique indexes for statement lines and reconciliation targets.
+  - CP3 corrects unmatched-book aggregation to sum cash journal lines that lack an active reconciliation reference; no synthetic subtraction remains.
+  - CP3 updates only Alembic-head assertions in shared PostgreSQL test helpers; accounting posting, ledger balance, tenant/RBAC behavior, and frontend code remain unchanged.
 - **Verification**:
-  - `tests/security/test_recon_001_reconciliation_integrity.py`: 36 passed, 1 xfailed, 1 skipped.
-  - `tests/unit/test_bank_reconciliation_p2.py`: 2 passed.
-  - FIN-P1-105 reconciliation slice: 10 passed.
-  - AUTHZ-001 reconciliation slice: 5 passed.
-  - Independent read-only CP2 review: PASS; Critical/High/Medium/Low = 0/0/0/0.
+  - Focused RECON-001 suite: 59 passed, 1 environment-gated security skip.
+  - Unit/migration coverage after review follow-up: 20 passed.
+  - Fresh disposable PostgreSQL 16: 3 passed, including 20-worker statement-line and target-reuse races; one commit and 19 `IntegrityError` rejections in each race.
+  - PostgreSQL migration chain: upgrade, downgrade to `023_historical_seq_bootstrap`, re-upgrade to `024_recon_integrity_invariants`, offline SQL generation, and `alembic check` all passed.
+  - Independent read-only CP3 review: PASS; Critical/High/Medium/Low = 0/0/0/3. All three Low coverage findings were remediated and verified.
 - **Checkpoints Defined**:
   - CP1: Executable RED reproduction & characterization suite [COMPLETED].
   - CP2: Canonical reconciliation integrity service boundary & auto-match unification [COMPLETED].
-  - CP3: Database constraints, fail-closed historical preflight migration, PostgreSQL concurrency proof, and dashboard metric correction [PENDING].
+  - CP3: Database constraints, fail-closed historical preflight migration, PostgreSQL concurrency proof, and dashboard metric correction [VERIFIED — pending commit].
   - CP4: Full regression, security review, and remote delivery [PENDING].
-- **Next action**: Begin CP3 only when explicitly requested.
+- **Next action**: Commit CP3, then run CP4 regression and delivery gates.

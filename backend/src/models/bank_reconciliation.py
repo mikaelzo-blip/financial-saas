@@ -10,9 +10,12 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     UniqueConstraint,
+    CheckConstraint,
     Integer,
     Text,
+    text,
 )
+from sqlalchemy.sql.naming import conv
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
@@ -108,6 +111,44 @@ class BankReconciliation(Base):
         Index("ix_bank_reconciliations_jl", "journal_line_id"),
         Index("ix_bank_reconciliations_mm", "money_movement_id"),
         Index("ix_bank_reconciliations_trx", "transaction_id"),
+        Index(
+            "uq_bank_reconciliations_statement_line",
+            "statement_line_id",
+            unique=True,
+            postgresql_where=text("status = 'MATCHED'"),
+            sqlite_where=text("status = 'MATCHED'"),
+        ),
+        Index(
+            "uq_bank_reconciliations_journal_line",
+            "journal_line_id",
+            unique=True,
+            postgresql_where=text("journal_line_id IS NOT NULL AND status = 'MATCHED'"),
+            sqlite_where=text("journal_line_id IS NOT NULL AND status = 'MATCHED'"),
+        ),
+        Index(
+            "uq_bank_reconciliations_money_movement",
+            "money_movement_id",
+            unique=True,
+            postgresql_where=text("money_movement_id IS NOT NULL AND status = 'MATCHED'"),
+            sqlite_where=text("money_movement_id IS NOT NULL AND status = 'MATCHED'"),
+        ),
+        Index(
+            "uq_bank_reconciliations_transaction",
+            "transaction_id",
+            unique=True,
+            postgresql_where=text("transaction_id IS NOT NULL AND status = 'MATCHED'"),
+            sqlite_where=text("transaction_id IS NOT NULL AND status = 'MATCHED'"),
+        ),
+        CheckConstraint(
+            "(CASE WHEN journal_line_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN money_movement_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN transaction_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            name=conv("ck_bank_recon_exactly_one_target"),
+        ),
+        CheckConstraint(
+            "matched_amount > 0",
+            name=conv("ck_bank_recon_matched_amount_positive"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)

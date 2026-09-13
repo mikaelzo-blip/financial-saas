@@ -557,20 +557,28 @@ class BankReconciliationService:
         matched_amount = sum(l.credit + l.debit for l in all_lines if l.reconciliation_status == ReconciliationStatus.MATCHED)
         unmatched_bank = sum(l.credit + l.debit for l in all_lines if l.reconciliation_status == ReconciliationStatus.UNMATCHED_BANK)
 
-        # Unmatched book lines (Cash journal lines not referenced in bank_reconciliations)
-        jl_query = (
+        # Unmatched book lines: direct aggregation of cash JournalLines not referenced in active bank_reconciliations
+        matched_jl_subquery = (
+            select(BankReconciliation.journal_line_id)
+            .where(
+                BankReconciliation.organization_id == organization_id,
+                BankReconciliation.journal_line_id.is_not(None),
+                BankReconciliation.status == ReconciliationStatus.MATCHED,
+            )
+        )
+        unmatched_jl_query = (
             select(func.coalesce(func.sum(JournalLine.debit_amount + JournalLine.credit_amount), Decimal("0.00")))
-            .join(JournalEntry)
+            .join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id)
             .where(
                 JournalEntry.organization_id == organization_id,
-                JournalLine.payment_account_id.is_not(None)
+                JournalLine.payment_account_id.is_not(None),
+                JournalLine.id.not_in(matched_jl_subquery),
             )
         )
         if payment_account_id:
-            jl_query = jl_query.where(JournalLine.payment_account_id == payment_account_id)
+            unmatched_jl_query = unmatched_jl_query.where(JournalLine.payment_account_id == payment_account_id)
 
-        total_book_cash = await self.session.scalar(jl_query) or Decimal("0.00")
-        unmatched_book = max(Decimal("0.00"), total_book_cash - matched_amount)
+        unmatched_book = await self.session.scalar(unmatched_jl_query) or Decimal("0.00")
 
         # Unallocated cash movements via money movement service logic
         in_stmt = select(func.coalesce(func.sum(MoneyMovement.amount), Decimal("0.00"))).where(

@@ -37,21 +37,13 @@
 
 ## Checkpoint 3: Database Constraints, Fail-Closed Migration & Dashboard Correction
 
-- [ ] **TASK-CP3-01**: Implement Alembic migration `024_reconciliation_integrity_constraints.py` with fail-closed preflight check scanning for historical duplicates (statement lines, JL, MM, TX), zero-target rows, multi-target rows, non-positive amounts (`matched_amount <= 0`), and amount discrepancies.
-- [ ] **TASK-CP3-02**: Add partial unique indexes in migration `024`:
-  - `uq_bank_reconciliations_statement_line` on `statement_line_id WHERE status = 'MATCHED'`
-  - `uq_bank_reconciliations_journal_line` on `journal_line_id WHERE journal_line_id IS NOT NULL`
-  - `uq_bank_reconciliations_money_movement` on `money_movement_id WHERE money_movement_id IS NOT NULL`
-  - `uq_bank_reconciliations_transaction` on `transaction_id WHERE transaction_id IS NOT NULL`
-- [ ] **TASK-CP3-03**: Add check constraints in migration `024`:
-  - `ck_bank_recon_exactly_one_target`: exactly one target FK is not null.
-  - `ck_bank_recon_matched_amount_positive`: `matched_amount > 0`.
-- [ ] **TASK-CP3-04**: Update `BankReconciliation` model in `src/models/bank_reconciliation.py` with corresponding `Index` (supplying both `postgresql_where` and `sqlite_where`) and `CheckConstraint` entries.
-- [ ] **TASK-CP3-05**: Correct `get_cash_completeness_dashboard` in `BankReconciliationService` to compute `unmatched_book_amount` from actual unreconciled `JournalLine`s (`LEFT JOIN bank_reconciliations ... WHERE br.id IS NULL`).
-- [ ] **TASK-CP3-06**: Update legacy test fixtures:
-  - `tests/unit/test_bank_reconciliation_p2.py` (`test_cash_completeness_dashboard_and_reconciliation`) to provide a valid target fixture.
-  - `tests/security/test_fin_p1_105_tenant_reference_hardening.py` (`test_bank_reconciliation_match_same_tenant_journal_line_accepted`) to ensure matching directional debit/credit and payment account linkage.
-- [ ] **TASK-CP3-07**: Verify migration upgrade/downgrade and PostgreSQL constraint enforcement; commit CP3.
+- [x] **TASK-CP3-01**: Implement Alembic migration `024_recon_integrity_invariants.py` with fail-closed preflight check scanning for historical duplicates (statement lines, JL, MM, TX), zero-target rows, multi-target rows, non-positive amounts (`matched_amount <= 0`), and amount discrepancies.
+- [x] **TASK-CP3-02**: Add four active-state partial unique indexes in migration `024` for statement lines, journal lines, money movements, and transactions.
+- [x] **TASK-CP3-03**: Add named `ck_bank_recon_exactly_one_target` and `ck_bank_recon_matched_amount_positive` constraints in migration `024`.
+- [x] **TASK-CP3-04**: Update `BankReconciliation` metadata with portable partial indexes and named check constraints.
+- [x] **TASK-CP3-05**: Correct `get_cash_completeness_dashboard` to aggregate cash `JournalLine`s lacking active journal-line reconciliation references.
+- [x] **TASK-CP3-06**: Confirm existing legacy fixtures satisfy the canonical target/direction/account contract; no fixture production semantics were weakened.
+- [x] **TASK-CP3-07**: Verify fresh PostgreSQL 16 upgrade/downgrade/re-upgrade, offline SQL, catalog constraints/indexes, 20-worker statement and target races, and zero drift; checkpoint commit pending.
 
 ---
 

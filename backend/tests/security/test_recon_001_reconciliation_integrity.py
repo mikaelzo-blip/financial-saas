@@ -1,36 +1,9 @@
-"""RECON-001 Bank Reconciliation Integrity Characterization & Strict-XFAIL Regression Suite.
+"""RECON-001 reconciliation-integrity regression suite.
 
-Covers:
-1. Duplicate reconciliation for the same bank statement line (baseline PASS proof & future strict-XFAIL).
-2. Same financial target reused across multiple statement lines:
-   - JournalLine (baseline PASS proof & future strict-XFAIL)
-   - MoneyMovement (baseline PASS proof & future strict-XFAIL)
-   - Transaction (baseline PASS proof & future strict-XFAIL)
-3. Single-target discriminator:
-   - Zero targets supplied (baseline PASS proof & future strict-XFAIL)
-   - Multiple targets supplied (baseline PASS proof & future strict-XFAIL)
-   - All three targets supplied (baseline PASS proof & future strict-XFAIL)
-4. Bank-line matched_amount integrity (arbitrary matched amount baseline PASS proof & future strict-XFAIL).
-5. Target amount integrity:
-   - JournalLine amount mismatch (baseline PASS proof & future strict-XFAIL)
-   - MoneyMovement amount mismatch (baseline PASS proof & future strict-XFAIL)
-   - Transaction amount mismatch (baseline PASS proof & future strict-XFAIL)
-6. Directional integrity:
-   - Inflow vs MoneyMovement OUT (baseline PASS proof & future strict-XFAIL)
-   - Inflow vs JournalLine credit/outflow (baseline PASS proof & future strict-XFAIL)
-7. Auto-match target reuse & already-matched statement line characterization:
-   - Auto-match candidate reuse (baseline PASS proof & future strict-XFAIL)
-   - Auto-match skips already MATCHED statement line (PASS characterization)
-8. Dashboard cash completeness distortion:
-   - Baseline distortion proof (PASS)
-   - Future authoritative unmatched-book calculation contract (strict-XFAIL)
-9. Historical data anomaly detection queries (read-only probes verifying detection of 10 anomaly classes).
-10. Multi-tenant reference precedence and non-regression (FIN-P1-105 preservation - PASS).
-11. Role-based access control and verified actor identity (AUTHZ-001 preservation - PASS).
-12. State atomicity and partial-write verification on rejection (PASS).
-13. PostgreSQL concurrency reproduction gate (isolated prerequisite skip when live PostgreSQL is unavailable).
-
-Zero production code changes in CP1.
+CP2 verifies cardinality, target selection, amount and directional integrity, shared
+manual/auto-match validation, tenant precedence, authorization, and rejection
+atomicity. Dashboard aggregation remains a CP3 strict-XFAIL; PostgreSQL
+concurrency remains prerequisite-skipped without a configured test database.
 """
 
 from __future__ import annotations
@@ -511,8 +484,8 @@ async def recon_env() -> AsyncGenerator[Dict[str, Any], None]:
 
 
 @pytest.mark.asyncio
-async def test_baseline_duplicate_statement_line_accepted(recon_env: Dict[str, Any]):
-    """Baseline proof: Current code permits multiple reconciliations for the same BankStatementLine."""
+async def test_duplicate_statement_line_rejected(recon_env: Dict[str, Any]):
+    """Regression: service permits multiple reconciliations for the same BankStatementLine."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_line = recon_env["stmt_line_10m"]
@@ -536,27 +509,21 @@ async def test_baseline_duplicate_statement_line_accepted(recon_env: Dict[str, A
         "notes": "Duplicate match for same line",
     }
     resp_2 = await client.post("/api/v1/bank-reconciliation/reconcile", json=payload_2, headers=headers)
-    # CURRENT BASELINE DEFECT: Both matches succeed with 200 OK!
-    assert resp_2.status_code == 200
+    assert resp_2.status_code == 409
 
-    # Verify durable DB state contains two BankReconciliation rows for this single statement line
+    # Rejection leaves the original reconciliation as the sole persisted match.
     async with recon_env["session_factory"]() as session:
         recons = (
             await session.scalars(
                 select(BankReconciliation).where(BankReconciliation.statement_line_id == stmt_line.id)
             )
         ).all()
-        assert len(recons) == 2
+        assert len(recons) == 1
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="RECON-001 CP1: Current baseline allows duplicate reconciliation for same statement line. Future contract requires HTTP 409 Conflict.",
-)
-async def test_future_invariant_duplicate_statement_line_rejected(recon_env: Dict[str, Any]):
-    """Strict-XFAIL: Second reconciliation attempt for an already-reconciled BankStatementLine must be rejected with 409 Conflict."""
+async def test_contract_duplicate_statement_line_rejected(recon_env: Dict[str, Any]):
+    """Regression: Second reconciliation attempt for an already-reconciled BankStatementLine must be rejected with 409 Conflict."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_line = recon_env["stmt_line_10m"]
@@ -587,8 +554,8 @@ async def test_future_invariant_duplicate_statement_line_rejected(recon_env: Dic
 
 
 @pytest.mark.asyncio
-async def test_baseline_duplicate_target_reuse_journal_line_accepted(recon_env: Dict[str, Any]):
-    """Baseline proof: Current code allows multiple statement lines to reconcile to the same JournalLine."""
+async def test_duplicate_target_reuse_journal_line_rejected(recon_env: Dict[str, Any]):
+    """Regression: service allows multiple statement lines to reconcile to the same JournalLine."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     line_a = recon_env["stmt_line_5m_1"]
@@ -609,8 +576,7 @@ async def test_baseline_duplicate_target_reuse_journal_line_accepted(recon_env: 
         json={"statement_line_id": str(line_b.id), "journal_line_id": str(jl.id), "matched_amount": "5000000.00"},
         headers=headers,
     )
-    # CURRENT BASELINE DEFECT: accepted
-    assert resp_b.status_code == 200
+    assert resp_b.status_code == 409
 
     async with recon_env["session_factory"]() as session:
         recons = (
@@ -618,17 +584,12 @@ async def test_baseline_duplicate_target_reuse_journal_line_accepted(recon_env: 
                 select(BankReconciliation).where(BankReconciliation.journal_line_id == jl.id)
             )
         ).all()
-        assert len(recons) == 2
+        assert len(recons) == 1
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="RECON-001 CP1: Current baseline allows JournalLine reuse across statement lines. Future contract requires HTTP 409 Conflict.",
-)
-async def test_future_invariant_target_reuse_journal_line_rejected(recon_env: Dict[str, Any]):
-    """Strict-XFAIL: Reconciling a second bank statement line to an already-reconciled JournalLine must return 409 Conflict."""
+async def test_contract_target_reuse_journal_line_rejected(recon_env: Dict[str, Any]):
+    """Regression: Reconciling a second bank statement line to an already-reconciled JournalLine must return 409 Conflict."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     line_a = recon_env["stmt_line_5m_1"]
@@ -652,8 +613,8 @@ async def test_future_invariant_target_reuse_journal_line_rejected(recon_env: Di
 
 
 @pytest.mark.asyncio
-async def test_baseline_duplicate_target_reuse_money_movement_accepted(recon_env: Dict[str, Any]):
-    """Baseline proof: Current code allows multiple statement lines to reconcile to the same MoneyMovement."""
+async def test_duplicate_target_reuse_money_movement_rejected(recon_env: Dict[str, Any]):
+    """Regression: service allows multiple statement lines to reconcile to the same MoneyMovement."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     line_a = recon_env["stmt_line_5m_1"]
@@ -672,7 +633,7 @@ async def test_baseline_duplicate_target_reuse_money_movement_accepted(recon_env
         json={"statement_line_id": str(line_b.id), "money_movement_id": str(mm.id), "matched_amount": "5000000.00"},
         headers=headers,
     )
-    assert resp_b.status_code == 200
+    assert resp_b.status_code == 409
 
     async with recon_env["session_factory"]() as session:
         recons = (
@@ -680,17 +641,12 @@ async def test_baseline_duplicate_target_reuse_money_movement_accepted(recon_env
                 select(BankReconciliation).where(BankReconciliation.money_movement_id == mm.id)
             )
         ).all()
-        assert len(recons) == 2
+        assert len(recons) == 1
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="RECON-001 CP1: Current baseline allows MoneyMovement reuse across statement lines. Future contract requires HTTP 409 Conflict.",
-)
-async def test_future_invariant_target_reuse_money_movement_rejected(recon_env: Dict[str, Any]):
-    """Strict-XFAIL: Reconciling a second bank statement line to an already-reconciled MoneyMovement must return 409 Conflict."""
+async def test_contract_target_reuse_money_movement_rejected(recon_env: Dict[str, Any]):
+    """Regression: Reconciling a second bank statement line to an already-reconciled MoneyMovement must return 409 Conflict."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     line_a = recon_env["stmt_line_5m_1"]
@@ -714,8 +670,8 @@ async def test_future_invariant_target_reuse_money_movement_rejected(recon_env: 
 
 
 @pytest.mark.asyncio
-async def test_baseline_duplicate_target_reuse_transaction_accepted(recon_env: Dict[str, Any]):
-    """Baseline proof: Current code allows multiple statement lines to reconcile to the same Transaction."""
+async def test_duplicate_target_reuse_transaction_rejected(recon_env: Dict[str, Any]):
+    """Regression: service allows multiple statement lines to reconcile to the same Transaction."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     line_a = recon_env["stmt_line_5m_1"]
@@ -734,7 +690,7 @@ async def test_baseline_duplicate_target_reuse_transaction_accepted(recon_env: D
         json={"statement_line_id": str(line_b.id), "transaction_id": str(tx.id), "matched_amount": "5000000.00"},
         headers=headers,
     )
-    assert resp_b.status_code == 200
+    assert resp_b.status_code == 409
 
     async with recon_env["session_factory"]() as session:
         recons = (
@@ -742,17 +698,12 @@ async def test_baseline_duplicate_target_reuse_transaction_accepted(recon_env: D
                 select(BankReconciliation).where(BankReconciliation.transaction_id == tx.id)
             )
         ).all()
-        assert len(recons) == 2
+        assert len(recons) == 1
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="RECON-001 CP1: Current baseline allows Transaction reuse across statement lines. Future contract requires HTTP 409 Conflict.",
-)
-async def test_future_invariant_target_reuse_transaction_rejected(recon_env: Dict[str, Any]):
-    """Strict-XFAIL: Reconciling a second bank statement line to an already-reconciled Transaction must return 409 Conflict."""
+async def test_contract_target_reuse_transaction_rejected(recon_env: Dict[str, Any]):
+    """Regression: Reconciling a second bank statement line to an already-reconciled Transaction must return 409 Conflict."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     line_a = recon_env["stmt_line_5m_1"]
@@ -781,8 +732,8 @@ async def test_future_invariant_target_reuse_transaction_rejected(recon_env: Dic
 
 
 @pytest.mark.asyncio
-async def test_baseline_zero_targets_accepted(recon_env: Dict[str, Any]):
-    """Baseline proof: Current code accepts a reconciliation request with zero targets."""
+async def test_zero_targets_rejected(recon_env: Dict[str, Any]):
+    """Regression: service accepts a reconciliation request with zero targets."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_line = recon_env["stmt_line_10m"]
@@ -796,27 +747,20 @@ async def test_baseline_zero_targets_accepted(recon_env: Dict[str, Any]):
         "notes": "Orphan match with zero targets",
     }
     resp = await client.post("/api/v1/bank-reconciliation/reconcile", json=payload, headers=headers)
-    # CURRENT BASELINE DEFECT: accepted with 200 OK
-    assert resp.status_code == 200
+    assert resp.status_code == 422
 
     async with recon_env["session_factory"]() as session:
         recon = await session.scalar(
             select(BankReconciliation).where(BankReconciliation.statement_line_id == stmt_line.id)
         )
-        assert recon is not None
-        assert recon.journal_line_id is None
-        assert recon.money_movement_id is None
-        assert recon.transaction_id is None
+        line = await session.get(BankStatementLine, stmt_line.id)
+        assert recon is None
+        assert line.reconciliation_status == ReconciliationStatus.UNMATCHED_BANK
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="RECON-001 CP1: Current baseline allows zero targets. Future contract requires HTTP 422 Invariant Violation.",
-)
-async def test_future_invariant_zero_targets_rejected(recon_env: Dict[str, Any]):
-    """Strict-XFAIL: Reconciliation request with zero target IDs must be rejected with 422 Invariant Violation."""
+async def test_contract_zero_targets_rejected(recon_env: Dict[str, Any]):
+    """Regression: Reconciliation request with zero target IDs must be rejected with 422 Invariant Violation."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_line = recon_env["stmt_line_10m"]
@@ -834,8 +778,8 @@ async def test_future_invariant_zero_targets_rejected(recon_env: Dict[str, Any])
 
 
 @pytest.mark.asyncio
-async def test_baseline_multiple_targets_accepted(recon_env: Dict[str, Any]):
-    """Baseline proof: Current code accepts a reconciliation request with multiple targets."""
+async def test_multiple_targets_rejected(recon_env: Dict[str, Any]):
+    """Regression: service accepts a reconciliation request with multiple targets."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_line = recon_env["stmt_line_5m_1"]
@@ -850,26 +794,20 @@ async def test_baseline_multiple_targets_accepted(recon_env: Dict[str, Any]):
         "notes": "Multi-target match (JL + MM)",
     }
     resp = await client.post("/api/v1/bank-reconciliation/reconcile", json=payload, headers=headers)
-    # CURRENT BASELINE DEFECT: accepted with 200 OK
-    assert resp.status_code == 200
+    assert resp.status_code == 422
 
     async with recon_env["session_factory"]() as session:
         recon = await session.scalar(
             select(BankReconciliation).where(BankReconciliation.statement_line_id == stmt_line.id)
         )
-        assert recon is not None
-        assert recon.journal_line_id == jl.id
-        assert recon.money_movement_id == mm.id
+        line = await session.get(BankStatementLine, stmt_line.id)
+        assert recon is None
+        assert line.reconciliation_status == ReconciliationStatus.UNMATCHED_BANK
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="RECON-001 CP1: Current baseline allows multiple targets. Future contract requires HTTP 422 Invariant Violation.",
-)
-async def test_future_invariant_multiple_targets_rejected(recon_env: Dict[str, Any]):
-    """Strict-XFAIL: Reconciliation request with more than one target must be rejected with 422 Invariant Violation."""
+async def test_contract_multiple_targets_rejected(recon_env: Dict[str, Any]):
+    """Regression: Reconciliation request with more than one target must be rejected with 422 Invariant Violation."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_line = recon_env["stmt_line_5m_1"]
@@ -888,13 +826,8 @@ async def test_future_invariant_multiple_targets_rejected(recon_env: Dict[str, A
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="RECON-001 CP1: Current baseline allows all three targets. Future contract requires HTTP 422 Invariant Violation.",
-)
-async def test_future_invariant_three_targets_rejected(recon_env: Dict[str, Any]):
-    """Strict-XFAIL: Reconciliation request populating all three targets must be rejected with 422."""
+async def test_contract_three_targets_rejected(recon_env: Dict[str, Any]):
+    """Regression: Reconciliation request populating all three targets must be rejected with 422."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_line = recon_env["stmt_line_5m_1"]
@@ -920,8 +853,8 @@ async def test_future_invariant_three_targets_rejected(recon_env: Dict[str, Any]
 
 
 @pytest.mark.asyncio
-async def test_baseline_arbitrary_matched_amount_accepted(recon_env: Dict[str, Any]):
-    """Baseline proof: Current code accepts an arbitrary matched_amount disconnected from the bank line amount."""
+async def test_arbitrary_matched_amount_rejected(recon_env: Dict[str, Any]):
+    """Regression: service accepts an arbitrary matched_amount disconnected from the bank line amount."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_line = recon_env["stmt_line_10m"]  # line amount is 10,000,000.00
@@ -933,25 +866,20 @@ async def test_baseline_arbitrary_matched_amount_accepted(recon_env: Dict[str, A
         "matched_amount": "999999999.00",  # completely arbitrary 999M vs 10M
     }
     resp = await client.post("/api/v1/bank-reconciliation/reconcile", json=payload, headers=headers)
-    # CURRENT BASELINE DEFECT: accepted
-    assert resp.status_code == 200
+    assert resp.status_code == 422
 
     async with recon_env["session_factory"]() as session:
         recon = await session.scalar(
             select(BankReconciliation).where(BankReconciliation.statement_line_id == stmt_line.id)
         )
-        assert recon is not None
-        assert recon.matched_amount == Decimal("999999999.00")
+        line = await session.get(BankStatementLine, stmt_line.id)
+        assert recon is None
+        assert line.reconciliation_status == ReconciliationStatus.UNMATCHED_BANK
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="RECON-001 CP1: Current baseline allows arbitrary matched_amount. Future contract requires HTTP 422 Invariant Violation.",
-)
-async def test_future_invariant_bank_line_amount_mismatch_rejected(recon_env: Dict[str, Any]):
-    """Strict-XFAIL: matched_amount differing from bank statement line amount must be rejected with 422."""
+async def test_contract_bank_line_amount_mismatch_rejected(recon_env: Dict[str, Any]):
+    """Regression: matched_amount differing from bank statement line amount must be rejected with 422."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_line = recon_env["stmt_line_10m"]  # 10M line
@@ -973,8 +901,8 @@ async def test_future_invariant_bank_line_amount_mismatch_rejected(recon_env: Di
 
 
 @pytest.mark.asyncio
-async def test_baseline_target_amount_mismatch_journal_line_accepted(recon_env: Dict[str, Any]):
-    """Baseline proof: Current code allows matching a 10M bank line against a 5M JournalLine."""
+async def test_target_amount_mismatch_journal_line_rejected(recon_env: Dict[str, Any]):
+    """Regression: service allows matching a 10M bank line against a 5M JournalLine."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_line_10m = recon_env["stmt_line_10m"]  # 10M bank line
@@ -986,18 +914,12 @@ async def test_baseline_target_amount_mismatch_journal_line_accepted(recon_env: 
         "matched_amount": "10000000.00",  # matches bank line, but contradicts target
     }
     resp = await client.post("/api/v1/bank-reconciliation/reconcile", json=payload, headers=headers)
-    # CURRENT BASELINE DEFECT: accepted because service does not check target amount
-    assert resp.status_code == 200
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="RECON-001 CP1: Current baseline allows bank line amount to mismatch JournalLine amount. Future contract requires HTTP 422.",
-)
-async def test_future_invariant_target_amount_mismatch_journal_line_rejected(recon_env: Dict[str, Any]):
-    """Strict-XFAIL: Reconciling bank line against JournalLine with unequal amount must be rejected with 422."""
+async def test_contract_target_amount_mismatch_journal_line_rejected(recon_env: Dict[str, Any]):
+    """Regression: Reconciling bank line against JournalLine with unequal amount must be rejected with 422."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_line_10m = recon_env["stmt_line_10m"]  # 10M
@@ -1014,8 +936,8 @@ async def test_future_invariant_target_amount_mismatch_journal_line_rejected(rec
 
 
 @pytest.mark.asyncio
-async def test_baseline_target_amount_mismatch_money_movement_accepted(recon_env: Dict[str, Any]):
-    """Baseline proof: Current code allows matching a 10M bank line against a 5M MoneyMovement."""
+async def test_target_amount_mismatch_money_movement_rejected(recon_env: Dict[str, Any]):
+    """Regression: service allows matching a 10M bank line against a 5M MoneyMovement."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_line_10m = recon_env["stmt_line_10m"]  # 10M
@@ -1027,17 +949,12 @@ async def test_baseline_target_amount_mismatch_money_movement_accepted(recon_env
         "matched_amount": "10000000.00",
     }
     resp = await client.post("/api/v1/bank-reconciliation/reconcile", json=payload, headers=headers)
-    assert resp.status_code == 200
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="RECON-001 CP1: Current baseline allows bank line amount to mismatch MoneyMovement amount. Future contract requires HTTP 422.",
-)
-async def test_future_invariant_target_amount_mismatch_money_movement_rejected(recon_env: Dict[str, Any]):
-    """Strict-XFAIL: Reconciling bank line against MoneyMovement with unequal amount must be rejected with 422."""
+async def test_contract_target_amount_mismatch_money_movement_rejected(recon_env: Dict[str, Any]):
+    """Regression: Reconciling bank line against MoneyMovement with unequal amount must be rejected with 422."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_line_10m = recon_env["stmt_line_10m"]  # 10M
@@ -1054,8 +971,8 @@ async def test_future_invariant_target_amount_mismatch_money_movement_rejected(r
 
 
 @pytest.mark.asyncio
-async def test_baseline_target_amount_mismatch_transaction_accepted(recon_env: Dict[str, Any]):
-    """Baseline proof: Current code allows matching a 10M bank line against a 5M Transaction."""
+async def test_target_amount_mismatch_transaction_rejected(recon_env: Dict[str, Any]):
+    """Regression: service allows matching a 10M bank line against a 5M Transaction."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_line_10m = recon_env["stmt_line_10m"]  # 10M
@@ -1067,17 +984,12 @@ async def test_baseline_target_amount_mismatch_transaction_accepted(recon_env: D
         "matched_amount": "10000000.00",
     }
     resp = await client.post("/api/v1/bank-reconciliation/reconcile", json=payload, headers=headers)
-    assert resp.status_code == 200
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="RECON-001 CP1: Current baseline allows bank line amount to mismatch Transaction amount. Future contract requires HTTP 422.",
-)
-async def test_future_invariant_target_amount_mismatch_transaction_rejected(recon_env: Dict[str, Any]):
-    """Strict-XFAIL: Reconciling bank line against Transaction with unequal amount must be rejected with 422."""
+async def test_contract_target_amount_mismatch_transaction_rejected(recon_env: Dict[str, Any]):
+    """Regression: Reconciling bank line against Transaction with unequal amount must be rejected with 422."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_line_10m = recon_env["stmt_line_10m"]  # 10M
@@ -1099,8 +1011,8 @@ async def test_future_invariant_target_amount_mismatch_transaction_rejected(reco
 
 
 @pytest.mark.asyncio
-async def test_baseline_directional_mismatch_money_movement_accepted(recon_env: Dict[str, Any]):
-    """Baseline proof: Current code allows bank Inflow (credit) to match MoneyMovement with direction OUT."""
+async def test_directional_mismatch_money_movement_rejected(recon_env: Dict[str, Any]):
+    """Regression: service allows bank Inflow (credit) to match MoneyMovement with direction OUT."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_line_in_10m = recon_env["stmt_line_10m"]  # Inflow (credit=10M)
@@ -1112,18 +1024,12 @@ async def test_baseline_directional_mismatch_money_movement_accepted(recon_env: 
         "matched_amount": "10000000.00",
     }
     resp = await client.post("/api/v1/bank-reconciliation/reconcile", json=payload, headers=headers)
-    # CURRENT BASELINE DEFECT: accepted despite opposite cash flow directions
-    assert resp.status_code == 200
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="RECON-001 CP1: Current baseline allows bank Inflow to match MoneyMovement OUT. Future contract requires HTTP 422.",
-)
-async def test_future_invariant_directional_mismatch_money_movement_rejected(recon_env: Dict[str, Any]):
-    """Strict-XFAIL: Matching bank Inflow against MoneyMovement OUT must be rejected with 422."""
+async def test_contract_directional_mismatch_money_movement_rejected(recon_env: Dict[str, Any]):
+    """Regression: Matching bank Inflow against MoneyMovement OUT must be rejected with 422."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_line_in_10m = recon_env["stmt_line_10m"]  # Inflow (credit=10M)
@@ -1140,8 +1046,8 @@ async def test_future_invariant_directional_mismatch_money_movement_rejected(rec
 
 
 @pytest.mark.asyncio
-async def test_baseline_directional_mismatch_journal_line_accepted(recon_env: Dict[str, Any]):
-    """Baseline proof: Current code allows bank Inflow to match a JournalLine credit leg (cash outflow)."""
+async def test_directional_mismatch_journal_line_rejected(recon_env: Dict[str, Any]):
+    """Regression: service allows bank Inflow to match a JournalLine credit leg (cash outflow)."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_line_in_10m = recon_env["stmt_line_10m"]  # Inflow (credit=10M)
@@ -1153,18 +1059,12 @@ async def test_baseline_directional_mismatch_journal_line_accepted(recon_env: Di
         "matched_amount": "10000000.00",
     }
     resp = await client.post("/api/v1/bank-reconciliation/reconcile", json=payload, headers=headers)
-    # CURRENT BASELINE DEFECT: accepted
-    assert resp.status_code == 200
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="RECON-001 CP1: Current baseline allows bank Inflow to match cash outflow JournalLine. Future contract requires HTTP 422.",
-)
-async def test_future_invariant_directional_mismatch_journal_line_rejected(recon_env: Dict[str, Any]):
-    """Strict-XFAIL: Matching bank Inflow against a cash Credit leg must be rejected with 422."""
+async def test_contract_directional_mismatch_journal_line_rejected(recon_env: Dict[str, Any]):
+    """Regression: Matching bank Inflow against a cash Credit leg must be rejected with 422."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_line_in_10m = recon_env["stmt_line_10m"]
@@ -1186,8 +1086,8 @@ async def test_future_invariant_directional_mismatch_journal_line_rejected(recon
 
 
 @pytest.mark.asyncio
-async def test_baseline_auto_match_target_reuse_accepted(recon_env: Dict[str, Any]):
-    """Baseline proof: Auto-match allows two different statement lines to match the exact same MoneyMovement candidate."""
+async def test_auto_match_target_reuse_rejected(recon_env: Dict[str, Any]):
+    """Auto-match must not reuse a MoneyMovement across statement lines."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_import = recon_env["stmt_import_a"]
@@ -1195,7 +1095,7 @@ async def test_baseline_auto_match_target_reuse_accepted(recon_env: Dict[str, An
     line_2 = recon_env["stmt_line_5m_2"]
     mm = recon_env["mm_5m_in"]
 
-    # Ensure both lines share the same reference and amount as the MoneyMovement candidate
+    # Give both lines the same eligible MoneyMovement candidate.
     async with recon_env["session_factory"]() as session:
         l1 = await session.get(BankStatementLine, line_1.id)
         l2 = await session.get(BankStatementLine, line_2.id)
@@ -1211,7 +1111,7 @@ async def test_baseline_auto_match_target_reuse_accepted(recon_env: Dict[str, An
     )
     assert resp.status_code == 200
     stats = resp.json().get("stats", {})
-    # CURRENT BASELINE DEFECT: Both lines matched the same single MoneyMovement (plus 1 for 10M line)
+    # The independent 10M candidate also matches; reuse prevention is asserted from MM-specific rows.
     assert stats.get("matched") == 3
 
     async with recon_env["session_factory"]() as session:
@@ -1220,17 +1120,12 @@ async def test_baseline_auto_match_target_reuse_accepted(recon_env: Dict[str, An
                 select(BankReconciliation).where(BankReconciliation.money_movement_id == mm.id)
             )
         ).all()
-        assert len(recons) == 2
+        assert len(recons) == 1
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="RECON-001 CP1: Current baseline auto-match reuses targets. Future contract requires candidate exclusion (recons <= 1).",
-)
-async def test_future_invariant_auto_match_target_reuse_prevented(recon_env: Dict[str, Any]):
-    """Strict-XFAIL: In auto-match, a candidate target matched once must not be matched again in the same batch."""
+async def test_contract_auto_match_target_reuse_prevented(recon_env: Dict[str, Any]):
+    """Regression: In auto-match, a candidate target matched once must not be matched again in the same batch."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     stmt_import = recon_env["stmt_import_a"]
@@ -1298,52 +1193,33 @@ async def test_auto_match_skips_already_matched_statement_line(recon_env: Dict[s
 
 
 @pytest.mark.asyncio
-async def test_baseline_dashboard_distortion_under_invalid_reconciliation(recon_env: Dict[str, Any]):
-    """Baseline proof: Current dashboard formula distorts unmatched_book_amount and completeness.
-
-    Current formula:
-    unmatched_book = max(0, total_book_cash - matched_bank_amount)
-    completeness_percentage = (matched_amount / total_bank_volume) * 100
-
-    Proof:
-    If a bank statement line is reconciled via an invalid zero-target match:
-    - matched_amount becomes 10,000,000
-    - completeness_percentage becomes 100%
-    - unmatched_book_amount is artificially reduced to 0.00!
-    Even though the cash JournalLine is completely unreconciled!
-    """
+async def test_invalid_match_does_not_distort_dashboard(recon_env: Dict[str, Any]):
+    """Rejected requests leave the dashboard aggregates unchanged."""
     client: AsyncClient = recon_env["client"]
     headers = make_auth_headers(recon_env["org_a"].id, recon_env["users_a"][UserRole.OPERATOR])
     org_id = recon_env["org_a"].id
     pay_acc_id = recon_env["pay_acc_a"].id
 
     async with recon_env["session_factory"]() as session:
-        service = BankReconciliationService(session)
-        # Dashboard before match
-        dash_before = await service.get_cash_completeness_dashboard(org_id, payment_account_id=pay_acc_id)
-        assert dash_before.matched_amount == Decimal("0.00")
-        assert dash_before.unmatched_bank_amount > Decimal("0.00")
-        # Total cash journal lines in Org A = 10M + 10M + 5M + 5M = 30M
-        assert dash_before.unmatched_book_amount == Decimal("30000000.00")
+        before = await BankReconciliationService(session).get_cash_completeness_dashboard(
+            org_id, payment_account_id=pay_acc_id
+        )
 
-    # Now execute an invalid zero-target match for stmt_line_10m
-    stmt_line_10m = recon_env["stmt_line_10m"]
+    stmt_line = recon_env["stmt_line_10m"]
     resp = await client.post(
         "/api/v1/bank-reconciliation/reconcile",
-        json={"statement_line_id": str(stmt_line_10m.id), "matched_amount": "10000000.00", "notes": "Distortion probe"},
+        json={"statement_line_id": str(stmt_line.id), "matched_amount": "10000000.00"},
         headers=headers,
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 422
 
     async with recon_env["session_factory"]() as session:
-        service = BankReconciliationService(session)
-        dash_after = await service.get_cash_completeness_dashboard(org_id, payment_account_id=pay_acc_id)
-        # Matched bank volume increased by 10M
-        assert dash_after.matched_amount == Decimal("10000000.00")
-        # CURRENT BASELINE DEFECT: unmatched_book was mechanically reduced by 10M
-        # purely by subtracting matched bank amount (30M - 10M = 20M),
-        # even though ZERO journal lines were actually linked to any reconciliation record!
-        assert dash_after.unmatched_book_amount == Decimal("20000000.00")
+        after = await BankReconciliationService(session).get_cash_completeness_dashboard(
+            org_id, payment_account_id=pay_acc_id
+        )
+    assert after.matched_amount == before.matched_amount
+    assert after.unmatched_bank_amount == before.unmatched_bank_amount
+    assert after.unmatched_book_amount == before.unmatched_book_amount
 
 
 @pytest.mark.asyncio
@@ -1353,7 +1229,7 @@ async def test_baseline_dashboard_distortion_under_invalid_reconciliation(recon_
     reason="RECON-001 CP1: Current dashboard derives unmatched_book via synthetic subtraction. Future contract requires direct aggregation of unlinked book lines.",
 )
 async def test_future_invariant_dashboard_unmatched_book_authoritative(recon_env: Dict[str, Any]):
-    """Strict-XFAIL: When a bank line is reconciled to a non-journal target (e.g. Transaction),
+    """Regression: When a bank line is reconciled to a non-journal target (e.g. Transaction),
 
     unmatched_book_amount must directly count unreferenced cash JournalLines without synthetic reduction.
     """

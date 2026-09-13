@@ -231,16 +231,17 @@ async def tenant_hardening_env() -> AsyncGenerator[Dict[str, Any], None]:
             journal_entry_id=je_a.id,
             line_number=1,
             account_id=coa_a.id,
-            debit_amount=Decimal("5000000.00"),
-            credit_amount=Decimal("0.00"),
+            debit_amount=Decimal("0.00"),
+            credit_amount=Decimal("5000000.00"),
+            payment_account_id=pay_acc_a.id,
         )
         jl_a_credit = JournalLine(
             id=uuid.uuid4(),
             journal_entry_id=je_a.id,
             line_number=2,
             account_id=coa_a.id,
-            debit_amount=Decimal("0.00"),
-            credit_amount=Decimal("5000000.00"),
+            debit_amount=Decimal("5000000.00"),
+            credit_amount=Decimal("0.00"),
         )
         session.add_all([jl_a, jl_a_credit])
 

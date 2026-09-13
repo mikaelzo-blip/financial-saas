@@ -22,16 +22,16 @@
 
 ## Checkpoint 2: Canonical Reconciliation Integrity Service Boundary
 
-- [ ] **TASK-CP2-01**: Implement canonical target resolution and validation method `_validate_and_resolve_match` in `BankReconciliationService` respecting strict error precedence: Precedence 1 = Tenant Existence (404), Precedence 2 = Target Discriminator (422), Precedence 3 = Unreconciled Status (409), Precedence 4 = Direction/Amount Integrity (422).
-- [ ] **TASK-CP2-02**: Enforce statement line single-match check (`reconciliation_status != MATCHED` and no active `BankReconciliation`, raising 409 `DuplicateEntityException`).
-- [ ] **TASK-CP2-03**: Enforce target single-match check across `JournalLine`, `MoneyMovement`, and `Transaction` (raising 409 `DuplicateEntityException`).
-- [ ] **TASK-CP2-04**: Enforce single-target discriminator check (exactly one target FK provided, raising 422 `InvariantViolationException`).
-- [ ] **TASK-CP2-05**: Enforce exact amount equality (`matched_amount == bank_line_amount == target_amount`) and directional consistency (`credit` -> cash debit, `debit` -> cash credit, raising 422 `InvariantViolationException`).
-- [ ] **TASK-CP2-06**: Enforce target eligibility (payment account matching, transaction status not `REJECTED`).
-- [ ] **TASK-CP2-07**: Implement pessimistic row-level locking (`SELECT ... FOR UPDATE`) on `BankStatementLine` in `match_manual`.
-- [ ] **TASK-CP2-08**: Refactor `auto_match_statement` to exclude already-reconciled targets and prevent intra-batch collision.
-- [ ] **TASK-CP2-09**: Remove strict xfail markers from service tests; verify CP1 characterization tests transition from RED to GREEN.
-- [ ] **TASK-CP2-10**: Run linter, typecheck, and CP2 verification; commit CP2.
+- [x] **TASK-CP2-01**: Implement canonical target resolution and validation method `_validate_and_resolve_match` in `BankReconciliationService` respecting strict error precedence: Precedence 1 = Tenant Existence (404), Precedence 2 = Target Discriminator (422), Precedence 3 = Unreconciled Status (409), Precedence 4 = Direction/Amount Integrity (422).
+- [x] **TASK-CP2-02**: Enforce statement line single-match check (`reconciliation_status != MATCHED` and no active `BankReconciliation`, raising 409 `DuplicateEntityException`).
+- [x] **TASK-CP2-03**: Enforce target single-match check across `JournalLine`, `MoneyMovement`, and `Transaction` (raising 409 `DuplicateEntityException`).
+- [x] **TASK-CP2-04**: Enforce single-target discriminator check (exactly one target FK provided, raising 422 `InvariantViolationException`).
+- [x] **TASK-CP2-05**: Enforce exact amount equality (`matched_amount == bank_line_amount == target_amount`) and directional consistency (`credit` -> cash debit, `debit` -> cash credit, raising 422 `InvariantViolationException`).
+- [x] **TASK-CP2-06**: Enforce target eligibility (payment-account matching; no stricter transaction workflow-status rule exists in the current enum contract).
+- [x] **TASK-CP2-07**: Implement pessimistic row-level locking (`SELECT ... FOR UPDATE`) on `BankStatementLine` in `match_manual` and the selected target row.
+- [x] **TASK-CP2-08**: Refactor `auto_match_statement` to exclude already-reconciled targets, prevent intra-batch collisions, and persist through canonical validation.
+- [x] **TASK-CP2-09**: Remove CP2-owned strict xfail markers; verify 14 RED cases transition to ordinary passing regressions while dashboard remains strict-XFAIL.
+- [x] **TASK-CP2-10**: Run configured verification, complete independent review, and commit CP2.
 
 ---
 

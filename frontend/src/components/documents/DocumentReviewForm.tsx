@@ -23,6 +23,7 @@ interface Props {
 const statusLabels: Record<DocumentResponse['processing_status'], string> = {
   UPLOADED: 'Dokumen diterima',
   HASHED: 'Dokumen diperiksa',
+  QUEUED: 'Menunggu antrean',
   EXTRACTING: 'Sedang membaca dokumen',
   EXTRACTED: 'Dokumen selesai dibaca',
   MATCHING: 'Sedang mencari data terkait',

@@ -103,6 +103,7 @@ class DocumentResponse(BaseModel):
     source_metadata: Dict[str, Any] = {}
     created_at: datetime
     processing_status: DocumentProcessingStatus = DocumentProcessingStatus.UPLOADED
+    processing_attempts: int = 0
     extracted_data: Dict[str, Any] = Field(default_factory=dict)
     matching_results: Dict[str, Any] = Field(default_factory=dict)
     confidence_scores: Dict[str, Any] = Field(default_factory=dict)

@@ -16,7 +16,7 @@ async def test_feature_012_migration_is_applied(
     async with pg_session_factory() as session:
         await assert_postgresql_migration_head(
             session,
-            expected_head="025_transaction_rejected",
+            expected_head="026_document_inbox_queue",
         )
         assert await session.scalar(
             text("SELECT to_regclass('public.tenant_sequences')")

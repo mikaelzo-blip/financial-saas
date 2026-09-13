@@ -2,6 +2,7 @@ import uuid
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 from sqlalchemy import select, and_, or_, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.background_job import BackgroundJob
@@ -15,26 +16,76 @@ class JobQueueService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    async def get_active_job_by_idempotency_key(
+        self,
+        idempotency_key: str,
+        organization_id: Optional[uuid.UUID] = None,
+        job_type: Optional[str] = None,
+    ) -> Optional[BackgroundJob]:
+        filters = [
+            BackgroundJob.idempotency_key == idempotency_key,
+            BackgroundJob.status.in_(["PENDING", "RUNNING"]),
+        ]
+        if organization_id is not None:
+            filters.append(BackgroundJob.organization_id == organization_id)
+        if job_type is not None:
+            filters.append(BackgroundJob.job_type == job_type)
+
+        stmt = (
+            select(BackgroundJob)
+            .where(and_(*filters))
+            .limit(1)
+        )
+        return await self.session.scalar(stmt)
+
     async def enqueue(
         self,
         job_type: str,
         payload: Dict[str, Any],
         organization_id: Optional[uuid.UUID] = None,
         max_attempts: int = 3,
-        delay_seconds: int = 0
+        delay_seconds: int = 0,
+        idempotency_key: Optional[str] = None,
     ) -> BackgroundJob:
+        if idempotency_key:
+            active = await self.get_active_job_by_idempotency_key(
+                idempotency_key,
+                organization_id=organization_id,
+                job_type=job_type,
+            )
+            if active:
+                return active
+
         available_at = datetime.now() + timedelta(seconds=delay_seconds)
         job = BackgroundJob(
             organization_id=organization_id,
+            idempotency_key=idempotency_key,
             job_type=job_type,
             payload=payload,
             max_attempts=max_attempts,
             status="PENDING",
             available_at=available_at
         )
-        self.session.add(job)
-        await self.session.flush()
-        return job
+
+        if idempotency_key:
+            try:
+                async with self.session.begin_nested():
+                    self.session.add(job)
+                    await self.session.flush()
+                return job
+            except IntegrityError:
+                active = await self.get_active_job_by_idempotency_key(
+                    idempotency_key,
+                    organization_id=organization_id,
+                    job_type=job_type,
+                )
+                if active:
+                    return active
+                raise
+        else:
+            self.session.add(job)
+            await self.session.flush()
+            return job
 
     async def acquire_job(
         self,

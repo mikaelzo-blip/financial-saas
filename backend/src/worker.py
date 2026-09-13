@@ -24,6 +24,49 @@ logging.basicConfig(
 logger = logging.getLogger("financial_worker_entrypoint")
 
 
+async def handle_document_process(payload: dict, session) -> None:
+    """
+    Worker handler for DOCUMENT_PROCESS jobs:
+    Executes DocumentPipeline extraction, classification, and candidate generation.
+    """
+    import uuid
+    from sqlalchemy import select
+
+    doc_id_str = payload.get("document_id")
+    if not doc_id_str:
+        logger.warning(f"Invalid payload for DOCUMENT_PROCESS: {payload}")
+        return
+
+    doc_id = uuid.UUID(doc_id_str)
+    doc = await session.scalar(select(Document).where(Document.id == doc_id))
+    if not doc:
+        logger.warning(f"Document {doc_id} not found for DOCUMENT_PROCESS job")
+        return
+
+    if doc.processing_status == DocumentProcessingStatus.PROCESSED:
+        logger.info(f"Document {doc_id} is already PROCESSED. Skipping.")
+        return
+
+    doc_service = DocumentService(session)
+    file_path = doc_service.storage.get_file_path(doc.storage_path)
+    if not file_path.is_file():
+        doc.processing_attempts += 1
+        doc.processing_status = DocumentProcessingStatus.FAILED
+        doc.failure_code = "FileNotFound"
+        doc.failure_message = f"Evidentiary file not found at {doc.storage_path}"
+        await session.flush()
+        raise RuntimeError(f"[{doc.failure_code}] Evidentiary file not found at {doc.storage_path}")
+
+    provider = get_extraction_provider()
+    pipeline = DocumentPipeline(session, provider)
+    await pipeline.process(doc, file_path)
+    await session.flush()
+
+    if doc.processing_status == DocumentProcessingStatus.FAILED:
+        err_detail = f"[{doc.failure_code}] {doc.failure_message}" if doc.failure_code else (doc.failure_message or "Document processing failed")
+        raise RuntimeError(err_detail)
+
+
 async def handle_document_deferred_analysis(payload: dict, session) -> None:
     """
     Worker handler for DOCUMENT_DEFERRED_ANALYSIS jobs:
@@ -70,6 +113,7 @@ async def handle_document_deferred_analysis(payload: dict, session) -> None:
 
 def build_worker() -> JobWorker:
     worker = JobWorker(poll_interval_seconds=1.0)
+    worker.register_handler("DOCUMENT_PROCESS", handle_document_process)
     worker.register_handler("DOCUMENT_DEFERRED_ANALYSIS", handle_document_deferred_analysis)
     return worker
 

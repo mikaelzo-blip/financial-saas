@@ -228,7 +228,7 @@ async def test_organizations(
 
 async def assert_postgresql_migration_head(
     session: AsyncSession,
-    expected_head: str = "025_transaction_rejected",
+    expected_head: str = "026_document_inbox_queue",
 ) -> None:
     result = await session.execute(text("SELECT version_num FROM alembic_version"))
     assert result.scalar_one() == expected_head

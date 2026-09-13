@@ -200,12 +200,15 @@ class DocumentService:
         organization_id: uuid.UUID,
         document_type: Optional[DocumentType] = None,
         processing_status: Optional[DocumentProcessingStatus] = None,
+        source_channel: Optional[str] = None,
     ) -> List[Document]:
         filters = [Document.organization_id == organization_id]
         if document_type:
             filters.append(Document.document_type == document_type)
         if processing_status:
             filters.append(Document.processing_status == processing_status)
+        if source_channel:
+            filters.append(Document.source_channel == source_channel)
 
         stmt = select(Document).where(and_(*filters)).order_by(Document.created_at.desc())
         result = await self.session.execute(stmt)

@@ -9,7 +9,8 @@ from sqlalchemy import (
     Index,
     JSON,
     Text,
-    func
+    func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 from src.core.database import Base
@@ -25,6 +26,17 @@ class BackgroundJob(Base):
     __table_args__ = (
         Index("ix_jobs_status_available", "status", "available_at"),
         Index("ix_jobs_org_type", "organization_id", "job_type"),
+        Index("ix_jobs_idempotency_key", "idempotency_key"),
+        Index(
+            "uq_jobs_active_idempotency",
+            "organization_id",
+            "job_type",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL AND status IN ('PENDING', 'RUNNING')"),
+            sqlite_where=text("idempotency_key IS NOT NULL AND status IN ('PENDING', 'RUNNING')"),
+            postgresql_nulls_not_distinct=True,
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -33,6 +45,10 @@ class BackgroundJob(Base):
     )
     organization_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=True
+    )
+    idempotency_key: Mapped[Optional[str]] = mapped_column(
+        String(255),
         nullable=True
     )
     job_type: Mapped[str] = mapped_column(

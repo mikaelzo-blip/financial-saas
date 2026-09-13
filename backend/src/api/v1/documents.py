@@ -1,6 +1,6 @@
 import uuid
 from typing import List, Optional
-from fastapi import APIRouter, BackgroundTasks, Depends, UploadFile, File, Form, Query, status, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, Form, Query, status, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, select
@@ -21,7 +21,8 @@ from src.schemas.document import (DocumentResponse, DocumentCorrectionRequest,
                                   DocumentRejectionRequest, TransactionCandidate)
 from src.schemas.transaction import TransactionCreate, TransactionResponse
 from src.services.document_service import DocumentService
-from src.services.documents.pipeline import process_document_background
+from src.services.documents.inbound_adapter import InboundDocumentAdapter, InboundDocumentInput
+from src.services.job_queue_service import JobQueueService
 from src.services.posting_rules import PostingRuleRegistry
 from src.services.transaction_service import TransactionService
 from src.services.accounting_engine import AccountingEngine
@@ -59,7 +60,6 @@ async def require_reviewer(db: AsyncSession, org_id: uuid.UUID, user_id: uuid.UU
     summary="Upload Source Evidentiary Document"
 )
 async def upload_document(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     document_type: DocumentType = Form(DocumentType.UNKNOWN),
     source_channel: str = Form("WEB"),
@@ -70,24 +70,23 @@ async def upload_document(
     db: AsyncSession = Depends(get_db),
 ):
     async def ingest(session: AsyncSession):
-        document = await DocumentService(session).ingest_document(
-            organization_id=org_id,
-            file_obj=file.file,
-            file_name=file.filename or "unknown_file",
-            mime_type=file.content_type or "application/octet-stream",
-            document_type=document_type,
-            source_channel=source_channel,
-            project_id=project_id,
-            created_by=current_user.id,
+        adapter = InboundDocumentAdapter(session)
+        document = await adapter.ingest_and_enqueue(
+            InboundDocumentInput(
+                organization_id=org_id,
+                file_obj=file.file,
+                file_name=file.filename or "unknown_file",
+                mime_type=file.content_type or "application/octet-stream",
+                document_type=document_type,
+                source_channel=source_channel,
+                project_id=project_id,
+                created_by=current_user.id,
+            ),
+            enqueue_job=process,
         )
-        if process:
-            document.processing_status = DocumentProcessingStatus.EXTRACTING
-            await session.flush()
         return document
 
     document = await run_in_clean_transaction(db, ingest)
-    if process:
-        background_tasks.add_task(process_document_background, document.id)
     return document
 
 
@@ -103,17 +102,29 @@ async def get_document_content(document_id: uuid.UUID, org_id: uuid.UUID = Depen
 
 
 @router.post("/{document_id}/retry", response_model=DocumentResponse, status_code=status.HTTP_202_ACCEPTED)
-async def retry_document(document_id: uuid.UUID, background_tasks: BackgroundTasks,
+async def retry_document(document_id: uuid.UUID,
                          org_id: uuid.UUID = Depends(get_current_org_id),
                          current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.OPERATOR)),
                          db: AsyncSession = Depends(get_db)):
-    service = DocumentService(db)
-    document = await service.get_document(org_id, document_id)
-    if document.processing_status not in {DocumentProcessingStatus.FAILED, DocumentProcessingStatus.REVIEW_REQUIRED}:
-        raise HTTPException(status_code=409, detail="Document is not in a retryable state")
-    document.processing_status = DocumentProcessingStatus.EXTRACTING
-    await db.flush()
-    background_tasks.add_task(process_document_background, document.id)
+    async def retry(session: AsyncSession):
+        service = DocumentService(session)
+        document = await service.get_document(org_id, document_id)
+        if document.processing_status not in {DocumentProcessingStatus.FAILED, DocumentProcessingStatus.REVIEW_REQUIRED}:
+            raise HTTPException(status_code=409, detail="Document is not in a retryable state")
+        document.processing_status = DocumentProcessingStatus.QUEUED
+        await session.flush()
+
+        queue = JobQueueService(session)
+        await queue.enqueue(
+            job_type="DOCUMENT_PROCESS",
+            payload={"document_id": str(document.id)},
+            organization_id=org_id,
+            idempotency_key=f"DOCUMENT_PROCESS:{document.id}",
+        )
+        await session.flush()
+        return document
+
+    document = await run_in_clean_transaction(db, retry)
     return document
 
 
@@ -317,8 +328,15 @@ async def get_document(
 )
 async def list_documents(
     document_type: Optional[DocumentType] = Query(None),
+    processing_status: Optional[DocumentProcessingStatus] = Query(None),
+    source_channel: Optional[str] = Query(None),
     org_id: uuid.UUID = Depends(get_current_org_id),
     db: AsyncSession = Depends(get_db)
 ):
     service = DocumentService(db)
-    return await service.list_documents(org_id, document_type=document_type)
+    return await service.list_documents(
+        org_id,
+        document_type=document_type,
+        processing_status=processing_status,
+        source_channel=source_channel,
+    )

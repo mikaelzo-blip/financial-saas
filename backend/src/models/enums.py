@@ -189,6 +189,7 @@ class DocumentType(str, Enum):
 class DocumentProcessingStatus(str, Enum):
     UPLOADED = "UPLOADED"
     HASHED = "HASHED"
+    QUEUED = "QUEUED"
     EXTRACTING = "EXTRACTING"
     EXTRACTED = "EXTRACTED"
     MATCHING = "MATCHING"

@@ -170,4 +170,8 @@ CP3 changed only document correction capability validation, `AUTO_SAFE_TYPES`, F
 
 ### Delivery Boundary
 
-No migrations, enum changes, posting rules, accounting policy, frontend product code, authorization role policy, or historical data changes were introduced. API schemas, routes, and response models are unchanged; behavior intentionally changes from `201 STAGED` to `422 INVARIANT_VIOLATION` for unsupported generic input. Push/PR creation and actual GitHub CI are the remaining CP4 delivery gates.
+No migrations, enum changes, posting rules, accounting policy, frontend product code, authorization role policy, or historical data changes were introduced. API schemas, routes, and response models are unchanged; behavior intentionally changes from `201 STAGED` to `422 INVARIANT_VIOLATION` for unsupported generic input.
+
+### Remote Delivery Verification
+
+PR **#64** (`fix(accounting): reject unsupported transaction processing types`) is open at `https://github.com/mikaelzo-blip/financial-saas/pull/64` and GitHub reports merge state `CLEAN`. GitHub Actions run `34740725014` passed all required jobs: backend PostgreSQL 16 dependencies/migrations/current/head/drift/FIN-001/full-suite/offline-chain; frontend dependencies/tests/lint/typecheck/build; and repository tracked-secret/environment safety. No merge was performed; explicit user authorization is required for the squash merge.

@@ -1035,7 +1035,7 @@ async def test_scenario_23_rejected_candidate_creates_no_financial_mutation(wa_u
 
 @pytest.mark.asyncio
 async def test_scenario_24_approved_candidate_converts_to_authoritative_business_event(wa_uat, db_session):
-    """Scenario 24: Explicit reviewer approval creates business transaction and posts journal."""
+    """Scenario 24: Explicit reviewer approval transitions candidate to READY_TO_POST without ledger posting."""
     org = wa_uat["orgs"][0]
     user = wa_uat["users"][0]
 
@@ -1074,20 +1074,17 @@ async def test_scenario_24_approved_candidate_converts_to_authoritative_business
         f"/api/v1/documents/{doc.id}/approve",
         headers={"X-Organization-ID": str(org.id), "X-User-ID": str(user.id)},
     )
-    assert resp.status_code == 201, resp.text
+    assert resp.status_code == 200, resp.text
     result = resp.json()
     assert result["id"] is not None
-    assert result["transaction_type"] == "VENDOR_BILL"
+    assert result["processing_status"] == "READY_TO_POST"
 
     await db_session.refresh(doc)
-    assert doc.processing_status == DocumentProcessingStatus.PROCESSED
-    assert doc.candidate_transaction["converted_transaction_id"] == result["id"]
+    assert doc.processing_status == DocumentProcessingStatus.READY_TO_POST
+    assert doc.candidate_transaction["status"] == "READY_TO_POST"
 
-    # Subledger check: VendorBill created
-    bill = await db_session.scalar(select(VendorBill).where(VendorBill.organization_id == org.id))
-    assert bill is not None
-    assert bill.total_amount == Decimal("12000000.00")
-    assert bill.status == "UNPAID"
+    # Approval terminates at READY_TO_POST without financial mutation
+    assert (await db_session.scalar(select(JournalEntry).where(JournalEntry.organization_id == org.id))) is None
 
 
 @pytest.mark.asyncio
@@ -1111,7 +1108,7 @@ async def test_scenario_25_no_journal_before_approval(wa_uat, db_session):
 
 @pytest.mark.asyncio
 async def test_scenario_26_exactly_one_journal_after_approval(wa_uat, db_session):
-    """Scenario 26: Approval creates exactly 1 JournalEntry where Total Debit == Total Credit."""
+    """Scenario 26: Approval terminates at READY_TO_POST with zero journals created."""
     org = wa_uat["orgs"][0]
     user = wa_uat["users"][0]
     bank_acc = wa_uat["accounts"][0]
@@ -1148,14 +1145,11 @@ async def test_scenario_26_exactly_one_journal_after_approval(wa_uat, db_session
         f"/api/v1/documents/{doc.id}/approve",
         headers={"X-Organization-ID": str(org.id), "X-User-ID": str(user.id)},
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 200
+    assert resp.json()["processing_status"] == "READY_TO_POST"
 
     journals = (await db_session.scalars(select(JournalEntry).where(JournalEntry.organization_id == org.id))).all()
-    assert len(journals) == 1
-    journal = journals[0]
-    assert journal.total_debit == Decimal("500000.00")
-    assert journal.total_credit == Decimal("500000.00")
-    assert journal.total_debit == journal.total_credit
+    assert len(journals) == 0
 
 
 @pytest.mark.asyncio
@@ -1234,7 +1228,7 @@ async def test_scenario_28_end_to_end_audit_trail(wa_uat, db_session):
         f"/api/v1/documents/{doc.id}/approve",
         headers={"X-Organization-ID": str(org.id), "X-User-ID": str(user.id)},
     )
-    assert approve_resp.status_code == 201
+    assert approve_resp.status_code == 200
 
     # Trace audit logs
     audit_events = (await db_session.scalars(
@@ -1243,7 +1237,6 @@ async def test_scenario_28_end_to_end_audit_trail(wa_uat, db_session):
     actions = [evt.action for evt in audit_events]
     assert "DOCUMENT_RECEIVED" in actions
     assert "APPROVE_CANDIDATE" in actions
-    assert "POST" in actions
 
 
 @pytest.mark.asyncio

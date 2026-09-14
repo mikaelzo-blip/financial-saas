@@ -114,6 +114,13 @@ class Document(Base):
     # Relationships
     organization: Mapped["Organization"] = relationship("Organization")
     uploader: Mapped[Optional["User"]] = relationship("User")
+    corrections: Mapped[List["DocumentCorrection"]] = relationship(
+        "DocumentCorrection",
+        lazy="selectin",
+        order_by="DocumentCorrection.corrected_at.asc()",
+        cascade="all, delete-orphan",
+        foreign_keys="[DocumentCorrection.document_id]",
+    )
 
     def __repr__(self) -> str:
         return f"<Document {self.document_code} - {self.file_name} ({self.document_type.value})>"

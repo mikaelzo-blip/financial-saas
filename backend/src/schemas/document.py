@@ -101,6 +101,19 @@ class DocumentRejectionRequest(BaseModel):
     reason: str = Field(min_length=3)
 
 
+class DocumentCorrectionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    document_id: uuid.UUID
+    field_path: str
+    old_value: Optional[Any] = None
+    new_value: Optional[Any] = None
+    reason: str
+    corrected_by: uuid.UUID
+    corrected_at: datetime
+
+
 class DocumentResponse(BaseModel):
     id: uuid.UUID
     organization_id: uuid.UUID
@@ -122,5 +135,18 @@ class DocumentResponse(BaseModel):
     review_flags: List[str] = Field(default_factory=list)
     failure_code: Optional[str] = None
     failure_message: Optional[str] = None
+    corrections: List[DocumentCorrectionResponse] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def prevent_lazy_load_corrections(cls, data: Any) -> Any:
+        try:
+            from sqlalchemy import inspect as sa_inspect
+            insp = sa_inspect(data, raiseerr=False)
+            if insp is not None and "corrections" in insp.unloaded:
+                data.__dict__["corrections"] = []
+        except Exception:
+            pass
+        return data
 
     model_config = ConfigDict(from_attributes=True)

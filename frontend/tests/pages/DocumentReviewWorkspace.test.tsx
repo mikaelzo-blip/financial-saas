@@ -99,7 +99,7 @@ test('shows plain-language choices and records their internal IDs', async () => 
     expect.objectContaining({ project_id: projects[0].id, counterparty_id: counterparties[0].id }),
     'Verifikasi dokumen sumber',
   );
-  expect(screen.getByRole('button', { name: 'Setujui & Buat Transaksi' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Setujui untuk Diposting' })).toBeDisabled();
   await userEvent.click(screen.getByRole('button', { name: 'Tolak Kandidat' }));
   expect(onReject).toHaveBeenCalledWith('Verifikasi dokumen sumber');
 });
@@ -175,7 +175,7 @@ test('allows vendor approval when an optional project lookup is unavailable', as
     />,
   );
 
-  const approveButton = screen.getByRole('button', { name: 'Setujui & Buat Transaksi' });
+  const approveButton = screen.getByRole('button', { name: 'Setujui untuk Diposting' });
   expect(approveButton).toBeEnabled();
   await userEvent.click(approveButton);
   expect(onApprove).toHaveBeenCalledOnce();
@@ -205,6 +205,6 @@ test('blocks approval when a required project lookup is unavailable', () => {
     />,
   );
 
-  expect(screen.getByRole('button', { name: 'Setujui & Buat Transaksi' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Setujui untuk Diposting' })).toBeDisabled();
   expect(screen.getByText(/diperlukan untuk persetujuan/)).toBeInTheDocument();
 });

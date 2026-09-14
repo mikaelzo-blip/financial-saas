@@ -52,17 +52,15 @@ async def test_review_correction_audits_and_converts_without_posting(client: Asy
     assert corrected.json()["processing_status"] == "READY_FOR_APPROVAL"
     assert corrected.json()["review_flags"] == []
     approved = await client.post(f"/api/v1/documents/{document.id}/approve", headers=headers)
-    assert approved.status_code == 201
-    assert approved.json()["workflow_status"] == "POSTED"
+    assert approved.status_code == 200
+    assert approved.json()["processing_status"] == "READY_TO_POST"
+    assert approved.json()["candidate_transaction"]["status"] == "READY_TO_POST"
     assert await db_session.scalar(select(DocumentCorrection).where(DocumentCorrection.document_id == document.id))
-    journal = await db_session.scalar(select(JournalEntry).where(JournalEntry.transaction_id == uuid.UUID(approved.json()["id"])))
-    assert journal and journal.total_debit == journal.total_credit == Decimal("1000.00")
+    assert (await db_session.scalar(select(JournalEntry).where(JournalEntry.organization_id == org.id))) is None
     approval_event = await db_session.scalar(select(AuditLog).where(
         AuditLog.entity_id == document.id, AuditLog.action == "APPROVE_CANDIDATE"
     ))
-    assert approval_event and approval_event.new_values == {
-        "transaction_id": approved.json()["id"], "journal_id": str(journal.id)
-    }
+    assert approval_event is not None
     second = await client.post(f"/api/v1/documents/{document.id}/approve", headers=headers)
     assert second.status_code == 409
 

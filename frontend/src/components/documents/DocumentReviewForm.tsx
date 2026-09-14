@@ -15,6 +15,7 @@ interface Props {
   counterpartyLookupError?: string;
   approvalLookupLoading?: boolean;
   approvalLookupError?: string;
+  actionError?: string;
   onSave: (changes: Record<string, unknown>, reason: string) => Promise<void>;
   onApprove: () => Promise<void>;
   onReject: (reason: string) => Promise<void>;
@@ -65,6 +66,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
   counterpartyLookupError,
   approvalLookupLoading = false,
   approvalLookupError,
+  actionError,
   onSave,
   onApprove,
   onReject,
@@ -491,6 +493,11 @@ export const DocumentReviewForm: React.FC<Props> = ({
       {approvalLookupError && (
         <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
           {approvalLookupError}
+        </div>
+      )}
+      {actionError && (
+        <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+          {actionError}
         </div>
       )}
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { documentsApi } from '../../api/documents';
 import { masterApi } from '../../api/master';
@@ -12,15 +12,17 @@ import {
 } from '../../utils/documentReview';
 
 export const DocumentReviewPage: React.FC = () => {
-  const { id = '' } = useParams(); const navigate = useNavigate(); const queryClient = useQueryClient();
+  const { id = '' } = useParams(); const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ['document', id], queryFn: () => documentsApi.get(id), enabled: !!id });
   const content = useQuery({ queryKey: ['document-content', id], queryFn: () => documentsApi.content(id), enabled: !!id });
   const projects = useQuery({ queryKey: ['document-review-projects'], queryFn: () => projectsApi.list() });
   const customers = useQuery({ queryKey: ['document-review-customers'], queryFn: masterApi.getCustomers });
   const vendors = useQuery({ queryKey: ['document-review-vendors'], queryFn: masterApi.getVendors });
   const correction = useMutation({ mutationFn: ({changes, reason}: {changes: Record<string, unknown>; reason: string}) => documentsApi.correct(id, changes, reason), onSuccess: data => queryClient.setQueryData(['document', id], data) });
-  const approval = useMutation({ mutationFn: () => documentsApi.approve(id), onSuccess: () => navigate('/transactions') });
+  const approval = useMutation({ mutationFn: () => documentsApi.approve(id), onSuccess: data => queryClient.setQueryData(['document', id], data) });
   const rejection = useMutation({ mutationFn: (reason: string) => documentsApi.reject(id, reason), onSuccess: data => queryClient.setQueryData(['document', id], data) });
+  const actionError = [correction, approval, rejection].find((mutation) => mutation.isError)?.error;
+  const actionErrorMessage = actionError instanceof Error ? actionError.message : undefined;
   if (query.isLoading) return <div role="status" className="p-8">Memuat dokumen…</div>;
   if (!query.data) return <div role="alert" className="p-8">Dokumen tidak ditemukan.</div>;
   const document = query.data;
@@ -127,6 +129,7 @@ export const DocumentReviewPage: React.FC = () => {
       counterpartyLookupError={counterpartyLookupError ? 'Daftar vendor atau pelanggan tidak dapat dimuat.' : undefined}
       approvalLookupLoading={approvalLookupLoading}
       approvalLookupError={approvalLookupError}
+      actionError={actionErrorMessage}
       onSave={(changes, reason) => correction.mutateAsync({changes, reason}).then(() => undefined)}
       onApprove={() => approval.mutateAsync().then(() => undefined)}
       onReject={(reason) => rejection.mutateAsync(reason).then(() => undefined)}

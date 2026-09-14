@@ -8,7 +8,10 @@ from sqlalchemy import and_, select
 from src.core.database import get_db
 from src.api.deps import get_current_org_id
 from src.api.auth import require_application_user, require_roles
-from src.models.enums import DocumentType, DocumentProcessingStatus, CandidateStatus, ProjectStatus, TransactionType
+from src.models.enums import (
+    DocumentType, DocumentProcessingStatus, CandidateStatus, ProjectStatus,
+    ReviewFlag, TransactionType,
+)
 from src.models.document import DocumentCorrection
 from src.models.project import Project
 from src.models.counterparty import Counterparty
@@ -26,8 +29,6 @@ from src.services.document_service import DocumentService
 from src.services.documents.inbound_adapter import InboundDocumentAdapter, InboundDocumentInput
 from src.services.job_queue_service import JobQueueService
 from src.services.posting_rules import PostingRuleRegistry
-from src.services.transaction_service import TransactionService
-from src.services.accounting_engine import AccountingEngine
 from src.services.audit_service import AuditService
 from src.services.transaction_retry import run_in_clean_transaction
 
@@ -45,6 +46,40 @@ def is_candidate_ready_for_approval(candidate: TransactionCandidate) -> bool:
     if t_type in {TransactionType.VENDOR_BILL, TransactionType.CUSTOMER_INVOICE}:
         return bool(candidate.counterparty_id and candidate.project_id)
     return True
+
+
+async def validate_allocation_target(
+    db: AsyncSession,
+    org_id: uuid.UUID,
+    candidate: TransactionCandidate,
+) -> None:
+    if not candidate.allocation_target_id:
+        return
+
+    allocation_models = (
+        (CustomerInvoice,)
+        if candidate.proposed_transaction_type == TransactionType.CUSTOMER_PAYMENT
+        else (VendorBill,)
+        if candidate.proposed_transaction_type == TransactionType.PAY_VENDOR_BILL
+        else (CustomerInvoice, VendorBill)
+    )
+    for model in allocation_models:
+        target = await db.scalar(select(model).where(and_(
+            model.id == candidate.allocation_target_id,
+            model.organization_id == org_id,
+        )))
+        if not target:
+            continue
+        if candidate.proposed_transaction_type == TransactionType.CUSTOMER_PAYMENT and (
+            candidate.counterparty_id != target.customer_id
+        ):
+            raise HTTPException(status_code=422, detail="Allocation target does not belong to the selected customer")
+        if candidate.proposed_transaction_type == TransactionType.PAY_VENDOR_BILL and (
+            candidate.counterparty_id != target.vendor_id
+        ):
+            raise HTTPException(status_code=422, detail="Allocation target does not belong to the selected vendor")
+        return
+    raise HTTPException(status_code=422, detail="Allocation target is not available in this organization")
 
 
 async def require_reviewer(db: AsyncSession, org_id: uuid.UUID, user_id: uuid.UUID) -> User:
@@ -89,12 +124,17 @@ async def upload_document(
         return document
 
     document = await run_in_clean_transaction(db, ingest)
-    return document
+    return await DocumentService(db).get_document(org_id, document.id)
 
 
 @router.get("/{document_id}/content", summary="Stream Immutable Original")
-async def get_document_content(document_id: uuid.UUID, org_id: uuid.UUID = Depends(get_current_org_id),
-                               db: AsyncSession = Depends(get_db)):
+async def get_document_content(
+    document_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_application_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = current_user
     service = DocumentService(db)
     document = await service.get_document(org_id, document_id)
     path = service.storage.get_file_path(document.storage_path)
@@ -163,6 +203,7 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
 
     candidate = dict(document.candidate_transaction or {})
     extracted = dict(document.extracted_data or {})
+    matching_results = dict(document.matching_results or {})
 
     # Capture old values before mutation
     old = {}
@@ -223,6 +264,7 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
                 candidate["payment_account_id"] = str(acc.id)
             else:
                 raise HTTPException(status_code=422, detail="Selected candidate is not available in this organization")
+            matching_results["ambiguous"] = False
 
     # Synchronize extracted fields
     if "document_type" in data.changes and data.changes["document_type"]:
@@ -262,22 +304,38 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
 
     document.extracted_data = extracted
 
-    # Material correction: rematch entities using Slice 3 matcher
+    # Material corrections invalidate any prior allocation unless the reviewer
+    # explicitly selects a replacement during this same correction.
     material_fields = {
         "invoice_number", "document_number", "spk_number", "counterparty_id",
         "project_id", "amount", "total_amount", "document_type"
     }
-    if any(k in material_fields for k in data.changes):
+    material_correction = any(key in material_fields for key in data.changes)
+    selected_candidate = data.changes.get("selected_candidate_id")
+    if material_correction and not selected_candidate and "allocation_target_id" not in data.changes:
+        candidate["allocation_target_id"] = None
+        matching_results.pop("selected_candidate_id", None)
+
+    if material_correction:
         try:
             extraction_obj = StructuredExtraction.model_validate(document.extracted_data)
-            new_matches = await match_entities(db, org_id, extraction_obj, document_type=document.document_type)
-            document.matching_results = new_matches
-            if "counterparty_id" not in data.changes and new_matches.get("counterparty_id"):
-                candidate["counterparty_id"] = new_matches["counterparty_id"]
-            if "project_id" not in data.changes and new_matches.get("project_id"):
-                candidate["project_id"] = new_matches["project_id"]
-        except Exception:
-            pass
+        except ValueError as error:
+            raise HTTPException(
+                status_code=422,
+                detail="Corrected extraction data cannot be rematched",
+            ) from error
+        matching_results = await match_entities(
+            db, org_id, extraction_obj, document_type=document.document_type
+        )
+        if "counterparty_id" not in data.changes and matching_results.get("counterparty_id"):
+            candidate["counterparty_id"] = matching_results["counterparty_id"]
+        if "project_id" not in data.changes and matching_results.get("project_id"):
+            candidate["project_id"] = matching_results["project_id"]
+    if selected_candidate:
+        matching_results["ambiguous"] = False
+        matching_results["selected_candidate_id"] = str(selected_candidate)
+
+    document.matching_results = matching_results
 
     validated = TransactionCandidate.model_validate(candidate)
     if validated.proposed_transaction_type is not None:
@@ -314,19 +372,7 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
         PaymentAccount.is_active.is_(True),
     ))):
         raise HTTPException(status_code=422, detail="PaymentAccount is not available in this organization")
-    if validated.allocation_target_id:
-        allocation_models = ((CustomerInvoice,) if validated.proposed_transaction_type == TransactionType.CUSTOMER_PAYMENT
-            else (VendorBill,) if validated.proposed_transaction_type == TransactionType.PAY_VENDOR_BILL
-            else (CustomerInvoice, VendorBill))
-        target_exists = False
-        for model in allocation_models:
-            if await db.scalar(select(model.id).where(and_(
-                model.id == validated.allocation_target_id, model.organization_id == org_id
-            ))):
-                target_exists = True
-                break
-        if not target_exists:
-            raise HTTPException(status_code=422, detail="Allocation target is not available in this organization")
+    await validate_allocation_target(db, org_id, validated)
 
     document.candidate_transaction = validated.model_dump(mode="json")
     resolved = {
@@ -341,6 +387,13 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
     }
     cleared = {resolved[key] for key, value in data.changes.items() if key in resolved and value}
     document.review_flags = [flag for flag in document.review_flags if flag not in cleared]
+    if matching_results.get("ambiguous"):
+        if ReviewFlag.AMBIGUOUS_MATCH.value not in document.review_flags:
+            document.review_flags.append(ReviewFlag.AMBIGUOUS_MATCH.value)
+    else:
+        document.review_flags = [
+            flag for flag in document.review_flags if flag != ReviewFlag.AMBIGUOUS_MATCH.value
+        ]
     if not document.review_flags and is_candidate_ready_for_approval(validated):
         validated.status = CandidateStatus.READY_FOR_APPROVAL
         document.candidate_transaction = validated.model_dump(mode="json")
@@ -394,6 +447,11 @@ async def approve_document_candidate(
             status_code=409,
             detail=f"Document has unresolved review requirements: {', '.join(document.review_flags)}"
         )
+    if (document.matching_results or {}).get("ambiguous"):
+        raise HTTPException(
+            status_code=409,
+            detail="Document has ambiguous matching results requiring an explicit candidate selection",
+        )
 
     if not document.candidate_transaction:
         raise HTTPException(status_code=422, detail="Document candidate is missing")
@@ -439,17 +497,7 @@ async def approve_document_candidate(
         if not account:
             raise HTTPException(status_code=422, detail="Payment account is not available in this organization")
 
-    if candidate.allocation_target_id:
-        target_exists = False
-        for model in (CustomerInvoice, VendorBill):
-            if await db.scalar(select(model.id).where(and_(
-                model.id == candidate.allocation_target_id,
-                model.organization_id == org_id,
-            ))):
-                target_exists = True
-                break
-        if not target_exists:
-            raise HTTPException(status_code=422, detail="Allocation target is not available in this organization")
+    await validate_allocation_target(db, org_id, candidate)
 
     previous_status = document.processing_status.value
     candidate.status = CandidateStatus.READY_TO_POST
@@ -488,7 +536,11 @@ async def reject_document_candidate(document_id: uuid.UUID, data: DocumentReject
     user_id = current_user.id
     document = await DocumentService(db).get_document(org_id, document_id, for_update=True)
     await require_reviewer(db, org_id, user_id)
-    if document.processing_status in {DocumentProcessingStatus.PROCESSED, DocumentProcessingStatus.REJECTED}:
+    if document.processing_status in {
+        DocumentProcessingStatus.PROCESSED,
+        DocumentProcessingStatus.REJECTED,
+        DocumentProcessingStatus.READY_TO_POST,
+    }:
         raise HTTPException(status_code=409, detail="Document review decision is already final")
     if document.processing_status not in {DocumentProcessingStatus.REVIEW_REQUIRED,
                                            DocumentProcessingStatus.READY_FOR_APPROVAL}:

@@ -145,7 +145,8 @@ async def test_candidate_selection_persists_choice_and_rejects_cross_tenant(
     )
     vendor1 = Counterparty(organization_id=org1.id, name="Vendor One", is_vendor=True)
     vendor2 = Counterparty(organization_id=org2.id, name="Vendor Two", is_vendor=True)
-    db_session.add_all([manager, vendor1, vendor2])
+    vendor3 = Counterparty(organization_id=org1.id, name="Vendor Three", is_vendor=True)
+    db_session.add_all([manager, vendor1, vendor2, vendor3])
     await db_session.flush()
 
     bill1 = VendorBill(
@@ -215,6 +216,21 @@ async def test_candidate_selection_persists_choice_and_rejects_cross_tenant(
         },
     )
     assert cross_resp.status_code == 422
+
+    # A candidate linked to vendor1 cannot survive a counterparty correction to vendor3.
+    stale_target_resp = await client.post(
+        f"/api/v1/documents/{doc.id}/corrections",
+        headers=headers,
+        json={
+            "changes": {"counterparty_id": str(vendor3.id)},
+            "reason": "Corrected vendor after checking source evidence",
+        },
+    )
+    assert stale_target_resp.status_code == 200
+    assert stale_target_resp.json()["candidate_transaction"]["allocation_target_id"] is None
+
+    approve_resp = await client.post(f"/api/v1/documents/{doc.id}/approve", headers=headers)
+    assert approve_resp.status_code == 409
 
 
 @pytest.mark.asyncio
@@ -623,3 +639,62 @@ async def test_unauthorized_role_cannot_mutate_review(
         ).status_code == 403
 
 
+@pytest.mark.asyncio
+async def test_approve_rejects_ambiguous_matching_results_without_selection(
+    client: AsyncClient, db_session
+):
+    org = Organization(slug="slice4-ambiguous-rematch", legal_name="Slice 4 Ambiguous Rematch Org")
+    db_session.add(org)
+    await db_session.flush()
+    manager = User(
+        organization_id=org.id,
+        email="ambiguous-rematch@slice4.test",
+        full_name="Ambiguous Rematch Manager",
+        password_hash="x",
+        role=UserRole.MANAGER,
+    )
+    vendor = Counterparty(organization_id=org.id, name="Ambiguous Vendor", is_vendor=True)
+    db_session.add_all([manager, vendor])
+    await db_session.flush()
+    project = Project(
+        organization_id=org.id,
+        project_code="PRJ-AMBIG-001",
+        project_name="Ambiguous Match Project",
+        customer_id=vendor.id,
+        start_date=date(2026, 1, 1),
+        project_status=ProjectStatus.ACTIVE,
+        original_contract_value=Decimal("10000000.00"),
+        revised_contract_value=Decimal("10000000.00"),
+    )
+    db_session.add(project)
+    await db_session.flush()
+
+    doc = await DocumentService(db_session).ingest_document(
+        org.id,
+        io.BytesIO(b"%PDF-1.4\nambiguous-rematch"),
+        "ambiguous-rematch.pdf",
+        "application/pdf",
+        DocumentType.VENDOR_INVOICE,
+        created_by=manager.id,
+    )
+    doc.candidate_transaction = {
+        "id": str(doc.id),
+        "proposed_transaction_type": "VENDOR_BILL",
+        "counterparty_id": str(vendor.id),
+        "project_id": str(project.id),
+        "amount": "4000000.00",
+        "transaction_date": "2026-09-05",
+        "status": "READY_FOR_APPROVAL",
+    }
+    doc.matching_results = {"ambiguous": True, "match_candidates": []}
+    doc.review_flags = []
+    doc.processing_status = DocumentProcessingStatus.READY_FOR_APPROVAL
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/v1/documents/{doc.id}/approve",
+        headers={"X-Organization-ID": str(org.id), "X-User-ID": str(manager.id)},
+    )
+
+    assert response.status_code == 409
+    assert "ambiguous" in response.json()["detail"].lower()

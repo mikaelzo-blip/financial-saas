@@ -54,6 +54,7 @@ class ReviewFlag(str, Enum):
     TAX_REVIEW = "TAX_REVIEW"
     ACCOUNT_REVIEW = "ACCOUNT_REVIEW"
     RELATED_PARTY_REVIEW = "RELATED_PARTY_REVIEW"
+    AMBIGUOUS_MATCH = "AMBIGUOUS_MATCH"
 
 
 class TransactionType(str, Enum):

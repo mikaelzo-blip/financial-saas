@@ -269,35 +269,16 @@ async def test_uat13_bank_transfer_proof_end_to_end_flow(client: AsyncClient, db
 
     # 5. Explicit Reviewer Approval
     approve_res = await client.post(f"/api/v1/documents/{doc.id}/approve", headers=headers)
-    assert approve_res.status_code == 201
+    assert approve_res.status_code == 200
+    assert approve_res.json()["processing_status"] == "READY_TO_POST"
 
-    # 6. Verify Deterministic Financial Double-Entry Journal
+    # 6. Verify Deterministic Hard Gate: zero journals created by approval in Slice 4
     journals = list((await db_session.scalars(
         select(JournalEntry).where(JournalEntry.organization_id == org_id)
     )).all())
-    assert len(journals) == 1
-    j = journals[0]
-    lines = list((await db_session.scalars(
-        select(JournalLine).where(JournalLine.journal_entry_id == j.id)
-    )).all())
-    assert len(lines) == 2
-    debit_sum = sum(line.debit_amount for line in lines)
-    credit_sum = sum(line.credit_amount for line in lines)
-    assert debit_sum == credit_sum == Decimal("50000000")
+    assert len(journals) == 0
 
-    # 7. Verify Subledger Update
-    invoice_id = env["invoice"].id
-    from sqlalchemy.orm import selectinload
-    inv_refreshed = await db_session.scalar(
-        select(CustomerInvoice)
-        .where(CustomerInvoice.id == invoice_id)
-        .execution_options(populate_existing=True)
-        .options(selectinload(CustomerInvoice.allocations))
-    )
-    assert inv_refreshed.calculate_outstanding_amount() == Decimal("0")
-    assert inv_refreshed.status == "PAID"
-
-    # 8. Verify Idempotency on Repeated Ingestion / Replay
+    # 7. Verify Idempotency on Repeated Ingestion / Replay
     with pytest.raises(Exception):
         await doc_service.ingest_document(
             org_id, io.BytesIO(raw_pdf), "transfer_mandiri.pdf", "application/pdf",

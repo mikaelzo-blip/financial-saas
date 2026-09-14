@@ -493,15 +493,15 @@ async def test_uat14_failure_and_edge_case_stress_matrix(client: AsyncClient, db
     assert doc_cand.candidate_transaction["counterparty_id"] == str(vend_a.id)
     assert doc_cand.candidate_transaction["project_id"] == str(prj_a.id)
 
-    # Approve candidate -> converts to authoritative transaction & posts journal
+    # Approve candidate -> transitions candidate to READY_TO_POST without financial mutation
     doc_cand.review_flags = []
     doc_cand.processing_status = DocumentProcessingStatus.READY_FOR_APPROVAL
     await db_session.flush()
 
     appr_ok = await client.post(f"/api/v1/documents/{doc_cand.id}/approve", headers=headers_a)
-    assert appr_ok.status_code == 201
+    assert appr_ok.status_code == 200
     await db_session.refresh(doc_cand)
-    assert doc_cand.processing_status == DocumentProcessingStatus.PROCESSED
+    assert doc_cand.processing_status == DocumentProcessingStatus.READY_TO_POST
 
     # Double approval / Replay fails closed (HTTP 409)
     double_appr = await client.post(f"/api/v1/documents/{doc_cand.id}/approve", headers=headers_a)
@@ -516,7 +516,23 @@ async def test_uat14_failure_and_edge_case_stress_matrix(client: AsyncClient, db
     assert stale_corr.status_code == 409
 
     # 5. Overpayment & Over-Allocation Safety
-    bill_a = await db_session.scalar(select(VendorBill).where(VendorBill.organization_id == org_a.id))
+    bill_trx = await TransactionService(db_session).create_transaction(
+        org_a.id,
+        TransactionCreate(
+            transaction_type=TransactionType.VENDOR_BILL,
+            transaction_date=date(2026, 8, 20),
+            amount=Decimal("15000000.00"),
+            counterparty_id=vend_a.id,
+            project_id=prj_a.id,
+            cost_category=CostCategory.MAT,
+            reference_no="BILL-STRESS-01",
+            description="Material stress bill",
+        ),
+    )
+    await db_session.commit()
+    await AccountingEngine(db_session).post_transaction(org_a.id, bill_trx.id)
+    await db_session.commit()
+    bill_a = await db_session.scalar(select(VendorBill).where(VendorBill.transaction_id == bill_trx.id))
     assert bill_a is not None
 
     # Overpayment attempt fails (HTTP 422)

@@ -239,7 +239,7 @@ describe('DocumentReview Workspace Slice 4', () => {
       />,
     );
 
-    const approveButton = screen.getByRole('button', { name: 'Setujui & Buat Transaksi' });
+    const approveButton = screen.getByRole('button', { name: 'Setujui untuk Diposting' });
     expect(approveButton).toBeEnabled();
     await userEvent.click(approveButton);
     expect(onApprove).toHaveBeenCalledOnce();

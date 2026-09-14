@@ -680,7 +680,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
             !!approvalLookupError
           }
         >
-          Setujui & Buat Transaksi
+          Setujui untuk Diposting
         </Button>
         <Button variant="danger" onClick={() => onReject(reason)}>
           Tolak Kandidat

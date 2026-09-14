@@ -20,6 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
+        op.execute("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(64)")
         op.execute("ALTER TYPE document_processing_status ADD VALUE IF NOT EXISTS 'READY_TO_POST'")
 
 

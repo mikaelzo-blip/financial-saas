@@ -315,28 +315,19 @@ async def test_uat15_full_traceability_correlation(client: httpx.AsyncClient, db
         headers=headers,
         json={"notes": "Approved from WhatsApp intake verification"},
     )
-    assert approve_resp.status_code == 201
+    assert approve_resp.status_code == 200
     approve_data = approve_resp.json()
-    assert approve_data["workflow_status"] == "POSTED"
-    txn_id = uuid.UUID(approve_data["id"])
+    assert approve_data["processing_status"] == "READY_TO_POST"
 
-    # Step 5: Verify Transaction & Posted JournalEntry
-    tx = await db_session.get(Transaction, txn_id)
-    assert tx is not None
-    assert tx.amount == Decimal("1500000.00")
-    assert tx.workflow_status == WorkflowStatus.POSTED
-
-    # Verify Document link
+    # Step 5: Verify Document transitions to READY_TO_POST with zero journals
     doc_refreshed = await db_session.get(Document, doc_id)
-    assert doc_refreshed.processing_status == DocumentProcessingStatus.PROCESSED
-    assert doc_refreshed.candidate_transaction["converted_transaction_id"] == str(txn_id)
+    assert doc_refreshed.processing_status == DocumentProcessingStatus.READY_TO_POST
+    assert doc_refreshed.candidate_transaction["status"] == "READY_TO_POST"
 
     je = await db_session.scalar(
-        select(JournalEntry).where(JournalEntry.transaction_id == txn_id)
+        select(JournalEntry).where(JournalEntry.organization_id == org.id)
     )
-    assert je is not None
-    assert je.total_debit == Decimal("1500000.00")
-    assert je.total_credit == Decimal("1500000.00")
+    assert je is None
 
     # Step 6: Verify full audit and traceability linkage
     audit_logs = (await db_session.scalars(
@@ -462,6 +453,7 @@ async def test_uat15_idempotency_and_retry_resilience(client: httpx.AsyncClient,
         "description": "Biaya Operasional",
         "transaction_date": "2026-09-03",
         "payment_account_id": str(bank_acc.id),
+        "expense_category": "OFFICE_ADMIN",
         "status": "READY_FOR_APPROVAL",
     }
     doc.review_flags = []
@@ -474,20 +466,20 @@ async def test_uat15_idempotency_and_retry_resilience(client: httpx.AsyncClient,
         "X-User-ID": str(user.id),
     }
 
-    # Approval 1: Success
+    # Approval 1: Success (terminates at READY_TO_POST in Slice 4)
     app1 = await client.post(f"/api/v1/documents/{doc_id1}/approve", headers=headers, json={})
-    assert app1.status_code == 201
-    assert app1.json()["workflow_status"] == "POSTED"
+    assert app1.status_code == 200
+    assert app1.json()["processing_status"] == "READY_TO_POST"
 
-    # Approval 2: Replay must fail closed (400 or 409 Conflict)
+    # Approval 2: Replay must fail closed (HTTP 409 Conflict)
     app2 = await client.post(f"/api/v1/documents/{doc_id1}/approve", headers=headers, json={})
-    assert app2.status_code in (400, 409)
+    assert app2.status_code == 409
 
-    # Verify exactly 1 journal entry exists
+    # Verify zero journal entries exist (approval does not post in Slice 4)
     je_count = await db_session.scalar(
         select(func.count(JournalEntry.id)).where(JournalEntry.organization_id == org.id)
     )
-    assert je_count == 1
+    assert je_count == 0
 
 
 async def test_uat15_strict_human_review_hard_stop(client: httpx.AsyncClient, db_session, monkeypatch, tmp_path):

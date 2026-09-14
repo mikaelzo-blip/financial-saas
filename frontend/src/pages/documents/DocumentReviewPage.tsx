@@ -92,8 +92,30 @@ export const DocumentReviewPage: React.FC = () => {
     approvalLookupError = 'Vendor atau pelanggan pada kandidat tidak aktif atau tidak tersedia.';
   }
   return <div className="grid gap-6 lg:grid-cols-2">
-    <section className="min-h-[70vh] rounded-xl border bg-slate-100 p-3" aria-label="Dokumen sumber immutable">
-      {!contentUrl ? <div role="status" className="p-8">Memuat bukti sumber…</div> : document.mime_type.startsWith('image/') ? <img className="mx-auto max-h-[68vh]" src={contentUrl} alt={document.file_name} /> : <iframe className="h-[68vh] w-full" src={contentUrl} title={document.file_name} />}
+    <section className="min-h-[70vh] rounded-xl border bg-slate-100 p-3 flex flex-col justify-between" aria-label="Dokumen sumber immutable">
+      <div className="flex-1 flex items-center justify-center">
+        {!contentUrl ? (
+          <div role="status" className="p-8">Memuat bukti sumber…</div>
+        ) : document.mime_type.startsWith('image/') ? (
+          <img className="mx-auto max-h-[68vh]" src={contentUrl} alt={document.file_name} />
+        ) : (
+          <iframe className="h-[68vh] w-full" src={contentUrl} title={document.file_name} />
+        )}
+      </div>
+      {contentUrl && (
+        <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2 px-1 text-xs text-slate-600">
+          <span className="truncate max-w-[200px]">{document.file_name}</span>
+          <a
+            href={contentUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            download={document.file_name}
+            className="text-blue-600 hover:underline font-medium ml-2"
+          >
+            Buka / Unduh Dokumen Asli
+          </a>
+        </div>
+      )}
     </section>
     <DocumentReviewForm
       document={document}

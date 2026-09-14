@@ -18,7 +18,9 @@ from src.models.coa import PaymentAccount
 from src.models.user import User
 from src.models.enums import UserRole
 from src.schemas.document import (DocumentResponse, DocumentCorrectionRequest,
-                                  DocumentRejectionRequest, TransactionCandidate)
+                                  DocumentRejectionRequest, TransactionCandidate,
+                                  StructuredExtraction)
+from src.services.documents.matching import match_entities
 from src.schemas.transaction import TransactionCreate, TransactionResponse
 from src.services.document_service import DocumentService
 from src.services.documents.inbound_adapter import InboundDocumentAdapter, InboundDocumentInput
@@ -137,18 +139,146 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
     service = DocumentService(db)
     document = await service.get_document(org_id, document_id, for_update=True)
     await require_reviewer(db, org_id, user_id)
-    if document.processing_status not in {
-        DocumentProcessingStatus.REVIEW_REQUIRED, DocumentProcessingStatus.READY_FOR_APPROVAL
+    if document.processing_status in {
+        DocumentProcessingStatus.PROCESSED,
+        DocumentProcessingStatus.REJECTED,
+        DocumentProcessingStatus.READY_TO_POST,
+    } or document.processing_status not in {
+        DocumentProcessingStatus.REVIEW_REQUIRED,
+        DocumentProcessingStatus.READY_FOR_APPROVAL,
     }:
         raise HTTPException(status_code=409, detail="Document is not awaiting review")
-    allowed = {"project_id", "counterparty_id", "payment_account_id", "allocation_target_id",
-               "proposed_transaction_type", "cost_category", "expense_category", "transaction_date",
-               "amount", "description", "external_reference"}
+
+    allowed = {
+        "project_id", "counterparty_id", "payment_account_id", "allocation_target_id",
+        "selected_candidate_id", "proposed_transaction_type", "cost_category",
+        "expense_category", "transaction_date", "date", "amount", "total_amount",
+        "subtotal", "tax", "vat_amount", "description", "external_reference",
+        "transfer_reference", "document_number", "invoice_number", "spk_number",
+        "bast_number", "due_date", "document_type", "origin_bank", "destination_bank",
+        "destination_account_number"
+    }
     if not data.changes or set(data.changes) - allowed:
         raise HTTPException(status_code=422, detail="Correction contains unsupported fields")
-    candidate = dict(document.candidate_transaction)
-    old = {key: candidate.get(key) for key in data.changes}
-    candidate.update(data.changes)
+
+    candidate = dict(document.candidate_transaction or {})
+    extracted = dict(document.extracted_data or {})
+
+    # Capture old values before mutation
+    old = {}
+    for key in data.changes:
+        if key in candidate:
+            old[key] = candidate.get(key)
+        elif key in extracted:
+            old[key] = extracted.get(key)
+        elif key == "document_type":
+            old[key] = document.document_type.value
+        else:
+            old[key] = None
+
+    # Handle candidate selection
+    if "selected_candidate_id" in data.changes:
+        selected_id_val = data.changes["selected_candidate_id"]
+        if selected_id_val:
+            try:
+                selected_uuid = uuid.UUID(str(selected_id_val))
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=422, detail="Invalid selected_candidate_id UUID")
+
+            bill = await db.scalar(select(VendorBill).where(and_(
+                VendorBill.id == selected_uuid, VendorBill.organization_id == org_id
+            )))
+            invoice = await db.scalar(select(CustomerInvoice).where(and_(
+                CustomerInvoice.id == selected_uuid, CustomerInvoice.organization_id == org_id
+            )))
+            party = await db.scalar(select(Counterparty).where(and_(
+                Counterparty.id == selected_uuid, Counterparty.organization_id == org_id,
+                Counterparty.is_active.is_(True)
+            )))
+            proj = await db.scalar(select(Project).where(and_(
+                Project.id == selected_uuid, Project.organization_id == org_id
+            )))
+            acc = await db.scalar(select(PaymentAccount).where(and_(
+                PaymentAccount.id == selected_uuid, PaymentAccount.organization_id == org_id,
+                PaymentAccount.is_active.is_(True)
+            )))
+
+            if bill:
+                candidate["allocation_target_id"] = str(bill.id)
+                if not candidate.get("counterparty_id") and bill.vendor_id:
+                    candidate["counterparty_id"] = str(bill.vendor_id)
+                if not candidate.get("project_id") and bill.project_id:
+                    candidate["project_id"] = str(bill.project_id)
+            elif invoice:
+                candidate["allocation_target_id"] = str(invoice.id)
+                if not candidate.get("counterparty_id") and invoice.customer_id:
+                    candidate["counterparty_id"] = str(invoice.customer_id)
+                if not candidate.get("project_id") and invoice.project_id:
+                    candidate["project_id"] = str(invoice.project_id)
+            elif party:
+                candidate["counterparty_id"] = str(party.id)
+            elif proj:
+                candidate["project_id"] = str(proj.id)
+            elif acc:
+                candidate["payment_account_id"] = str(acc.id)
+            else:
+                raise HTTPException(status_code=422, detail="Selected candidate is not available in this organization")
+
+    # Synchronize extracted fields
+    if "document_type" in data.changes and data.changes["document_type"]:
+        try:
+            document.document_type = DocumentType(data.changes["document_type"])
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid document_type")
+
+    for ext_field in ("invoice_number", "document_number", "spk_number", "bast_number",
+                      "due_date", "subtotal", "vat_amount", "origin_bank", "destination_bank",
+                      "destination_account_number"):
+        if ext_field in data.changes:
+            extracted[ext_field] = data.changes[ext_field]
+    if "tax" in data.changes:
+        extracted["vat_amount"] = data.changes["tax"]
+    if "total_amount" in data.changes:
+        extracted["total_amount"] = data.changes["total_amount"]
+        candidate["amount"] = data.changes["total_amount"]
+    if "amount" in data.changes:
+        extracted["total_amount"] = data.changes["amount"]
+        candidate["amount"] = data.changes["amount"]
+    if "date" in data.changes:
+        extracted["transaction_date"] = data.changes["date"]
+        candidate["transaction_date"] = data.changes["date"]
+    if "transaction_date" in data.changes:
+        extracted["transaction_date"] = data.changes["transaction_date"]
+        candidate["transaction_date"] = data.changes["transaction_date"]
+
+    for cand_field in ("project_id", "counterparty_id", "payment_account_id", "allocation_target_id",
+                       "proposed_transaction_type", "cost_category", "expense_category",
+                       "description", "external_reference"):
+        if cand_field in data.changes:
+            candidate[cand_field] = data.changes[cand_field]
+
+    if "invoice_number" in data.changes and not data.changes.get("external_reference"):
+        candidate["external_reference"] = data.changes["invoice_number"]
+
+    document.extracted_data = extracted
+
+    # Material correction: rematch entities using Slice 3 matcher
+    material_fields = {
+        "invoice_number", "document_number", "spk_number", "counterparty_id",
+        "project_id", "amount", "total_amount", "document_type"
+    }
+    if any(k in material_fields for k in data.changes):
+        try:
+            extraction_obj = StructuredExtraction.model_validate(document.extracted_data)
+            new_matches = await match_entities(db, org_id, extraction_obj, document_type=document.document_type)
+            document.matching_results = new_matches
+            if "counterparty_id" not in data.changes and new_matches.get("counterparty_id"):
+                candidate["counterparty_id"] = new_matches["counterparty_id"]
+            if "project_id" not in data.changes and new_matches.get("project_id"):
+                candidate["project_id"] = new_matches["project_id"]
+        except Exception:
+            pass
+
     validated = TransactionCandidate.model_validate(candidate)
     if validated.proposed_transaction_type is not None:
         PostingRuleRegistry.validate_generic_ingestion(validated.proposed_transaction_type)
@@ -197,80 +327,149 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
                 break
         if not target_exists:
             raise HTTPException(status_code=422, detail="Allocation target is not available in this organization")
+
     document.candidate_transaction = validated.model_dump(mode="json")
-    resolved = {"project_id": "PROJECT_UNKNOWN", "counterparty_id": "VENDOR_UNKNOWN",
-                "amount": "OCR_LOW_CONFIDENCE", "transaction_date": "OCR_LOW_CONFIDENCE"}
+    resolved = {
+        "project_id": "PROJECT_UNKNOWN",
+        "counterparty_id": "VENDOR_UNKNOWN",
+        "selected_candidate_id": "AMBIGUOUS_MATCH",
+        "allocation_target_id": "AMBIGUOUS_MATCH",
+        "amount": "OCR_LOW_CONFIDENCE",
+        "total_amount": "OCR_LOW_CONFIDENCE",
+        "transaction_date": "OCR_LOW_CONFIDENCE",
+        "date": "OCR_LOW_CONFIDENCE",
+    }
     cleared = {resolved[key] for key, value in data.changes.items() if key in resolved and value}
     document.review_flags = [flag for flag in document.review_flags if flag not in cleared]
     if not document.review_flags and is_candidate_ready_for_approval(validated):
         validated.status = CandidateStatus.READY_FOR_APPROVAL
         document.candidate_transaction = validated.model_dump(mode="json")
         document.processing_status = DocumentProcessingStatus.READY_FOR_APPROVAL
+
     for key, value in data.changes.items():
-        db.add(DocumentCorrection(organization_id=org_id, document_id=document.id, field_path=key,
-            old_value=old.get(key), new_value=value, reason=data.reason, corrected_by=user_id))
-    await AuditService(db).log_event(org_id, "Document", document.id, "CORRECT_EXTRACTION", user_id,
-                                     old_values=old, new_values=data.changes, reason=data.reason)
+        db.add(DocumentCorrection(
+            organization_id=org_id,
+            document_id=document.id,
+            field_path=key,
+            old_value=old.get(key),
+            new_value=value,
+            reason=data.reason,
+            corrected_by=user_id
+        ))
+
+    await AuditService(db).log_event(
+        org_id, "Document", document.id, "CORRECT_EXTRACTION", user_id,
+        old_values=old, new_values=data.changes, reason=data.reason
+    )
     await db.flush()
     return document
 
 
-@router.post("/{document_id}/approve", response_model=TransactionResponse, status_code=status.HTTP_201_CREATED)
-async def approve_document_candidate(document_id: uuid.UUID, org_id: uuid.UUID = Depends(get_current_org_id),
-                                     current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
-                                     db: AsyncSession = Depends(get_db)):
+@router.post("/{document_id}/approve", response_model=DocumentResponse, status_code=status.HTTP_200_OK)
+async def approve_document_candidate(
+    document_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+    db: AsyncSession = Depends(get_db)
+):
     user_id = current_user.id
+    service = DocumentService(db)
+    document = await service.get_document(org_id, document_id, for_update=True)
+    await require_reviewer(db, org_id, user_id)
 
-    async def approve(session: AsyncSession) -> uuid.UUID:
-        document = await DocumentService(session).get_document(org_id, document_id, for_update=True)
-        reviewer = await require_reviewer(session, org_id, user_id)
-        if document.review_flags or document.processing_status != DocumentProcessingStatus.READY_FOR_APPROVAL:
-            raise HTTPException(status_code=409, detail="Document has unresolved review requirements")
-        candidate = TransactionCandidate.model_validate(document.candidate_transaction)
-        if candidate.converted_transaction_id:
-            raise HTTPException(status_code=409, detail="Candidate already converted")
-        if not candidate.proposed_transaction_type or not candidate.transaction_date or not candidate.amount:
-            raise HTTPException(status_code=409, detail="Candidate is incomplete")
-        if candidate.proposed_transaction_type == TransactionType.CUSTOMER_PAYMENT and not candidate.allocation_target_id:
-            raise HTTPException(status_code=409, detail="Customer payment requires an invoice allocation")
-        if candidate.proposed_transaction_type == TransactionType.PAY_VENDOR_BILL and not candidate.allocation_target_id:
-            raise HTTPException(status_code=409, detail="Vendor payment requires a bill allocation")
-        transaction = await TransactionService(session).create_transaction(org_id, TransactionCreate(
-            transaction_type=candidate.proposed_transaction_type, transaction_date=candidate.transaction_date,
-            amount=candidate.amount, currency=candidate.currency_code or "IDR", counterparty_id=candidate.counterparty_id,
-            payment_account_id=candidate.payment_account_id, reference_no=candidate.external_reference,
-            description=candidate.description or f"Document {document.document_code}", document_ids=[document.id],
-            project_id=candidate.project_id, cost_category=candidate.cost_category,
-            expense_category=candidate.expense_category), created_by=user_id)
-        journal = await AccountingEngine(session).post_transaction(
-            org_id,
-            transaction.id,
-            actor_id=user_id,
-            actor_role=reviewer.role,
+    if document.processing_status in {
+        DocumentProcessingStatus.PROCESSED,
+        DocumentProcessingStatus.REJECTED,
+        DocumentProcessingStatus.READY_TO_POST,
+    }:
+        raise HTTPException(status_code=409, detail="Document review decision is already final")
+    if document.processing_status not in {
+        DocumentProcessingStatus.REVIEW_REQUIRED,
+        DocumentProcessingStatus.READY_FOR_APPROVAL,
+    }:
+        raise HTTPException(status_code=409, detail="Document is not awaiting review")
+
+    if document.review_flags:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Document has unresolved review requirements: {', '.join(document.review_flags)}"
         )
-        if candidate.proposed_transaction_type == TransactionType.CUSTOMER_PAYMENT:
-            from src.services.receivable_service import CustomerARService
-            await CustomerARService(session).allocate_customer_payment(
-                org_id, transaction.id, [(candidate.allocation_target_id, candidate.amount)]
-            )
-        elif candidate.proposed_transaction_type == TransactionType.PAY_VENDOR_BILL:
-            from src.services.payable_service import VendorAPService
-            await VendorAPService(session).allocate_vendor_payment(
-                org_id, transaction.id, [(candidate.allocation_target_id, candidate.amount)]
-            )
-        if candidate.proposed_transaction_type in (TransactionType.CUSTOMER_PAYMENT, TransactionType.PAY_VENDOR_BILL):
-            from src.services.money_movement_service import MoneyMovementService
-            await MoneyMovementService(session).synchronize_payment_money_movement(org_id, transaction.id)
-        candidate.status, candidate.converted_transaction_id = CandidateStatus.CONVERTED, transaction.id
-        document.candidate_transaction = candidate.model_dump(mode="json")
-        document.processing_status = DocumentProcessingStatus.PROCESSED
-        await AuditService(session).log_event(org_id, "Document", document.id, "APPROVE_CANDIDATE", user_id,
-            new_values={"transaction_id": str(transaction.id), "journal_id": str(journal.id)})
-        await session.flush()
-        return transaction.id
 
-    transaction_id = await run_in_clean_transaction(db, approve)
-    return await TransactionService(db).get_transaction(org_id, transaction_id)
+    if not document.candidate_transaction:
+        raise HTTPException(status_code=422, detail="Document candidate is missing")
+
+    candidate = TransactionCandidate.model_validate(document.candidate_transaction)
+    if not candidate.proposed_transaction_type or not candidate.transaction_date or not candidate.amount:
+        raise HTTPException(status_code=422, detail="Candidate is incomplete")
+
+    if candidate.proposed_transaction_type == TransactionType.CUSTOMER_PAYMENT and not candidate.allocation_target_id:
+        raise HTTPException(status_code=409, detail="Customer payment requires an invoice allocation")
+    if candidate.proposed_transaction_type == TransactionType.PAY_VENDOR_BILL and not candidate.allocation_target_id:
+        raise HTTPException(status_code=409, detail="Vendor payment requires a bill allocation")
+
+    if not is_candidate_ready_for_approval(candidate):
+        raise HTTPException(status_code=422, detail="Candidate is missing required fields for approval")
+
+    PostingRuleRegistry.validate_generic_ingestion(candidate.proposed_transaction_type)
+
+    if candidate.counterparty_id:
+        party = await db.scalar(select(Counterparty).where(and_(
+            Counterparty.id == candidate.counterparty_id,
+            Counterparty.organization_id == org_id,
+            Counterparty.is_active.is_(True)
+        )))
+        if not party:
+            raise HTTPException(status_code=422, detail="Counterparty is not available in this organization")
+
+    if candidate.project_id:
+        project = await db.scalar(select(Project).where(and_(
+            Project.id == candidate.project_id,
+            Project.organization_id == org_id,
+            Project.project_status.in_([ProjectStatus.PLANNED, ProjectStatus.ACTIVE, ProjectStatus.ON_HOLD]),
+        )))
+        if not project:
+            raise HTTPException(status_code=422, detail="Project is not available or not active in this organization")
+
+    if candidate.payment_account_id:
+        account = await db.scalar(select(PaymentAccount).where(and_(
+            PaymentAccount.id == candidate.payment_account_id,
+            PaymentAccount.organization_id == org_id,
+            PaymentAccount.is_active.is_(True)
+        )))
+        if not account:
+            raise HTTPException(status_code=422, detail="Payment account is not available in this organization")
+
+    if candidate.allocation_target_id:
+        target_exists = False
+        for model in (CustomerInvoice, VendorBill):
+            if await db.scalar(select(model.id).where(and_(
+                model.id == candidate.allocation_target_id,
+                model.organization_id == org_id,
+            ))):
+                target_exists = True
+                break
+        if not target_exists:
+            raise HTTPException(status_code=422, detail="Allocation target is not available in this organization")
+
+    previous_status = document.processing_status.value
+    candidate.status = CandidateStatus.READY_TO_POST
+    document.candidate_transaction = candidate.model_dump(mode="json")
+    document.processing_status = DocumentProcessingStatus.READY_TO_POST
+
+    await AuditService(db).log_event(
+        org_id,
+        "Document",
+        document.id,
+        "APPROVE_CANDIDATE",
+        user_id,
+        old_values={"processing_status": previous_status},
+        new_values={
+            "processing_status": DocumentProcessingStatus.READY_TO_POST.value,
+            "candidate_status": CandidateStatus.READY_TO_POST.value
+        }
+    )
+    await db.flush()
+    return document
 
 
 @router.get("/review-queue", response_model=List[DocumentResponse], summary="List Document Candidates Requiring Review")

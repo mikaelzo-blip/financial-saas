@@ -101,6 +101,19 @@ class DocumentRejectionRequest(BaseModel):
     reason: str = Field(min_length=3)
 
 
+class DocumentCorrectionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    document_id: uuid.UUID
+    field_path: str
+    old_value: Optional[Any] = None
+    new_value: Optional[Any] = None
+    reason: str
+    corrected_by: uuid.UUID
+    corrected_at: datetime
+
+
 class DocumentResponse(BaseModel):
     id: uuid.UUID
     organization_id: uuid.UUID
@@ -122,5 +135,6 @@ class DocumentResponse(BaseModel):
     review_flags: List[str] = Field(default_factory=list)
     failure_code: Optional[str] = None
     failure_message: Optional[str] = None
+    corrections: List[DocumentCorrectionResponse] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)

@@ -299,6 +299,30 @@ export interface ReviewFlagResponse {
   created_at: string;
 }
 
+export interface DocumentCorrectionResponse {
+  id: string;
+  organization_id: string;
+  document_id: string;
+  field_path: string;
+  old_value?: unknown;
+  new_value?: unknown;
+  reason: string;
+  corrected_by: string;
+  corrected_at: string;
+}
+
+export interface MatchCandidateResponse {
+  entity_type: string;
+  entity_id: string;
+  score: string | number;
+  confidence_band: 'HIGH' | 'MEDIUM' | 'LOW';
+  positive_signals: string[];
+  negative_signals: string[];
+  explanation: string;
+  target_model?: string;
+  scoring_details?: Record<string, unknown>;
+}
+
 export interface DocumentResponse {
   id: string;
   organization_id: string;
@@ -310,7 +334,7 @@ export interface DocumentResponse {
   mime_type: string;
   source_channel: string;
   created_at: string;
-  processing_status: 'UPLOADED' | 'HASHED' | 'QUEUED' | 'EXTRACTING' | 'EXTRACTED' | 'MATCHING' | 'REVIEW_REQUIRED' | 'READY_FOR_APPROVAL' | 'PROCESSED' | 'REJECTED' | 'FAILED';
+  processing_status: 'UPLOADED' | 'HASHED' | 'QUEUED' | 'EXTRACTING' | 'EXTRACTED' | 'MATCHING' | 'REVIEW_REQUIRED' | 'READY_FOR_APPROVAL' | 'READY_TO_POST' | 'PROCESSED' | 'REJECTED' | 'FAILED';
   processing_attempts?: number;
   extracted_data: Record<string, unknown>;
   matching_results: Record<string, unknown>;
@@ -319,6 +343,7 @@ export interface DocumentResponse {
   review_flags: string[];
   failure_code?: string;
   failure_message?: string;
+  corrections?: DocumentCorrectionResponse[];
 }
 
 export interface CounterpartyResponse {

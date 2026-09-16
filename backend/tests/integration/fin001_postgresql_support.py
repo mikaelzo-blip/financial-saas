@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from src.models.organization import Organization
 
 POSTGRES_URL_ENV = "FIN_001_TEST_DATABASE_URL"
-EXPECTED_ALEMBIC_HEAD = "027_document_review_ready_to_post"
+EXPECTED_ALEMBIC_HEAD = "028_document_posting_linkage"
 
 
 def require_fin001_postgres_url() -> str:

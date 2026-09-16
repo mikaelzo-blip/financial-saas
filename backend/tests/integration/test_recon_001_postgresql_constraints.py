@@ -28,7 +28,7 @@ from src.models.organization import Organization
 from src.models.transaction import Transaction
 
 POSTGRES_URL_ENV = "RECON_001_TEST_DATABASE_URL"
-EXPECTED_ALEMBIC_HEAD = "027_document_review_ready_to_post"
+EXPECTED_ALEMBIC_HEAD = "028_document_posting_linkage"
 
 pytestmark = pytest.mark.postgresql
 

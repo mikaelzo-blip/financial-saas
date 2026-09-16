@@ -334,16 +334,28 @@ export interface DocumentResponse {
   mime_type: string;
   source_channel: string;
   created_at: string;
-  processing_status: 'UPLOADED' | 'HASHED' | 'QUEUED' | 'EXTRACTING' | 'EXTRACTED' | 'MATCHING' | 'REVIEW_REQUIRED' | 'READY_FOR_APPROVAL' | 'READY_TO_POST' | 'PROCESSED' | 'REJECTED' | 'FAILED';
+  processing_status: 'UPLOADED' | 'HASHED' | 'QUEUED' | 'EXTRACTING' | 'EXTRACTED' | 'MATCHING' | 'REVIEW_REQUIRED' | 'READY_FOR_APPROVAL' | 'READY_TO_POST' | 'POSTED' | 'PROCESSED' | 'REJECTED' | 'FAILED';
   processing_attempts?: number;
   extracted_data: Record<string, unknown>;
   matching_results: Record<string, unknown>;
   confidence_scores: Record<string, string>;
   candidate_transaction: Record<string, unknown>;
   review_flags: string[];
+  converted_transaction_id?: string;
   failure_code?: string;
   failure_message?: string;
   corrections?: DocumentCorrectionResponse[];
+}
+
+export interface DocumentPostingResponse {
+  document_id: string;
+  processing_status: string;
+  transaction_id: string;
+  transaction_code: string;
+  already_posted: boolean;
+  posting_outcome: string;
+  journal_entry_id?: string;
+  entry_number?: string;
 }
 
 export interface CounterpartyResponse {

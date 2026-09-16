@@ -133,6 +133,7 @@ class DocumentResponse(BaseModel):
     confidence_scores: Dict[str, Any] = Field(default_factory=dict)
     candidate_transaction: Dict[str, Any] = Field(default_factory=dict)
     review_flags: List[str] = Field(default_factory=list)
+    converted_transaction_id: Optional[uuid.UUID] = None
     failure_code: Optional[str] = None
     failure_message: Optional[str] = None
     corrections: List[DocumentCorrectionResponse] = Field(default_factory=list)
@@ -150,3 +151,15 @@ class DocumentResponse(BaseModel):
         return data
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentPostingResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    document_id: uuid.UUID
+    processing_status: DocumentProcessingStatus
+    transaction_id: uuid.UUID
+    transaction_code: str
+    already_posted: bool
+    posting_outcome: str
+    journal_entry_id: Optional[uuid.UUID] = None
+    entry_number: Optional[str] = None

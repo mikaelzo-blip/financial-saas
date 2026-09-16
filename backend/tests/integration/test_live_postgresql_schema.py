@@ -36,7 +36,7 @@ async def test_live_postgresql_connection_and_alembic_head():
         async with engine.connect() as conn:
             res = await conn.execute(text("SELECT version_num FROM alembic_version"))
             version = res.scalar()
-            assert version == "027_document_review_ready_to_post", f"Expected 027_document_review_ready_to_post, got {version}"
+            assert version == "028_document_posting_linkage", f"Expected 028_document_posting_linkage, got {version}"
         await engine.dispose()
     except Exception as e:
         pytest.skip(f"Live PostgreSQL not reachable or credentials mismatch: {e}")

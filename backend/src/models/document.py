@@ -19,6 +19,7 @@ from src.models.enums import DocumentType, DocumentProcessingStatus
 if TYPE_CHECKING:
     from src.models.organization import Organization
     from src.models.user import User
+    from src.models.transaction import Transaction
 
 
 class Document(Base):
@@ -98,6 +99,12 @@ class Document(Base):
     confidence_scores: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     candidate_transaction: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     review_flags: Mapped[List[str]] = mapped_column(JSON, nullable=False, default=list)
+    converted_transaction_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("transactions.id", ondelete="RESTRICT"),
+        nullable=True,
+        unique=True,
+        index=True
+    )
     failure_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     failure_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
@@ -114,6 +121,10 @@ class Document(Base):
     # Relationships
     organization: Mapped["Organization"] = relationship("Organization")
     uploader: Mapped[Optional["User"]] = relationship("User")
+    converted_transaction: Mapped[Optional["Transaction"]] = relationship(
+        "Transaction",
+        foreign_keys=[converted_transaction_id]
+    )
     corrections: Mapped[List["DocumentCorrection"]] = relationship(
         "DocumentCorrection",
         lazy="selectin",

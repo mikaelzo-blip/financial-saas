@@ -1,10 +1,18 @@
 """Public webhook boundary. Adapter dispatch never receives a database session."""
 import json
+import uuid
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
+from src.core.database import get_db
+from src.api.deps import get_current_org_id
+from src.api.auth import require_application_user
+from src.models.user import User
+from src.schemas.whatsapp import WhatsAppIntegrationStatusResponse
+from src.services.whatsapp_status_service import WhatsAppStatusService
 from src.services.integrations.whatsapp.security import valid_handshake, valid_signature
 from src.services.hermes.retry import HermesApiError
 from src.services.integrations.whatsapp.provider import ProviderError
@@ -49,3 +57,23 @@ async def webhook(request: Request):
     except (HermesApiError, ProviderError, ValueError):
         raise HTTPException(503, "WhatsApp delivery temporarily unavailable") from None
     return {"status": "success"}
+
+
+@router.get(
+    "/integrations/whatsapp/status",
+    response_model=WhatsAppIntegrationStatusResponse,
+    summary="Get WhatsApp Integration Operational Health Status",
+)
+@router.get(
+    "/whatsapp/status",
+    response_model=WhatsAppIntegrationStatusResponse,
+    include_in_schema=False,
+)
+async def get_whatsapp_status(
+    org_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_application_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _ = current_user
+    service = WhatsAppStatusService(db)
+    return await service.get_status(organization_id=org_id)

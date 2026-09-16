@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Header, HTTPException, Request, Response, UploadFile, status
 from sqlalchemy import and_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
@@ -118,16 +119,28 @@ async def upload_document(
         service = DocumentService(session)
         from src.services.document_service import compute_sha256
         duplicate = await service.get_document_by_hash(organization_id, compute_sha256(file.file)) if sender else None
-        document = duplicate or await service.ingest_document(
-            organization_id=organization_id,
-            file_obj=file.file,
-            file_name=file.filename or "unknown_file",
-            mime_type=file.content_type or "application/octet-stream",
-            document_type=document_type,
-            source_channel=source_channel,
-            source_metadata={**metadata, "hermes_submission_id": str(submission.id)},
-            created_by=sender_user_id,
-        )
+        if duplicate:
+            document = duplicate
+            is_dup = True
+        else:
+            from src.services.documents.inbound_adapter import InboundDocumentAdapter, InboundDocumentInput
+            adapter = InboundDocumentAdapter(session)
+            document = await adapter.ingest_and_enqueue(
+                InboundDocumentInput(
+                    organization_id=organization_id,
+                    file_obj=file.file,
+                    file_name=file.filename or "unknown_file",
+                    mime_type=file.content_type or "application/octet-stream",
+                    document_type=document_type,
+                    source_channel=source_channel,
+                    source_message_id=metadata.get("wamid"),
+                    caption=metadata.get("caption"),
+                    source_metadata={**metadata, "hermes_submission_id": str(submission.id)},
+                    created_by=sender_user_id,
+                ),
+                enqueue_job=process,
+            )
+            is_dup = False
         submission.document_id = document.id
         submission.outcome_status = "ACCEPTED"
         await AuditService(session).log_event(
@@ -139,12 +152,26 @@ async def upload_document(
                 "outcome_status": submission.outcome_status,
             },
         )
-        if process and not duplicate:
-            document.processing_status = DocumentProcessingStatus.EXTRACTING
-            await session.flush()
-        return document, submission.id, duplicate is not None
+        return document, submission.id, is_dup
 
-    document, submission_id, duplicate = await run_in_clean_transaction(db, ingest)
+    try:
+        document, submission_id, duplicate = await run_in_clean_transaction(db, ingest)
+    except IntegrityError:
+        existing = await db.scalar(
+            select(HermesSubmission).where(
+                and_(
+                    HermesSubmission.organization_id == organization_id,
+                    HermesSubmission.operation == DOCUMENT_INTAKE_OPERATION,
+                    HermesSubmission.idempotency_key_hash == key_hash,
+                )
+            )
+        )
+        if existing and existing.document_id:
+            response.status_code = status.HTTP_200_OK
+            response.headers["X-Hermes-Correlation-ID"] = str(existing.id)
+            return await DocumentService(db).get_document(organization_id, existing.document_id)
+        raise
+
     if duplicate:
         response.headers["X-Document-Duplicate"] = "true"
     if process and not duplicate:

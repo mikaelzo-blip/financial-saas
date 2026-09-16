@@ -5,9 +5,15 @@ import {
   DocumentOperationalListResponse,
   DocumentOperationsListParams,
   DocumentPostingResponse,
+  WhatsAppIntegrationStatusResponse,
 } from '../types/api';
 
 export const documentsApi = {
+  whatsappStatus: async (): Promise<WhatsAppIntegrationStatusResponse> => {
+    const res = await apiClient.get<WhatsAppIntegrationStatusResponse>('/integrations/whatsapp/status');
+    return res.data;
+  },
+
   operationsSummary: async (): Promise<DocumentOperationsSummaryResponse> => {
     const res = await apiClient.get<DocumentOperationsSummaryResponse>('/operations/documents/summary');
     return res.data;

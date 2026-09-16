@@ -1,6 +1,6 @@
 """Validated channel DTOs; no accounting instructions accepted."""
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -42,3 +42,18 @@ class OutboundMessage(BaseModel):
     recipient_phone: str = Field(pattern=r"^\+[1-9][0-9]{7,14}$")
     body_text: str = Field(min_length=1, max_length=4096)
     buttons: list[dict[str, str]] = Field(default_factory=list, max_length=3)
+
+
+class WhatsAppIntegrationStatusResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    enabled: bool = True
+    connection_state: str = "DISCONNECTED"  # CONNECTED, DISCONNECTED, CONNECTING, DEGRADED, ERROR
+    last_connected_at: Optional[datetime] = None
+    last_message_at: Optional[datetime] = None
+    last_successful_ingestion_at: Optional[datetime] = None
+    last_error_code: Optional[str] = None
+    last_error_message_safe: Optional[str] = None
+    pending_handoff_count: int = 0
+    integration_version: Optional[str] = "baileys"
+    provider: str = "baileys"

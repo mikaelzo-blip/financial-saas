@@ -4,6 +4,7 @@
 - **Current branch**: `main`
 - **Main commit**: `faec99bb40dc2911e2717e3dd7bfede2bf2ff23c` (`feat(documents): add idempotent automatic accounting posting (#71)`)
 - **Active feature**: Slice 5 — Automatic Accounting Posting [COMPLETED AND MERGED]
+- **Operating model**: Local-first. Local Baileys intake is supported while the Finance PC services are running; durable PC-off capture remains `DEFERRED_POST_RC1`.
 - **Status**: PR #71 squash-merged to `main` on 2026-09-16. GitHub Quality Gates passed for the merged candidate.
 
 ## Delivered Scope

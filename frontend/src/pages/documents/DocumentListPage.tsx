@@ -15,6 +15,7 @@ import {
   Send,
   AlertOctagon,
   Layers,
+  MessageSquare,
 } from 'lucide-react';
 import { documentsApi } from '../../api/documents';
 import {
@@ -22,6 +23,7 @@ import {
   DocumentOperationsSummaryResponse,
   DocumentOperationalListResponse,
   DocumentType,
+  WhatsAppIntegrationStatusResponse,
 } from '../../types/api';
 import { formatIDR, formatDate } from '../../utils/formatters';
 import { formatDocumentType, formatSourceChannel } from '../../utils/labels';
@@ -83,6 +85,16 @@ export const DocumentListPage: React.FC = () => {
     refetchInterval: 30000,
   });
 
+  // Fetch WhatsApp integration status
+  const {
+    data: waStatus,
+    refetch: refetchWaStatus,
+  } = useQuery<WhatsAppIntegrationStatusResponse>({
+    queryKey: ['whatsapp-integration-status'],
+    queryFn: documentsApi.whatsappStatus,
+    refetchInterval: 30000,
+  });
+
   // Fetch paginated operational list
   const {
     data: listData,
@@ -122,6 +134,7 @@ export const DocumentListPage: React.FC = () => {
   const handleRefresh = () => {
     refetchSummary();
     refetchList();
+    refetchWaStatus();
   };
 
   const resetFilters = () => {
@@ -390,7 +403,7 @@ export const DocumentListPage: React.FC = () => {
       </div>
 
       {/* Middle Status Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Queue & Background Worker Health */}
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
@@ -532,6 +545,59 @@ export const DocumentListPage: React.FC = () => {
                 Tidak ada dokumen dengan flag peringatan saat ini.
               </p>
             )}
+          </div>
+        </div>
+
+        {/* WhatsApp Integration Health */}
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" data-testid="whatsapp-status-card">
+          <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+            <h3 className="text-xs font-semibold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <MessageSquare className="h-4 w-4 text-emerald-600" />
+              Integrasi WhatsApp
+            </h3>
+            <span
+              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                waStatus?.connection_state === 'CONNECTED'
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                  : waStatus?.connection_state === 'CONNECTING'
+                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                  : 'bg-slate-100 text-slate-700 border border-slate-200'
+              }`}
+            >
+              {waStatus?.connection_state === 'CONNECTED'
+                ? 'Terhubung'
+                : waStatus?.connection_state === 'CONNECTING'
+                ? 'Menghubungkan'
+                : 'Terputus'}
+            </span>
+          </div>
+          <div className="space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">Terakhir Masuk:</span>
+              <span className="font-medium text-slate-800">
+                {waStatus?.last_message_at ? formatDate(waStatus.last_message_at) : '-'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">Antrean / Pending:</span>
+              <span className="font-semibold text-slate-800">
+                {waStatus?.pending_handoff_count ?? 0}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">Terakhir Berhasil:</span>
+              <span className="font-medium text-slate-800">
+                {waStatus?.last_successful_ingestion_at
+                  ? formatDate(waStatus.last_successful_ingestion_at)
+                  : '-'}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-2 pt-1 border-t border-slate-100">
+              <span className="text-slate-500 shrink-0">Error Terakhir:</span>
+              <span className="font-mono text-[11px] text-rose-600 text-right truncate max-w-[180px]">
+                {waStatus?.last_error_message_safe || 'Tidak ada'}
+              </span>
+            </div>
           </div>
         </div>
       </div>

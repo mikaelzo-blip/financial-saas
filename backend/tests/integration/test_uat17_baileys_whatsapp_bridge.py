@@ -143,7 +143,7 @@ async def test_uat17_allowed_sender_and_image_intake(
         )
     )
     assert doc is not None
-    assert doc.processing_status.value in ["UPLOADED", "PROCESSING", "EXTRACTING", "PENDING_REVIEW"]
+    assert doc.processing_status.value in ["QUEUED", "UPLOADED", "PROCESSING", "EXTRACTING", "PENDING_REVIEW"]
 
     # 7. Strictly verify accounting invariants: zero journals, zero transactions mutated
     count_tx_after = await db_session.scalar(select(func.count(Transaction.id)))

@@ -68,9 +68,10 @@ class InboundDocumentAdapter:
                 )
                 await self.session.flush()
             except Exception:
-                if document.file_path:
+                storage_path = getattr(document, "storage_path", None)
+                if storage_path:
                     try:
-                        self.storage.delete_file(document.file_path)
+                        self.storage.delete_file(storage_path)
                     except OSError:
                         pass
                 raise

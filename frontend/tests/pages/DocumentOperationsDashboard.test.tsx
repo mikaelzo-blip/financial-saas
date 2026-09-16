@@ -11,6 +11,7 @@ import type {
   DocumentOperationsSummaryResponse,
   DocumentOperationalListResponse,
   DocumentOperationalItem,
+  WhatsAppIntegrationStatusResponse,
 } from '../../src/types/api';
 
 vi.mock('../../src/api/documents', () => ({
@@ -20,6 +21,7 @@ vi.mock('../../src/api/documents', () => ({
     retry: vi.fn(),
     postAccounting: vi.fn(),
     list: vi.fn(),
+    whatsappStatus: vi.fn(),
   },
 }));
 
@@ -170,6 +172,19 @@ const mockListResponse: DocumentOperationalListResponse = {
   pages: 1,
 };
 
+const mockWhatsAppStatus: WhatsAppIntegrationStatusResponse = {
+  enabled: true,
+  connection_state: 'CONNECTED',
+  last_connected_at: '2026-09-16T08:00:00Z',
+  last_message_at: '2026-09-16T08:05:00Z',
+  last_successful_ingestion_at: '2026-09-16T08:05:00Z',
+  last_error_code: null,
+  last_error_message_safe: null,
+  pending_handoff_count: 2,
+  integration_version: '1.0.0',
+  provider: 'baileys',
+};
+
 function renderDashboard() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -190,6 +205,15 @@ describe('Document Operational Dashboard', () => {
     vi.clearAllMocks();
     vi.mocked(documentsApi.operationsSummary).mockResolvedValue(mockSummary);
     vi.mocked(documentsApi.operationsList).mockResolvedValue(mockListResponse);
+    vi.mocked(documentsApi.whatsappStatus).mockResolvedValue(mockWhatsAppStatus);
+  });
+
+  it('renders WhatsApp integration health card with connection state and metrics', async () => {
+    renderDashboard();
+
+    expect(await screen.findByText('Integrasi WhatsApp')).toBeInTheDocument();
+    expect(await screen.findByText('Terhubung')).toBeInTheDocument();
+    expect(screen.getByText('Antrean / Pending:')).toBeInTheDocument();
   });
 
   it('renders actionable summary cards and queue metrics', async () => {

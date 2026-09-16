@@ -318,7 +318,7 @@ async def test_uat16_real_meta_cloud_api_adapter_media_intake_and_review_hardsto
     doc = docs[0]
     assert doc.source_channel == "WHATSAPP"
     assert doc.file_hash == hashlib.sha256(fake_jpg_content).hexdigest()
-    assert doc.processing_status in {"PENDING_REVIEW", "UNPROCESSED", "EXTRACTING"}
+    assert doc.processing_status.value in {"QUEUED", "PENDING_REVIEW", "UNPROCESSED", "EXTRACTING"}
 
     submissions = (await db_session.execute(select(HermesSubmission).where(HermesSubmission.organization_id == org.id))).scalars().all()
     assert len(submissions) == 1

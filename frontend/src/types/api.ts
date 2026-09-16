@@ -481,3 +481,16 @@ export interface ChartOfAccountResponse {
   parent_id?: string;
   is_active: boolean;
 }
+
+export interface WhatsAppIntegrationStatusResponse {
+  enabled: boolean;
+  connection_state: 'CONNECTED' | 'DISCONNECTED' | 'CONNECTING' | 'DEGRADED' | 'ERROR' | string;
+  last_connected_at?: string | null;
+  last_message_at?: string | null;
+  last_successful_ingestion_at?: string | null;
+  last_error_code?: string | null;
+  last_error_message_safe?: string | null;
+  pending_handoff_count: number;
+  integration_version?: string | null;
+  provider: string;
+}

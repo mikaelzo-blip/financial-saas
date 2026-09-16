@@ -208,25 +208,64 @@ class LocalExtractionProvider:
         total_amount = None
         total_candidate = parse_candidate_money(None)
 
+        # Remove regulatory boilerplate that triggers false positives (e.g. "diatas Rp. 100 juta")
+        text_for_amount = re.sub(r"(?i)[^\n]*(?:diatas|di\s*atas)\s*(?:rp\.?|idr)?\s*100\s*juta[^\n]*", "", text)
+        text_for_amount = re.sub(r"(?i)[^\n]*walk-in\s+customer[^\n]*", "", text_for_amount)
+        text_for_amount = re.sub(r"(?i)[^\n]*transaksi\s+tunai\s+diatas[^\n]*", "", text_for_amount)
+
+        # Step A: Direct regex match on text for explicit total labels
         total_match = re.search(
-            r"\b(?:grand\s+total|total\s+bayar|total\s+tagihan|total\s+transfer|total\s+pembayaran|total\s+amount|jumlah\s+transfer|jumlah\s+tagihan|(?<!sub)total|jumlah)\s*[:=]?\s*(?:Rp\.?|IDR)?\s*([\d.,\-]+)",
-            text,
+            r"\b(?:proceeds|idr\s+amount|jumlah\s+rupiah|amount\s+in\s+idr|jumlah\s+transfer|total\s+transfer|grand\s+total|total\s+bayar|total\s+tagihan|total\s+pembayaran|total\s+amount|jumlah\s+tagihan|(?<!sub)total|jumlah)\s*[:=]?\s*(?:Rp\.?|IDR|EUR|USD)?\s*[\d.,\-]{4,25}",
+            text_for_amount,
             re.I,
         )
-        if not total_match:
-            total_match = re.search(r"(?:Rp\.?|IDR)\s*([\d.,\-]+)", text, re.I)
-        if not total_match:
-            # Standalone formatted currency
-            total_match = re.search(r"\b\d{1,3}(?:\.\d{3})+(?:,\d{2})?\b|\b\d{1,3}(?:,\d{3})+(?:\.\d{2})?\b", text)
-
         if total_match:
-            raw_val = total_match.group(0)
-            total_candidate = parse_candidate_money(raw_val)
-            total_amount = total_candidate.value
+            cand = parse_candidate_money(total_match.group(0))
+            if cand.value and cand.value > 100:
+                total_candidate = cand
+                total_amount = cand.value
+
+        # Step B: Nearby lines below/above transfer/proceeds headers (handles multi-column bank/valas tables)
+        if total_amount is None or total_amount <= 100:
+            lines_for_amt = [re.sub(r"^[^\w\d]+|[^\w\d]+$", "", l.strip()) for l in text_for_amount.splitlines() if l.strip()]
+            for idx, l in enumerate(lines_for_amt):
+                if any(k in l.lower() for k in ["jumlah rupiah", "amount in idr", "proceeds", "total amount", "idr amount", "jumlah transfer", "total transfer"]):
+                    start_idx = max(0, idx - 3)
+                    end_idx = min(len(lines_for_amt), idx + 8)
+                    for next_l in lines_for_amt[start_idx:end_idx]:
+                        for m in re.finditer(r"\b(?:\d{1,3}(?:[.,]\d{3,6})+(?:[.,]\d{2})?|\d{4,}(?:[.,]\d{2})?)\b", next_l):
+                            cand = parse_candidate_money(m.group(0))
+                            if cand.value and cand.value > 100:
+                                if total_amount is None or cand.value > total_amount:
+                                    total_amount = cand.value
+                                    total_candidate = cand
+                                    total_match = m
+
+        # Step C: Currency prefix with formatted number >= 4 chars
+        if total_amount is None or total_amount <= 100:
+            m_curr = re.search(r"(?:Rp\.?|IDR|EUR|USD)\s*[:=]?\s*([\d.,\-]{4,25})", text_for_amount, re.I)
+            if m_curr:
+                cand = parse_candidate_money(m_curr.group(1))
+                if cand.value and cand.value > 100:
+                    total_amount = cand.value
+                    total_candidate = cand
+                    total_match = m_curr
+
+        # Step D: Standalone formatted currency
+        if total_amount is None or total_amount <= 100:
+            m_stand = re.search(r"\b\d{1,3}(?:\.\d{3})+(?:,\d{2})?\b|\b\d{1,3}(?:,\d{3})+(?:\.\d{2})?\b", text_for_amount)
+            if m_stand:
+                cand = parse_candidate_money(m_stand.group(0))
+                if cand.value and cand.value > 100:
+                    total_amount = cand.value
+                    total_candidate = cand
+                    total_match = m_stand
+
+        if total_amount is not None:
             field_evidence["total_amount"] = ExtractedField(
-                value=str(total_amount) if total_amount is not None else None,
-                confidence=ocr_score if total_amount is not None else Decimal("0.0"),
-                evidence=total_match.group(0),
+                value=str(total_amount),
+                confidence=ocr_score,
+                evidence=total_match.group(0) if total_match else str(total_amount),
                 validation_status=total_candidate.validation_status,
             )
 
@@ -283,10 +322,10 @@ class LocalExtractionProvider:
 
         # Look for transaction date patterns
         date_pattern = (
-            r"\b(?:tanggal|tgl|date)\s*[:=]?\s*"
-            r"(\d{1,2}[\s\-]+(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|MEI|AGU|OKT|DES)[A-Z]*[\s\-]+\d{4}"
-            r"|\d{4}-\d{2}-\d{2}"
-            r"|\d{2}[/-]\d{2}[/-]\d{4})\b"
+            r"\b(?:tanggal|tgl|date|trade\s*date)\s*[:=]?\s*"
+            r"([0-9]{1,2}[\s\-./]+[a-zA-Z]{3,10}[\s\-./]+[0-9]{2,4}"
+            r"|[0-9]{4}-[0-9]{2}-[0-9]{2}"
+            r"|[0-9]{1,2}[/.\-][0-9]{1,2}[/.\-][0-9]{2,4})\b"
         )
         for dm in re.finditer(date_pattern, text, re.I):
             matched_date_str = dm.group(1)
@@ -304,9 +343,9 @@ class LocalExtractionProvider:
         # Fallback date search
         if not tx_date:
             generic_date = re.search(
-                r"\b(\d{1,2}\s+(?:JANUARI|FEBRUARI|MARET|APRIL|MEI|JUNI|JULI|AGUSTUS|SEPTEMBER|OKTOBER|NOVEMBER|DESEMBER|JAN|FEB|PEB|MAR|APR|MAY|JUN|JUL|AGU|AGS|AUG|SEP|OKT|OCT|NOV|NOP|DES|DEC)\s+\d{4}"
-                r"|\d{4}-\d{2}-\d{2}"
-                r"|\d{2}[/-]\d{2}[/-]\d{4})\b",
+                r"\b([0-9]{1,2}[\s\-./]+[a-zA-Z]{3,10}[\s\-./]+[0-9]{2,4}"
+                r"|[0-9]{4}-[0-9]{2}-[0-9]{2}"
+                r"|[0-9]{1,2}[/.\-][0-9]{1,2}[/.\-][0-9]{2,4})\b",
                 text,
                 re.I,
             )
@@ -377,27 +416,42 @@ class LocalExtractionProvider:
             )
 
         # 6. Bank Hints & Transfer Metadata
-        bank_match = re.search(r"\b(BCA|MANDIRI|BRI|BNI|BSI|CIMB|PERMATA|DANAMON|JAGO|JENIUS|SEABANK|BTPN)\b", text, re.I)
+        bank_match = re.search(r"\b(BCA|MANDIRI|BRI|BNI|BSI|CIMB|PERMATA|DANAMON|JAGO|JENIUS|SEABANK|BTPN|DKI|BANK\s+DKI|HSBC)\b", text, re.I)
         bank_name = bank_match.group(1).upper() if bank_match else None
 
         # Transfer reference
         transfer_ref = None
-        tref_match = re.search(r"\b(?:no(?:mor)?\s*referensi|ref\s*#?|reference\s*no|no\s*transaksi)\s*[:=]?\s*([A-Za-z0-9\-\/]+)", text, re.I)
-        if tref_match:
-            transfer_ref = tref_match.group(1)
+        tref_match = re.search(
+            r"\b(?:no(?:mor)?\s*referensi|ref\.?\s*(?:number|no|\.?)|reference\s*no|no\s*transaksi)\s*[:=]?\s*([A-Za-z0-9\-\/]{6,30})",
+            text,
+            re.I,
+        )
+        cand_ref = tref_match.group(1).strip() if tref_match else None
+        if cand_ref and any(c.isdigit() for c in cand_ref) and not re.match(r"(?i)^(?:PT|BANK|PTBANK|BCA|MANDIRI|BRI|BNI|DKI|NUMBER|NOMOR|REF)", cand_ref):
+            transfer_ref = cand_ref
+        else:
+            # Fallback: look for 10-16 digit bank transaction reference code
+            ref_num = re.search(r"\b(?<!\d)(\d{10,16})(?!\d)\b", text)
+            if ref_num:
+                transfer_ref = ref_num.group(1)
+
+        if transfer_ref:
             field_evidence["transfer_reference"] = ExtractedField(
                 value=transfer_ref,
                 confidence=Decimal("0.95"),
-                evidence=tref_match.group(0),
+                evidence=transfer_ref,
                 validation_status="VALID",
             )
 
         # Destination account name & number
         dest_account_no = None
         dest_account_name = None
-        acc_no_match = re.search(r"\b(?:rekening\s+tujuan|no\s+rek|nomor\s+rekening)\s*[:=]?\s*(\d{7,16})\b", text, re.I)
+        acc_no_match = re.search(r"\b(?:rekening\s+tujuan|no\s+rek|nomor\s+rekening|benef(?:iciary)?\.?'?s?\s+acct\.?\s*(?:no)?)\s*[:=]?\s*([0-9\-]{7,25})\b", text, re.I)
+        if not acc_no_match:
+            acc_no_match = re.search(r"\b(?:\d{3}-\d{10}|\d{12})\b", text)
+
         if acc_no_match:
-            dest_account_no = acc_no_match.group(1)
+            dest_account_no = acc_no_match.group(1) if acc_no_match.lastindex else acc_no_match.group(0)
             field_evidence["destination_account_number"] = ExtractedField(
                 value=dest_account_no,
                 confidence=Decimal("0.95"),
@@ -405,10 +459,11 @@ class LocalExtractionProvider:
                 validation_status="VALID",
             )
 
-        acc_name_match = re.search(r"\b(?:nama\s+tujuan|nama\s+penerima|penerima)\s*[:=]?\s*([A-Za-z0-9\s.,\-]+)", text, re.I)
+        acc_name_match = re.search(r"\b(?:nama\s+tujuan|nama\s+penerima|penerima|beneficiary)\s*[:=]?\s*([A-Za-z0-9\s.,\-]+)", text, re.I)
         if acc_name_match:
-            acc_lines = acc_name_match.group(1).strip().splitlines()
-            first_line = acc_lines[0].strip() if acc_lines else ""
+            acc_lines = [line.strip() for line in acc_name_match.group(1).splitlines() if line.strip()]
+            clean_acc_lines = [l for l in acc_lines if not re.match(r"(?i)^(?:rekening|no|bank|nama\s+bank|bank\s+penerima)\b", l)]
+            first_line = clean_acc_lines[0] if clean_acc_lines else ""
             if len(first_line) > 2:
                 dest_account_name = first_line
                 field_evidence["destination_account_name"] = ExtractedField(

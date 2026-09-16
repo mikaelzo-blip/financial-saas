@@ -467,3 +467,56 @@ async def test_local_provider_handles_empty_or_whitespace_counterparty_matches(t
     assert result is not None
     assert result.document_type is not None
 
+
+@pytest.mark.asyncio
+async def test_bank_transfer_slip_date_and_amount_disclaimer_resilience(tmp_path: Path):
+    """Verify bank transfer and foreign exchange slips extract correct dates and ignore disclaimers."""
+    from datetime import date
+    from src.services.documents.normalization import parse_candidate_date, parse_candidate_money
+    from src.services.documents.table_extractor import extract_line_items_from_text
+
+    # 1. Normalization tests for Indonesian bank slip date variations & typos
+    d1 = parse_candidate_date("Tanggal 13 Austus 2026")
+    assert d1.validation_status == "VALID"
+    assert d1.value == date(2026, 8, 13)
+
+    d2 = parse_candidate_date("TGL:27 AUG 2026")
+    assert d2.validation_status == "VALID"
+    assert d2.value == date(2026, 8, 27)
+
+    d3 = parse_candidate_date("Trade Date: 13-Aug-26")
+    assert d3.validation_status == "VALID"
+    assert d3.value == date(2026, 8, 13)
+
+    # 2. Regulatory boilerplate rejection in parse_candidate_money
+    m_disclaimer = parse_candidate_money("diatas Rp. 100 juta")
+    assert m_disclaimer.validation_status == "INVALID"
+    assert m_disclaimer.value is None
+
+    # 3. Table extractor ignores date line items
+    raw_text = "Tanggal 13 Austus 2026\nSemen Gresik 20 sak Rp 70.000 Rp 1.400.000"
+    items = extract_line_items_from_text(raw_text)
+    assert len(items) == 1
+    assert items[0].description == "Semen Gresik"
+
+    # 4. Local provider extraction ignores boilerplate and extracts real transaction data
+    slip_path = tmp_path / "bank_dki_slip.png"
+    img = Image.new("RGB", (700, 400), color="white")
+    draw = ImageDraw.Draw(img)
+    draw.text((10, 10), "Aplikasi Kiriman Uang dan Pemindahbukuan Valas", fill="black")
+    draw.text((10, 30), "PT BANK DKI", fill="black")
+    draw.text((10, 50), "Ref. Number: 20708003319", fill="black")
+    draw.text((10, 70), "Tanggal 13 Austus 2026", fill="black")
+    draw.text((10, 90), "Untuk transaksi tunai diatas Rp.100 juta ekuivalen", fill="black")
+    draw.text((10, 110), "Jumlah Rupiah / Amount in IDR", fill="black")
+    draw.text((10, 130), "48.110.249,26", fill="black")
+    img.save(slip_path)
+
+    provider = LocalExtractionProvider()
+    result = await provider.extract(slip_path, "image/png")
+    assert result.document_type == DocumentType.TRANSFER_PROOF
+    assert result.data.document_number == "20708003319"
+    assert result.data.transaction_date == date(2026, 8, 13)
+    assert result.data.total_amount == Decimal("48110249.26")
+
+

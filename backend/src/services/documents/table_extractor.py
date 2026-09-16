@@ -26,6 +26,7 @@ _IGNORED_DESCRIPTIONS = {
     "ppn", "vat", "pajak", "dpp", "diskon", "discount", "uang muka", "dp",
     "terbilang", "catatan", "note", "keterangan", "syarat", "pembayaran",
     "tanda terima", "hormat kami", "penerima", "bank", "bca", "mandiri",
+    "tanggal", "tgl", "date", "trade date", "waktu", "hari",
 }
 
 
@@ -33,7 +34,7 @@ def is_header_or_summary_line(desc: str) -> bool:
     clean = desc.strip().lower()
     if clean in _IGNORED_DESCRIPTIONS:
         return True
-    if any(clean.startswith(prefix) for prefix in ("subtotal", "total", "grand total", "jumlah", "ppn", "terbilang")):
+    if any(clean.startswith(prefix) for prefix in ("subtotal", "total", "grand total", "jumlah", "ppn", "terbilang", "tanggal", "tgl", "date")):
         return True
     return False
 
@@ -44,9 +45,9 @@ def parse_line_item_text(line: str) -> Optional[LineItem]:
     if not clean or len(clean) < 5:
         return None
 
-    # Skip lines that are clearly headers or summary totals
+    # Skip lines that are clearly headers, summary totals, or date lines
     first_token = clean.split()[0].lower()
-    if first_token in ("subtotal", "total", "jumlah", "grand", "ppn", "vat", "terbilang", "no.", "no"):
+    if first_token in ("subtotal", "total", "jumlah", "grand", "ppn", "vat", "terbilang", "no.", "no", "tanggal", "tgl", "date", "trade"):
         return None
 
     # Pattern 1: Description   Qty   Unit   UnitPrice   [Tax]   LineTotal

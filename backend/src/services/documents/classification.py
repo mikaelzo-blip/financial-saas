@@ -23,7 +23,7 @@ class ClassificationResult:
 
 # Header regex rules checked preferentially in the first 25 lines of text
 _HEADER_RULES: List[Tuple[DocumentType, str, int, str]] = [
-    (DocumentType.TRANSFER_PROOF, r"\b(?:bukti\s+transfer|bukti\s+transaksi|transfer\s+berhasil|transfer\s+sukses|m-transfer|m-banking|internet\s+banking|transaksi\s+berhasil)\b", 70, "header: transfer-proof"),
+    (DocumentType.TRANSFER_PROOF, r"\b(?:bukti\s+transfer|bukti\s+transaksi|transfer\s+berhasil|transfer\s+sukses|m-transfer|m-banking|internet\s+banking|transaksi\s+berhasil|kiriman\s+uang|pemindahbukuan|foreign\s+transfer|overbooking\s+application|foreign\s+exchange\s+transaction|deal\s+confirmation|deal\s+rate|proceeds)\b", 70, "header: transfer-proof"),
     (DocumentType.BANK_STATEMENT, r"\b(?:rekening\s+koran|bank\s+statement|mutasi\s+rekening|account\s+statement)\b", 70, "header: bank-statement"),
     (DocumentType.TAX_INVOICE, r"\b(?:faktur\s+pajak|e-faktur)\b", 70, "header: tax-invoice"),
     (DocumentType.CUSTOMER_INVOICE, r"\b(?:customer\s+invoice|invoice\s+pelanggan|faktur\s+penjualan|tagihan\s+proyek|progress\s+billing)\b", 65, "header: customer-invoice"),

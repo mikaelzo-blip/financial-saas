@@ -255,3 +255,22 @@ async def test_project_rest_api_endpoints(client: AsyncClient, db_session: Async
     assert not_found_resp.status_code == 404
     err = not_found_resp.json()
     assert err["error"]["code"] == "NOT_FOUND"
+
+    # 5. PATCH /projects/{id}/status with project_status field compatibility
+    patch_status_resp = await client.patch(
+        f"/api/v1/projects/{project_id}/status",
+        headers={"X-Organization-ID": str(org.id)},
+        json={"project_status": "ACTIVE"}
+    )
+    assert patch_status_resp.status_code == 200
+    assert patch_status_resp.json()["project_status"] == "ACTIVE"
+
+    # 6. PATCH /projects/{id}/variation-order
+    patch_vo_resp = await client.patch(
+        f"/api/v1/projects/{project_id}/variation-order",
+        headers={"X-Organization-ID": str(org.id)},
+        json={"variation_order_value": "50000000.00"}
+    )
+    assert patch_vo_resp.status_code == 200
+    assert Decimal(patch_vo_resp.json()["variation_order_value"]) == Decimal("50000000.00")
+    assert Decimal(patch_vo_resp.json()["revised_contract_value"]) == Decimal("800000000.00")

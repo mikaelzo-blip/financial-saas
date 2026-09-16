@@ -4,6 +4,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './api/queryClient';
 import { AuthProvider } from './store/AuthContext';
 import { ToastProvider } from './components/feedback/Toast';
+import { ErrorBoundary } from './components/feedback/ErrorBoundary';
 import { ProtectedRoute } from './router/ProtectedRoute';
 import { AppLayout } from './components/layout/AppLayout';
 import { LoginPage } from './pages/auth/LoginPage';
@@ -44,7 +45,8 @@ export const App: React.FC = () => {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <ToastProvider>
-          <BrowserRouter>
+          <ErrorBoundary>
+            <BrowserRouter>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
 
@@ -109,7 +111,8 @@ export const App: React.FC = () => {
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </BrowserRouter>
-        </ToastProvider>
+        </ErrorBoundary>
+      </ToastProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

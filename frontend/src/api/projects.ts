@@ -41,7 +41,15 @@ export const projectsApi = {
 
   updateStatus: async (id: string, newStatus: ProjectStatus): Promise<ProjectResponse> => {
     const res = await apiClient.patch<ProjectResponse>(`/projects/${id}/status`, {
+      status: newStatus,
       project_status: newStatus,
+    });
+    return res.data;
+  },
+
+  updateVariationOrder: async (id: string, data: VariationOrderInput): Promise<ProjectResponse> => {
+    const res = await apiClient.patch<ProjectResponse>(`/projects/${id}/variation-order`, {
+      variation_order_value: Number(data.variation_order_value),
     });
     return res.data;
   },

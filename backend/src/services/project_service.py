@@ -1,5 +1,5 @@
 import uuid
-from typing import List, Optional
+from typing import List, Optional, Union
 from datetime import date
 from decimal import Decimal
 from sqlalchemy import select, func, and_
@@ -13,7 +13,13 @@ from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation
 from src.models.payable import VendorBill, VendorPaymentAllocation
 from src.models.transaction import Transaction
 from src.models.enums import ProjectStatus, CostCategory, BillingStatus, CollectionStatus, WorkflowStatus
-from src.schemas.project import ProjectCreate, ProjectUpdate, ProjectStatusUpdate, ProjectBudgetCreate
+from src.schemas.project import (
+    ProjectCreate,
+    ProjectUpdate,
+    ProjectStatusUpdate,
+    ProjectBudgetCreate,
+    ProjectVariationOrderUpdate,
+)
 from src.services.tenant_sequence_allocator import allocate_next
 from src.core.exceptions import EntityNotFoundException, InvariantViolationException
 
@@ -276,21 +282,28 @@ class ProjectService:
             project.actual_end_date = date.today()
 
         await self.session.flush()
+        await self.session.refresh(project)
         return project
 
     async def update_variation_order(
         self,
         organization_id: uuid.UUID,
         project_id: uuid.UUID,
-        variation_order_value: Decimal
+        variation_order: Union[Decimal, ProjectVariationOrderUpdate]
     ) -> Project:
         """
         Updates variation order and enforces revised contract value calculation.
         """
+        val = (
+            variation_order.variation_order_value
+            if isinstance(variation_order, ProjectVariationOrderUpdate)
+            else variation_order
+        )
         project = await self.get_project(organization_id, project_id)
-        project.variation_order_value = variation_order_value
+        project.variation_order_value = val
         project.revised_contract_value = project.calculate_revised_contract_value()
         await self.session.flush()
+        await self.session.refresh(project)
         return project
 
     async def get_project_budgets(

@@ -1,8 +1,8 @@
 import uuid
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import date, datetime
 from decimal import Decimal
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.models.enums import ProjectStatus, BillingStatus, CollectionStatus, CostCategory
 
@@ -43,8 +43,20 @@ class ProjectUpdate(BaseModel):
 
 
 class ProjectStatusUpdate(BaseModel):
-    status: ProjectStatus
+    status: Optional[ProjectStatus] = None
+    project_status: Optional[ProjectStatus] = None
     actual_end_date: Optional[date] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reconcile_status(cls, values: Any) -> Any:
+        if isinstance(values, dict):
+            status = values.get("status") or values.get("project_status")
+            if not status:
+                raise ValueError("status or project_status is required")
+            values["status"] = status
+            values["project_status"] = status
+        return values
 
 
 class ProjectVariationOrderUpdate(BaseModel):

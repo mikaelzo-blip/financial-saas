@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Calendar, FileText, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Calendar, FileText, CheckCircle2, PauseCircle, PlayCircle, Lock, Edit3 } from 'lucide-react';
 import { projectsApi } from '../../api/projects';
 import { ProjectStatus } from '../../types/api';
 import { formatIDR, formatDate } from '../../utils/formatters';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { Input } from '../../components/ui/Input';
+import { Modal } from '../../components/ui/Modal';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { SkeletonLoader } from '../../components/feedback/SkeletonLoader';
 import { useToast } from '../../components/feedback/Toast';
+import { parseApiError } from '../../api/errorHandler';
 import { ProjectProfitabilityTab } from './components/ProjectProfitabilityTab';
 
 export const ProjectDetailPage: React.FC = () => {
@@ -18,6 +21,8 @@ export const ProjectDetailPage: React.FC = () => {
   const queryClient = useQueryClient();
   const { success, error } = useToast();
   const [activeTab, setActiveTab] = useState<'overview' | 'profitability'>('profitability');
+  const [isVoModalOpen, setIsVoModalOpen] = useState(false);
+  const [voInputValue, setVoInputValue] = useState('');
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', id],
@@ -30,12 +35,45 @@ export const ProjectDetailPage: React.FC = () => {
     onSuccess: (updated) => {
       queryClient.setQueryData(['project', id], updated);
       queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['project-profitability', id] });
       success(`Status proyek berhasil diubah ke ${updated.project_status}.`);
     },
-    onError: (err: any) => {
-      error(err.response?.data?.detail || 'Gagal mengubah status proyek.');
+    onError: (err: unknown) => {
+      error(`Gagal mengubah status proyek: ${parseApiError(err).message}`);
     },
   });
+
+  const voMutation = useMutation({
+    mutationFn: (val: number) =>
+      projectsApi.updateVariationOrder(id!, { variation_order_value: val }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['project', id], updated);
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['project-profitability', id] });
+      success('Nilai Addendum / Variation Order berhasil diperbarui.');
+      setIsVoModalOpen(false);
+    },
+    onError: (err: unknown) => {
+      error(`Gagal memperbarui Variation Order: ${parseApiError(err).message}`);
+    },
+  });
+
+  const handleOpenVoModal = () => {
+    if (project) {
+      setVoInputValue(String(project.variation_order_value || '0'));
+      setIsVoModalOpen(true);
+    }
+  };
+
+  const handleSaveVo = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = Number(voInputValue);
+    if (isNaN(val) || val < 0) {
+      error('Nilai Variation Order harus berupa angka positif.');
+      return;
+    }
+    voMutation.mutate(val);
+  };
 
   if (isLoading) {
     return (
@@ -98,13 +136,47 @@ export const ProjectDetailPage: React.FC = () => {
             </Button>
           )}
           {project.project_status === 'ACTIVE' && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                leftIcon={<PauseCircle className="h-4 w-4" />}
+                onClick={() => statusMutation.mutate('ON_HOLD')}
+                isLoading={statusMutation.isPending}
+              >
+                Tunda Proyek
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                leftIcon={<CheckCircle2 className="h-4 w-4" />}
+                onClick={() => statusMutation.mutate('COMPLETED')}
+                isLoading={statusMutation.isPending}
+              >
+                Tandai Selesai
+              </Button>
+            </>
+          )}
+          {project.project_status === 'ON_HOLD' && (
             <Button
               size="sm"
-              variant="secondary"
-              onClick={() => statusMutation.mutate('COMPLETED')}
+              variant="success"
+              leftIcon={<PlayCircle className="h-4 w-4" />}
+              onClick={() => statusMutation.mutate('ACTIVE')}
               isLoading={statusMutation.isPending}
             >
-              Tandai Selesai
+              Lanjutkan Proyek (Aktifkan)
+            </Button>
+          )}
+          {project.project_status === 'COMPLETED' && (
+            <Button
+              size="sm"
+              variant="primary"
+              leftIcon={<Lock className="h-4 w-4" />}
+              onClick={() => statusMutation.mutate('CLOSED')}
+              isLoading={statusMutation.isPending}
+            >
+              Tutup Finansial Proyek
             </Button>
           )}
         </div>
@@ -139,7 +211,19 @@ export const ProjectDetailPage: React.FC = () => {
         <ProjectProfitabilityTab projectId={project.id} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card title="Rincian Nilai Kontrak">
+          <Card
+            title="Rincian Nilai Kontrak"
+            action={
+              <Button
+                size="sm"
+                variant="outline"
+                leftIcon={<Edit3 className="h-3 w-3" />}
+                onClick={handleOpenVoModal}
+              >
+                Update VO / Addendum
+              </Button>
+            }
+          >
             <dl className="divide-y divide-slate-100 text-xs">
               <div className="flex justify-between py-2.5">
                 <dt className="text-slate-500">Nilai Kontrak Awal</dt>
@@ -182,10 +266,56 @@ export const ProjectDetailPage: React.FC = () => {
                 </dt>
                 <dd className="font-medium text-slate-900">{formatDate(project.target_end_date)}</dd>
               </div>
+              {project.actual_end_date && (
+                <div className="flex justify-between py-2.5">
+                  <dt className="text-slate-500 flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5" /> Selesai Aktual
+                  </dt>
+                  <dd className="font-medium text-slate-900">{formatDate(project.actual_end_date)}</dd>
+                </div>
+              )}
             </dl>
           </Card>
         </div>
       )}
+
+      {/* Variation Order Modal */}
+      <Modal
+        isOpen={isVoModalOpen}
+        onClose={() => setIsVoModalOpen(false)}
+        title="Update Addendum / Variation Order (VO)"
+        description="Masukkan akumulasi nilai penambahan/pengurangan kontrak kerja yang telah disetujui."
+      >
+        <form onSubmit={handleSaveVo} className="space-y-4">
+          <Input
+            label="Total Nilai VO Disetujui (Rp)"
+            type="number"
+            value={voInputValue}
+            onChange={(e) => setVoInputValue(e.target.value)}
+            placeholder="0"
+            helperText="Nilai kontrak revisi akan otomatis dihitung: Nilai Awal + VO"
+            required
+          />
+          <div className="flex justify-end gap-2 pt-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsVoModalOpen(false)}
+            >
+              Batal
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              isLoading={voMutation.isPending}
+            >
+              Simpan VO
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

@@ -12,6 +12,7 @@ from src.schemas.project import (
     ProjectCreate,
     ProjectUpdate,
     ProjectStatusUpdate,
+    ProjectVariationOrderUpdate,
     ProjectResponse,
     ProjectBudgetCreate,
     ProjectBudgetResponse,
@@ -86,9 +87,29 @@ async def update_project_status(
     db: AsyncSession = Depends(get_db)
 ):
     """Transitions a project lifecycle status."""
-    service = ProjectService(db)
-    project = await service.update_project_status(org_id, project_id, data)
-    return project
+    async def update_status(session: AsyncSession):
+        return await ProjectService(session).update_project_status(org_id, project_id, data)
+
+    return await run_in_clean_transaction(db, update_status)
+
+
+@router.patch(
+    "/{project_id}/variation-order",
+    response_model=ProjectResponse,
+    summary="Update Project Variation Order"
+)
+async def update_project_variation_order(
+    project_id: uuid.UUID,
+    data: ProjectVariationOrderUpdate,
+    org_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+    db: AsyncSession = Depends(get_db)
+):
+    """Applies an approved Variation Order (addendum) to the project contract."""
+    async def update_vo(session: AsyncSession):
+        return await ProjectService(session).update_variation_order(org_id, project_id, data)
+
+    return await run_in_clean_transaction(db, update_vo)
 
 
 @router.get(

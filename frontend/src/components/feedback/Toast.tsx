@@ -20,6 +20,28 @@ interface ToastContextValue {
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
+function formatToastMessage(message: unknown): string {
+  if (typeof message === 'string') return message;
+  if (!message) return '';
+  if (Array.isArray(message)) {
+    return message
+      .map((item) => {
+        if (typeof item === 'object' && item !== null) {
+          const loc = (item as any).loc ? `[${(item as any).loc.join('.')}] ` : '';
+          const msg = (item as any).msg || (item as any).message || JSON.stringify(item);
+          return `${loc}${msg}`;
+        }
+        return String(item);
+      })
+      .join('; ');
+  }
+  if (typeof message === 'object') {
+    const obj = message as Record<string, any>;
+    return obj.message || obj.detail || obj.msg || JSON.stringify(message);
+  }
+  return String(message);
+}
+
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -28,9 +50,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const showToast = useCallback(
-    (message: string, type: ToastType = 'info', duration: number = 4000) => {
+    (message: string | unknown, type: ToastType = 'info', duration: number = 4000) => {
       const id = Math.random().toString(36).substring(2, 9);
-      const newToast: Toast = { id, type, message, duration };
+      const safeMessage = formatToastMessage(message);
+      const newToast: Toast = { id, type, message: safeMessage, duration };
       setToasts((prev) => [...prev, newToast]);
 
       if (duration > 0) {
@@ -42,10 +65,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     [removeToast]
   );
 
-  const success = useCallback((msg: string) => showToast(msg, 'success'), [showToast]);
-  const error = useCallback((msg: string) => showToast(msg, 'error', 6000), [showToast]);
-  const info = useCallback((msg: string) => showToast(msg, 'info'), [showToast]);
-  const warning = useCallback((msg: string) => showToast(msg, 'warning', 5000), [showToast]);
+  const success = useCallback((msg: string | unknown) => showToast(msg, 'success'), [showToast]);
+  const error = useCallback((msg: string | unknown) => showToast(msg, 'error', 6000), [showToast]);
+  const info = useCallback((msg: string | unknown) => showToast(msg, 'info'), [showToast]);
+  const warning = useCallback((msg: string | unknown) => showToast(msg, 'warning', 5000), [showToast]);
 
   return (
     <ToastContext.Provider value={{ showToast, success, error, info, warning }}>

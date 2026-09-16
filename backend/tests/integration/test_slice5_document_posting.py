@@ -693,6 +693,10 @@ async def test_ap_settlement_pay_vendor_bill_no_duplicate_expense(db_session, po
         "status": CandidateStatus.READY_TO_POST.value,
         "description": "Pelunasan tagihan semen",
     }
+    doc.extracted_data = {
+        "total_amount": "3000000.00", "currency_code": "IDR",
+        "transfer_details": {"execution_status": "EXECUTED", "execution_evidence": "Transfer berhasil"},
+    }
     doc.review_flags = []
     doc.processing_status = DocumentProcessingStatus.READY_TO_POST
     await db_session.flush()
@@ -801,6 +805,10 @@ async def test_ar_settlement_customer_payment_no_duplicate_revenue(db_session, p
         "status": CandidateStatus.READY_TO_POST.value,
         "description": "Pembayaran termin klien",
     }
+    doc.extracted_data = {
+        "total_amount": "5000000.00", "currency_code": "IDR",
+        "transfer_details": {"execution_status": "EXECUTED", "execution_evidence": "Transfer berhasil"},
+    }
     doc.review_flags = []
     doc.processing_status = DocumentProcessingStatus.READY_TO_POST
     await db_session.flush()
@@ -881,6 +889,10 @@ async def test_posting_failure_does_not_falsely_mark_document_posted(db_session,
         DocumentType.TRANSFER_PROOF,
         created_by=manager.id,
     )
+    doc.extracted_data = {
+        "total_amount": "1000000.00", "currency_code": "IDR",
+        "transfer_details": {"execution_status": "EXECUTED", "execution_evidence": "Transfer berhasil"},
+    }
     fake_bill_id = uuid.uuid4()
     doc.candidate_transaction = {
         "id": str(doc.id),
@@ -1187,6 +1199,10 @@ async def test_approve_candidate_does_not_enqueue_auto_post_for_manual_only_type
         "transaction_date": "2026-09-16",
         "status": CandidateStatus.READY_FOR_APPROVAL.value,
         "description": "Manual-only vendor bill payment",
+    }
+    doc.extracted_data = {
+        "total_amount": "3000000.00", "currency_code": "IDR",
+        "transfer_details": {"execution_status": "EXECUTED", "execution_evidence": "Transfer berhasil"},
     }
     doc.review_flags = []
     doc.processing_status = DocumentProcessingStatus.READY_FOR_APPROVAL

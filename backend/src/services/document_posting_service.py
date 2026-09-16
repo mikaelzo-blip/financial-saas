@@ -22,6 +22,7 @@ from src.models.enums import (
     CandidateStatus,
     CostCategory,
     DocumentProcessingStatus,
+    DocumentType,
     ExpenseCategory,
     ProjectStatus,
     TransactionType,
@@ -32,7 +33,8 @@ from src.models.payable import VendorBill, VendorPaymentAllocation
 from src.models.project import Project
 from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation
 from src.models.transaction import Transaction
-from src.schemas.document import TransactionCandidate
+from src.schemas.document import TransactionCandidate, StructuredExtraction
+from src.services.documents.transfer import transfer_review_flags
 from src.schemas.transaction import TransactionCreate
 from src.services.accounting_engine import AccountingEngine
 from src.services.audit_service import AuditService
@@ -207,6 +209,18 @@ class DocumentPostingService:
                 details={"status": document.processing_status.value, "failure_reason": "NOT_READY"},
             )
 
+        if document.document_type == DocumentType.TRANSFER_PROOF:
+            try:
+                transfer_flags = transfer_review_flags(StructuredExtraction.model_validate(document.extracted_data))
+            except ValueError as error:
+                raise InvariantViolationException(
+                    "Invalid transfer evidence.", details={"failure_reason": "UNRESOLVED_REVIEW"},
+                ) from error
+            if transfer_flags:
+                raise InvariantViolationException(
+                    f"Transfer requires review: {', '.join(transfer_flags)}",
+                    details={"failure_reason": "UNRESOLVED_REVIEW"},
+                )
         if document.review_flags:
             raise InvariantViolationException(
                 f"Document has unresolved review requirements: {', '.join(document.review_flags)}",

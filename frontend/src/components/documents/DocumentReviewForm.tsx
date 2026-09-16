@@ -3,6 +3,8 @@ import { Button } from '../ui/Button';
 import { Select } from '../ui/Select';
 import { CounterpartyResponse, DocumentResponse, MatchCandidateResponse, ProjectResponse } from '../../types/api';
 import { formatIDR, formatDate } from '../../utils/formatters';
+import { TransferEvidence } from './TransferEvidence';
+import { sameDecimalValue, transferExecutionLabels, type TransferDetails } from '../../utils/transferReview';
 import { ShieldCheck, FileText, CheckCircle, AlertTriangle, UserCheck, Layers, History } from 'lucide-react';
 
 interface Props {
@@ -16,6 +18,9 @@ interface Props {
   approvalLookupLoading?: boolean;
   approvalLookupError?: string;
   actionError?: string;
+  isSaving?: boolean;
+  isApproving?: boolean;
+  isRejecting?: boolean;
   onSave: (changes: Record<string, unknown>, reason: string) => Promise<void>;
   onApprove: () => Promise<void>;
   onReject: (reason: string) => Promise<void>;
@@ -38,6 +43,8 @@ const statusLabels: Record<DocumentResponse['processing_status'], string> = {
 };
 
 const reviewFlagLabels: Record<string, string> = {
+  TRANSFER_EXECUTION_UNCONFIRMED: 'Pelaksanaan transfer belum terbukti',
+  TRANSFER_AMOUNT_REVIEW: 'Mata uang, pokok, biaya atau debit perlu diperiksa',
   PROJECT_UNKNOWN: 'Proyek belum dikenali',
   VENDOR_UNKNOWN: 'Vendor belum dikenali',
   CUSTOMER_UNKNOWN: 'Pelanggan belum dikenali',
@@ -68,6 +75,9 @@ export const DocumentReviewForm: React.FC<Props> = ({
   approvalLookupLoading = false,
   approvalLookupError,
   actionError,
+  isSaving = false,
+  isApproving = false,
+  isRejecting = false,
   onSave,
   onApprove,
   onReject,
@@ -78,11 +88,22 @@ export const DocumentReviewForm: React.FC<Props> = ({
   const matchingResults = (document.matching_results || {}) as Record<string, unknown>;
   const matchCandidates = (matchingResults.match_candidates || []) as MatchCandidateResponse[];
   const isAmbiguous = Boolean(matchingResults.ambiguous);
+  const isTransfer = document.document_type === 'TRANSFER_PROOF';
+  const transferDetails = (extracted.transfer_details || {}) as TransferDetails;
+  const [executionStatus, setExecutionStatus] = useState(transferDetails.execution_status || 'UNKNOWN');
+  const [executionEvidence, setExecutionEvidence] = useState(transferDetails.execution_evidence || '');
+  const transferBlocked = isTransfer && (
+    transferDetails.execution_status !== 'EXECUTED' || !transferDetails.execution_evidence?.trim() ||
+    extracted.currency_code !== 'IDR' || extracted.total_amount == null ||
+    (transferDetails.fee && !sameDecimalValue(transferDetails.fee.amount, '0')) ||
+    (transferDetails.debit && (transferDetails.debit.currency_code !== extracted.currency_code ||
+      !sameDecimalValue(transferDetails.debit.amount, extracted.total_amount)))
+  );
 
   const [projectId, setProjectId] = useState(String(candidate.project_id ?? ''));
   const [counterpartyId, setCounterpartyId] = useState(String(candidate.counterparty_id ?? ''));
   const [invoiceNumber, setInvoiceNumber] = useState(
-    String(extracted.invoice_number ?? extracted.document_number ?? candidate.external_reference ?? ''),
+    String(isTransfer ? extracted.transfer_reference ?? extracted.document_number ?? '' : extracted.invoice_number ?? extracted.document_number ?? candidate.external_reference ?? ''),
   );
   const [totalAmount, setTotalAmount] = useState(
     String(candidate.amount ?? extracted.total_amount ?? ''),
@@ -142,10 +163,12 @@ export const DocumentReviewForm: React.FC<Props> = ({
       const changes: Record<string, unknown> = {
         project_id: projectId || null,
         counterparty_id: counterpartyId || null,
-        invoice_number: invoiceNumber || null,
-        amount: totalAmount || null,
+        ...(isTransfer ? {
+          transfer_reference: invoiceNumber || null,
+          execution_status: executionStatus,
+          execution_evidence: executionEvidence || null,
+        } : { invoice_number: invoiceNumber || null, amount: totalAmount || null, due_date: dueDate || null }),
         transaction_date: transactionDate || null,
-        due_date: dueDate || null,
       };
       if (selectedCandidateId) {
         changes.selected_candidate_id = selectedCandidateId;
@@ -163,10 +186,12 @@ export const DocumentReviewForm: React.FC<Props> = ({
       const changes: Record<string, unknown> = {
         project_id: projectId || null,
         counterparty_id: counterpartyId || null,
-        invoice_number: invoiceNumber || null,
-        amount: totalAmount || null,
+        ...(isTransfer ? {
+          transfer_reference: invoiceNumber || null,
+          execution_status: executionStatus,
+          execution_evidence: executionEvidence || null,
+        } : { invoice_number: invoiceNumber || null, amount: totalAmount || null, due_date: dueDate || null }),
         transaction_date: transactionDate || null,
-        due_date: dueDate || null,
         selected_candidate_id: cand.entity_id,
       };
       await onSave(changes, reason || 'Memilih kandidat pencocokan');
@@ -191,7 +216,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
       : 'Belum disetujui';
   const postingStatus = candidate.converted_transaction_id ? 'Terposting' : 'Belum diposting';
 
-  const lineItems = Array.isArray(extracted.line_items) ? (extracted.line_items as Record<string, unknown>[]) : [];
+  const lineItems = !isTransfer && Array.isArray(extracted.line_items) ? (extracted.line_items as Record<string, unknown>[]) : [];
   const corrections = document.corrections || [];
 
   return (
@@ -236,6 +261,30 @@ export const DocumentReviewForm: React.FC<Props> = ({
           <strong className="text-slate-900">{postingStatus}</strong>
         </div>
       </div>
+
+      {document.processing_status === 'REJECTED' && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800 space-y-1" role="alert">
+          <strong className="font-semibold block flex items-center gap-1.5 text-sm text-rose-900">
+            <AlertTriangle className="h-4 w-4 text-rose-600" />
+            Dokumen Ini Telah Ditolak
+          </strong>
+          <p>
+            Kandidat transaksi ini telah ditolak oleh peninjau dan tidak akan diposting ke pembukuan keuangan.
+          </p>
+        </div>
+      )}
+
+      {(document.processing_status === 'POSTED' || document.processing_status === 'PROCESSED') && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-xs text-emerald-800 space-y-1" role="status">
+          <strong className="font-semibold block flex items-center gap-1.5 text-sm text-emerald-900">
+            <CheckCircle className="h-4 w-4 text-emerald-600" />
+            Dokumen Sudah Diproses
+          </strong>
+          <p>
+            Dokumen ini sudah disetujui dan transaksi akuntansi terkait telah berhasil dibuat.
+          </p>
+        </div>
+      )}
 
       {/* Ambiguous Match Warning Alert */}
       {isAmbiguous && (
@@ -296,7 +345,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
       </div>
 
       {/* Extracted Values Overview */}
-      <div className="rounded-lg border border-slate-200 overflow-hidden text-xs">
+      {isTransfer ? <TransferEvidence extracted={extracted} /> : <div className="rounded-lg border border-slate-200 overflow-hidden text-xs">
         <div className="bg-slate-100 px-3 py-1.5 font-semibold text-slate-700 flex justify-between">
           <span>Data yang dibaca dari dokumen</span>
           <span>Hasil pembacaan</span>
@@ -349,8 +398,9 @@ export const DocumentReviewForm: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Line Items Table (Slice 2 extracted items) */}
-      {lineItems.length > 0 && (
+      }
+      {/* Line Items Table (Slice 2 extracted items, only for invoices/receipts) */}
+      {!isTransfer && lineItems.length > 0 && (
         <div className="rounded-lg border border-slate-200 overflow-hidden text-xs">
           <div className="bg-slate-100 px-3 py-1.5 font-semibold text-slate-700 flex items-center gap-1.5">
             <Layers className="h-3.5 w-3.5 text-slate-600" />
@@ -391,7 +441,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
           <div className="bg-slate-100 px-3 py-1.5 font-semibold text-slate-700 flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <UserCheck className="h-3.5 w-3.5 text-slate-600" />
-              Kandidat Pencocokan
+              {isTransfer ? 'Konteks pencocokan (dokumen terkait)' : 'Kandidat Pencocokan'}
             </span>
             <span className="text-[11px] text-slate-500 font-normal">
               {matchCandidates.length} kandidat ditemukan
@@ -506,20 +556,20 @@ export const DocumentReviewForm: React.FC<Props> = ({
       <div className="space-y-3">
         <div>
           <label htmlFor="invoice-number" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-            Nomor Faktur / Dokumen
+            {isTransfer ? 'Referensi Transfer' : 'Nomor Faktur / Dokumen'}
           </label>
           <input
             id="invoice-number"
             type="text"
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            placeholder="Contoh: INV-2026-001"
+            placeholder={isTransfer ? 'Referensi bank pada sumber' : 'Contoh: INV-2026-001'}
             value={invoiceNumber}
             onChange={(e) => setInvoiceNumber(e.target.value)}
           />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
+          {!isTransfer && <div>
             <label htmlFor="total-amount" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
               Total Nominal
             </label>
@@ -531,10 +581,10 @@ export const DocumentReviewForm: React.FC<Props> = ({
               value={totalAmount}
               onChange={(e) => setTotalAmount(e.target.value)}
             />
-          </div>
+          </div>}
           <div>
             <label htmlFor="transaction-date" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-              Tanggal Transaksi
+              {isTransfer ? 'Tanggal Transfer / Aplikasi' : 'Tanggal Transaksi'}
             </label>
             <input
               id="transaction-date"
@@ -546,7 +596,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
           </div>
         </div>
 
-        <div>
+        {!isTransfer && <div>
           <label htmlFor="due-date" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
             Tanggal Jatuh Tempo (Opsional)
           </label>
@@ -557,7 +607,17 @@ export const DocumentReviewForm: React.FC<Props> = ({
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
           />
-        </div>
+        </div>}
+        {isTransfer && <div className="space-y-2">
+          <label htmlFor="execution-status" className="block text-sm font-semibold">Verifikasi pelaksanaan transfer</label>
+          <Select id="execution-status" value={executionStatus} onChange={e => setExecutionStatus(e.target.value)}>
+            {Object.entries(transferExecutionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </Select>
+          <label htmlFor="execution-evidence" className="block text-sm">Bukti pelaksanaan pada sumber</label>
+          <input id="execution-evidence" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            value={executionEvidence} onChange={e => setExecutionEvidence(e.target.value)} />
+          <p className="text-xs text-slate-700">Konfirmasi hanya jika sumber membuktikan transfer terlaksana. Simpan koreksi sebelum menyetujui.</p>
+        </div>}
 
         <div className="space-y-2">
           <label htmlFor="project-search" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
@@ -668,24 +728,48 @@ export const DocumentReviewForm: React.FC<Props> = ({
 
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-2">
-        <Button onClick={save} isLoading={busy}>
-          Simpan Koreksi
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={onApprove}
-          disabled={
-            document.review_flags.length > 0 ||
-            isEvidenceOnly ||
-            approvalLookupLoading ||
-            !!approvalLookupError
-          }
-        >
-          Setujui untuk Diposting
-        </Button>
-        <Button variant="danger" onClick={() => onReject(reason)}>
-          Tolak Kandidat
-        </Button>
+        {document.processing_status === 'REJECTED' ? (
+          <div className="rounded-lg bg-slate-100 p-3 text-sm text-slate-700 w-full text-center">
+            Status dokumen ini adalah <strong>Ditolak</strong>. Tidak ada tindakan lebih lanjut yang dapat dilakukan.
+          </div>
+        ) : document.processing_status === 'READY_TO_POST' ? (
+          <p className="text-sm text-slate-700">Sudah disetujui. Menunggu posting melalui proses pencatatan terpisah.</p>
+        ) : document.processing_status === 'POSTED' || document.processing_status === 'PROCESSED' ? (
+          <div className="rounded-lg bg-slate-100 p-3 text-sm text-slate-700 w-full text-center">
+            Dokumen ini sudah <strong>selesai diproses</strong> ke pembukuan.
+          </div>
+        ) : (
+          <>
+            <Button onClick={save} isLoading={busy || isSaving} disabled={isApproving || isRejecting}>
+              Simpan Koreksi
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={onApprove}
+              isLoading={isApproving}
+              disabled={
+                document.review_flags.length > 0 ||
+                !!transferBlocked ||
+                isEvidenceOnly ||
+                approvalLookupLoading ||
+                !!approvalLookupError ||
+                busy ||
+                isSaving ||
+                isRejecting
+              }
+            >
+              Setujui untuk Diposting
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => onReject(reason)}
+              isLoading={isRejecting}
+              disabled={busy || isSaving || isApproving}
+            >
+              Tolak Kandidat
+            </Button>
+          </>
+        )}
       </div>
     </section>
   );

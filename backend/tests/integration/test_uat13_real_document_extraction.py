@@ -214,6 +214,7 @@ async def test_uat13_bank_transfer_proof_end_to_end_flow(client: AsyncClient, db
         issuer_name="PT Klien Utama",
         destination_bank="Mandiri",
         transfer_reference="TRF-987654",
+        transfer_details={"execution_status": "EXECUTED", "execution_evidence": "Transfer berhasil"},
         field_evidence={
             "total_amount": ExtractedField(value="50000000", confidence=Decimal("0.98"), evidence="Rp 50.000.000", validation_status="VALID"),
             "transaction_date": ExtractedField(value="2026-09-02", confidence=Decimal("0.95"), evidence="02/09/2026", validation_status="VALID"),

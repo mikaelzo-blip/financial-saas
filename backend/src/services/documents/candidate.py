@@ -2,6 +2,7 @@ import uuid
 from src.models.enums import (CandidateStatus, CostCategory, DocumentType,
                               ReviewFlag, TransactionType)
 from src.schemas.document import StructuredExtraction, TransactionCandidate
+from src.services.documents.transfer import transfer_review_flags
 
 
 SUPPORTING_DOCUMENT_TYPES = {
@@ -49,9 +50,9 @@ def build_candidate(document_id: uuid.UUID, document_type: DocumentType,
         cost_category=category,
         transaction_date=data.transaction_date,
         amount=data.total_amount,
-        currency_code=data.currency_code or "IDR",
+        currency_code=data.currency_code if document_type == DocumentType.TRANSFER_PROOF else data.currency_code or "IDR",
         description=data.description or f"Candidate from {document_type.value}",
-        external_reference=data.invoice_number or data.transfer_reference or data.document_number,
+        external_reference=(data.transfer_reference or data.document_number) if document_type == DocumentType.TRANSFER_PROOF else data.invoice_number or data.document_number,
         status=status,
     )
 
@@ -59,6 +60,8 @@ def build_candidate(document_id: uuid.UUID, document_type: DocumentType,
 def derive_flags(document_type: DocumentType, data: StructuredExtraction, matches: dict,
                  low_confidence: bool) -> list[str]:
     flags: list[str] = []
+    if document_type == DocumentType.TRANSFER_PROOF:
+        flags.extend(transfer_review_flags(data))
     if low_confidence:
         flags.append(ReviewFlag.OCR_LOW_CONFIDENCE.value)
 

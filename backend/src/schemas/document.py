@@ -44,8 +44,27 @@ class ExtractedField(BaseModel):
     validation_status: str = Field(pattern="^(VALID|AMBIGUOUS|INVALID|MISSING)$")
 
 
+class SourceMoney(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    amount: Decimal = Field(ge=0)
+    currency_code: str = Field(pattern="^[A-Z]{3}$")
+    evidence: str = Field(min_length=1)
+
+
+class TransferDetails(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    foreign: Optional[SourceMoney] = None
+    principal: Optional[SourceMoney] = None
+    fee: Optional[SourceMoney] = None
+    debit: Optional[SourceMoney] = None
+    purpose: Optional[str] = None
+    execution_status: str = Field(default="UNKNOWN", pattern="^(UNKNOWN|REQUESTED|EXECUTED)$")
+    execution_evidence: Optional[str] = None
+
+
 class StructuredExtraction(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    transfer_details: Optional[TransferDetails] = None
     document_number: Optional[str] = None
     invoice_number: Optional[str] = None
     spk_number: Optional[str] = None

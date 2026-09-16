@@ -25,6 +25,7 @@ from src.schemas.document import (DocumentResponse, DocumentCorrectionRequest,
                                   StructuredExtraction, DocumentPostingResponse)
 from src.services.document_posting_service import DocumentPostingService
 from src.services.documents.matching import match_entities
+from src.services.documents.transfer import normalize_transfer_extraction, transfer_review_flags, TRANSFER_REVIEW_FLAGS
 from src.schemas.transaction import TransactionCreate, TransactionResponse
 from src.services.document_service import DocumentService
 from src.services.documents.inbound_adapter import InboundDocumentAdapter, InboundDocumentInput
@@ -197,7 +198,7 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
         "subtotal", "tax", "vat_amount", "description", "external_reference",
         "transfer_reference", "document_number", "invoice_number", "spk_number",
         "bast_number", "due_date", "document_type", "origin_bank", "destination_bank",
-        "destination_account_number"
+        "destination_account_number", "execution_status", "execution_evidence"
     }
     if not data.changes or set(data.changes) - allowed:
         raise HTTPException(status_code=422, detail="Correction contains unsupported fields")
@@ -303,13 +304,32 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
     if "invoice_number" in data.changes and not data.changes.get("external_reference"):
         candidate["external_reference"] = data.changes["invoice_number"]
 
+    if "transfer_reference" in data.changes:
+        extracted["transfer_reference"] = data.changes["transfer_reference"]
+        candidate["external_reference"] = data.changes["transfer_reference"]
+    if document.document_type == DocumentType.TRANSFER_PROOF:
+        details = dict(extracted.get("transfer_details") or {})
+        for field in ("execution_status", "execution_evidence"):
+            if field in data.changes:
+                old[field] = details.get(field)
+                details[field] = data.changes[field]
+        if details:
+            extracted["transfer_details"] = details
+        try:
+            transfer_data = normalize_transfer_extraction(StructuredExtraction.model_validate(extracted))
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail="Invalid transfer evidence") from error
+        extracted = transfer_data.model_dump(mode="json")
+        candidate["amount"] = extracted.get("total_amount")
+        candidate["currency_code"] = extracted.get("currency_code")
     document.extracted_data = extracted
 
     # Material corrections invalidate any prior allocation unless the reviewer
     # explicitly selects a replacement during this same correction.
     material_fields = {
         "invoice_number", "document_number", "spk_number", "counterparty_id",
-        "project_id", "amount", "total_amount", "document_type"
+        "project_id", "amount", "total_amount", "document_type", "transfer_reference",
+        "transaction_date", "date", "external_reference"
     }
     material_correction = any(key in material_fields for key in data.changes)
     selected_candidate = data.changes.get("selected_candidate_id")
@@ -395,6 +415,13 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
         document.review_flags = [
             flag for flag in document.review_flags if flag != ReviewFlag.AMBIGUOUS_MATCH.value
         ]
+    if document.document_type == DocumentType.TRANSFER_PROOF:
+        document.review_flags = [flag for flag in document.review_flags if flag not in TRANSFER_REVIEW_FLAGS]
+        document.review_flags += transfer_review_flags(StructuredExtraction.model_validate(extracted))
+        if document.review_flags:
+            validated.status = CandidateStatus.REVIEW_REQUIRED
+            document.candidate_transaction = validated.model_dump(mode="json")
+            document.processing_status = DocumentProcessingStatus.REVIEW_REQUIRED
     if not document.review_flags and is_candidate_ready_for_approval(validated):
         validated.status = CandidateStatus.READY_FOR_APPROVAL
         document.candidate_transaction = validated.model_dump(mode="json")
@@ -443,6 +470,13 @@ async def approve_document_candidate(
     }:
         raise HTTPException(status_code=409, detail="Document is not awaiting review")
 
+    if document.document_type == DocumentType.TRANSFER_PROOF:
+        try:
+            transfer_flags = transfer_review_flags(StructuredExtraction.model_validate(document.extracted_data))
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail="Invalid transfer evidence") from error
+        if transfer_flags:
+            raise HTTPException(status_code=409, detail=f"Transfer requires review: {', '.join(transfer_flags)}")
     if document.review_flags:
         raise HTTPException(
             status_code=409,

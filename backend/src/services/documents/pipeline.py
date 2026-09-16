@@ -12,6 +12,7 @@ from src.services.documents.candidate import build_candidate, derive_flags
 from src.services.documents.confidence import below_threshold
 from src.services.documents.extraction import ExtractionProvider, get_extraction_provider
 from src.services.documents.matching import match_entities
+from src.services.documents.transfer import normalize_transfer_extraction
 from src.services.document_service import DocumentService
 from src.services.duplicate_service import DuplicateDetectionService
 from src.services.audit_service import AuditService
@@ -41,6 +42,8 @@ class DocumentPipeline:
             effective_type = (document.document_type if result.document_type.value == "UNKNOWN"
                               and document.document_type.value != "UNKNOWN" else result.document_type)
             document.document_type = effective_type
+            if effective_type.value == "TRANSFER_PROOF":
+                data = normalize_transfer_extraction(data)
             document.extracted_data = data.model_dump(mode="json")
             document.confidence_scores = result.confidence.model_dump(mode="json")
             document.raw_extraction = result.raw_payload if hasattr(result, "raw_payload") else {}

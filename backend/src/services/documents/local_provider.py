@@ -26,6 +26,7 @@ from src.services.documents.normalization import parse_candidate_date, parse_can
 from src.services.documents.quality_gate import evaluate_page_text_quality
 from src.services.documents.rasterizer import open_pdf_document, render_pdf_page_to_image
 from src.services.documents.table_extractor import extract_line_items_from_text
+from src.services.documents.transfer import extract_transfer_details
 
 
 def sanitize_raw_text(text: str) -> str:
@@ -527,7 +528,7 @@ class LocalExtractionProvider:
                 )
 
         # 8. Line Items Table Extraction
-        line_items = extract_line_items_from_text(
+        line_items = [] if kind == DocumentType.TRANSFER_PROOF else extract_line_items_from_text(
             raw_text=text,
             ocr_boxes=all_boxes if all_boxes else None,
             ocr_txts=all_ocr_txts if all_ocr_txts else None,
@@ -536,20 +537,35 @@ class LocalExtractionProvider:
         # 9. Project Reference
         project_ref = spk_number or (re.search(r"\bPRJ[-/][A-Z0-9-/]+", text, re.I).group(0) if re.search(r"\bPRJ[-/][A-Z0-9-/]+", text, re.I) else None)
 
-        # 10. Structured Extraction Schema
+        transfer_details = None
+        currency_code = "IDR" if total_amount is not None else None
+        if kind == DocumentType.TRANSFER_PROOF:
+            transfer_details = extract_transfer_details(text)
+            principal = transfer_details.principal or transfer_details.foreign
+            total_amount = principal.amount if principal else None
+            currency_code = principal.currency_code if principal else None
+            for key in ("total_amount", "due_date", "subtotal", "vat_amount"):
+                field_evidence.pop(key, None)
+            if principal:
+                field_evidence["total_amount"] = ExtractedField(
+                    value=str(principal.amount), confidence=ocr_score,
+                    evidence=principal.evidence, validation_status="VALID",
+                )
+
         data = StructuredExtraction(
-            document_number=invoice_number or spk_number or bast_number or transfer_ref,
+            transfer_details=transfer_details,
+            document_number=transfer_ref if kind == DocumentType.TRANSFER_PROOF else invoice_number or spk_number or bast_number or transfer_ref,
             invoice_number=invoice_number,
             spk_number=spk_number,
             bast_number=bast_number,
             transaction_date=tx_date,
-            due_date=due_date,
+            due_date=None if kind == DocumentType.TRANSFER_PROOF else due_date,
             issuer_name=issuer_name,
             recipient_name=recipient_name,
-            subtotal=subtotal_amount,
-            vat_amount=vat_amount,
+            subtotal=None if transfer_details else subtotal_amount,
+            vat_amount=None if transfer_details else vat_amount,
             total_amount=total_amount,
-            currency_code="IDR" if total_amount is not None else None,
+            currency_code=currency_code,
             origin_bank=bank_name if kind == DocumentType.TRANSFER_PROOF else None,
             destination_bank=bank_name if kind == DocumentType.TRANSFER_PROOF else None,
             destination_account_number=dest_account_no,

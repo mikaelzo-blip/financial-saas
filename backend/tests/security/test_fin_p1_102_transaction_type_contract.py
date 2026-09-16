@@ -815,6 +815,10 @@ async def test_document_candidate_approval_unsupported_type_fails_closed(p1_102_
         doc = Document(
             organization_id=org_id,
             document_code=f"DOC-APPR-UNSUP-{uuid.uuid4().hex[:6]}",
+            extracted_data={
+                "total_amount": "450000.00", "currency_code": "IDR",
+                "transfer_details": {"execution_status": "EXECUTED", "execution_evidence": "Transfer berhasil"},
+            },
             file_name="unsupported_candidate.pdf",
             file_hash=uuid.uuid4().hex,
             file_size_bytes=512,

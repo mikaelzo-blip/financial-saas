@@ -44,6 +44,8 @@ def parse_candidate_money(raw: str | None) -> NormalizedCandidate[Decimal]:
 
     # Strip common Indonesian trailing notation like ",-" or ".-" (e.g. Rp 1.250.000,-)
     clean_raw = re.sub(r"[,.]\s*[-–—]$", "", clean_raw)
+    # Fix OCR decimal separator as space, e.g. "93,414,661 30" -> "93,414,661.30"
+    clean_raw = re.sub(r"(\d+)\s+(\d{2})$", r"\1.\2", clean_raw)
 
     token = re.sub(r"(?i)^(?:.*?(?:rp\.?|idr|eur|usd|sgd))\s*|\s", "", clean_raw)
     # If there's still non-numeric prefix like "PPN:", strip non-digits at the beginning

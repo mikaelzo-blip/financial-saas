@@ -213,27 +213,47 @@ class LocalExtractionProvider:
         text_for_amount = re.sub(r"(?i)[^\n]*walk-in\s+customer[^\n]*", "", text_for_amount)
         text_for_amount = re.sub(r"(?i)[^\n]*transaksi\s+tunai\s+diatas[^\n]*", "", text_for_amount)
 
+        # Step 0: Priority for Proceeds (Forex deal / bank settlement total = Principal + Bank Fees)
+        m_proc = re.search(r"(?i)\bproceeds\b[\s\S]{0,40}?\b((?:IDR|Rp\.?)?\s*[\d.,]{4,25})\b", text_for_amount)
+        if m_proc:
+            cand_proc = parse_candidate_money(m_proc.group(0))
+            if cand_proc.value and cand_proc.value > 100:
+                total_candidate = cand_proc
+                total_amount = cand_proc.value
+                total_match = m_proc
+
+        # Step 0b: Priority for IDR Amount / Jumlah Rupiah when foreign currency is present
+        if total_amount is None or total_amount <= 100:
+            m_idr = re.search(r"(?i)\b(?:idr\s+amount|jumlah\s+rupiah|amount\s+in\s+idr)\b[\s\S]{0,40}?\b((?:IDR|Rp\.?)?\s*[\d.,]{4,25})\b", text_for_amount)
+            if m_idr:
+                cand_idr = parse_candidate_money(m_idr.group(0))
+                if cand_idr.value and cand_idr.value > 100:
+                    total_candidate = cand_idr
+                    total_amount = cand_idr.value
+                    total_match = m_idr
+
         # Step A: Direct regex match on text for explicit total labels
-        total_match = re.search(
-            r"\b(?:proceeds|idr\s+amount|jumlah\s+rupiah|amount\s+in\s+idr|jumlah\s+transfer|total\s+transfer|grand\s+total|total\s+bayar|total\s+tagihan|total\s+pembayaran|total\s+amount|jumlah\s+tagihan|(?<!sub)total|jumlah)\s*[:=]?\s*(?:Rp\.?|IDR|EUR|USD)?\s*[\d.,\-]{4,25}",
-            text_for_amount,
-            re.I,
-        )
-        if total_match:
-            cand = parse_candidate_money(total_match.group(0))
-            if cand.value and cand.value > 100:
-                total_candidate = cand
-                total_amount = cand.value
+        if total_amount is None or total_amount <= 100:
+            total_match = re.search(
+                r"\b(?:proceeds|idr\s+amount|jumlah\s+rupiah|amount\s+in\s+idr|jumlah\s+transfer|total\s+transfer|grand\s+total|total\s+bayar|total\s+tagihan|total\s+pembayaran|total\s+amount|jumlah\s+tagihan|(?<!sub)total|jumlah)\s*[:=]?\s*(?:Rp\.?|IDR|EUR|USD)?\s*[\d.,\-]{4,25}",
+                text_for_amount,
+                re.I,
+            )
+            if total_match:
+                cand = parse_candidate_money(total_match.group(0))
+                if cand.value and cand.value > 100:
+                    total_candidate = cand
+                    total_amount = cand.value
 
         # Step B: Nearby lines below/above transfer/proceeds headers (handles multi-column bank/valas tables)
-        if total_amount is None or total_amount <= 100:
+        if total_amount is None or total_amount < 1_000_000:
             lines_for_amt = [re.sub(r"^[^\w\d]+|[^\w\d]+$", "", l.strip()) for l in text_for_amount.splitlines() if l.strip()]
             for idx, l in enumerate(lines_for_amt):
                 if any(k in l.lower() for k in ["jumlah rupiah", "amount in idr", "proceeds", "total amount", "idr amount", "jumlah transfer", "total transfer"]):
                     start_idx = max(0, idx - 3)
                     end_idx = min(len(lines_for_amt), idx + 8)
                     for next_l in lines_for_amt[start_idx:end_idx]:
-                        for m in re.finditer(r"\b(?:\d{1,3}(?:[.,]\d{3,6})+(?:[.,]\d{2})?|\d{4,}(?:[.,]\d{2})?)\b", next_l):
+                        for m in re.finditer(r"\b(?:\d{1,3}(?:[.,]\d{3,6})+(?:[.,\s]\d{2})?|\d{4,}(?:[.,\s]\d{2})?)\b", next_l):
                             cand = parse_candidate_money(m.group(0))
                             if cand.value and cand.value > 100:
                                 if total_amount is None or cand.value > total_amount:

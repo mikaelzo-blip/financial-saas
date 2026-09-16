@@ -31,27 +31,7 @@ export function resolveBridgeScriptPath() {
   return candidates.find((candidate) => candidate && fs.existsSync(candidate)) || null;
 }
 
-export function patchBridgeScriptContent(source) {
-  let content = source;
-
-  content = replaceRequired(
-    content,
-    `// Build LID → phone reverse map from session files (lid-mapping-{phone}.json)
-function buildLidMap() {
-  const map = {};
-  try {
-    for (const f of readdirSync(SESSION_DIR)) {
-      const m = f.match(/^lid-mapping-(\\d+)\\.json$/);
-      if (!m) continue;
-      const phone = m[1];
-      const lid = JSON.parse(readFileSync(path.join(SESSION_DIR, f), 'utf8'));
-      if (lid) map[String(lid)] = phone;
-    }
-  } catch {}
-  return map;
-}
-let lidToPhone = buildLidMap();`,
-    `// Build LID → phone reverse map from both Hermes mapping file formats.
+const legacyV1Patch = `// Build LID → phone reverse map from both Hermes mapping file formats.
 function buildLidMap() {
   const map = {};
   try {
@@ -87,9 +67,104 @@ function resolveSenderPhone(senderId, senderNumber) {
     return /^\\d+$/.test(raw) ? raw : undefined;
   }
   return undefined;
-}`,
-    'LID resolver',
-  );
+}`;
+
+const canonicalLidResolver = `// Build LID → phone reverse map from both Hermes mapping file formats.
+function buildLidMap() {
+  const map = {};
+  try {
+    for (const f of readdirSync(SESSION_DIR)) {
+      try {
+        const mPhone = f.match(/^lid-mapping-(\\d+)\\.json$/);
+        if (mPhone) {
+          const phone = mPhone[1];
+          const raw = readFileSync(path.join(SESSION_DIR, f), 'utf8').trim();
+          if (raw) {
+            const lid = JSON.parse(raw);
+            if (lid) map[String(lid)] = phone;
+          }
+          continue;
+        }
+        const mReverse = f.match(/^lid-mapping-(\\d+)_reverse\\.json$/);
+        if (mReverse) {
+          const lid = mReverse[1];
+          const raw = readFileSync(path.join(SESSION_DIR, f), 'utf8').trim();
+          if (raw) {
+            const phone = JSON.parse(raw);
+            if (phone) map[String(lid)] = String(phone);
+          }
+        }
+      } catch {}
+    }
+  } catch {}
+  return map;
+}
+let lidToPhone = buildLidMap();
+
+function resolveSenderPhone(senderId, senderNumber) {
+  if (senderId.endsWith('@s.whatsapp.net')) {
+    const raw = senderNumber.replace(/^\\+/, '');
+    return /^\\d+$/.test(raw) ? raw : undefined;
+  }
+  if (senderId.endsWith('@lid')) {
+    let mapped = lidToPhone[senderNumber];
+    if (!mapped) {
+      try {
+        const reverseFile = path.join(SESSION_DIR, \`lid-mapping-\${senderNumber}_reverse.json\`);
+        if (existsSync(reverseFile)) {
+          const raw = readFileSync(reverseFile, 'utf8').trim();
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed) {
+              mapped = String(parsed);
+              lidToPhone[senderNumber] = mapped;
+            }
+          }
+        }
+      } catch {}
+      if (!mapped) {
+        try {
+          lidToPhone = buildLidMap();
+          mapped = lidToPhone[senderNumber];
+        } catch {}
+      }
+    }
+    if (!mapped) return undefined;
+    const raw = String(mapped).replace(/^\\+/, '');
+    return /^\\d+$/.test(raw) ? raw : undefined;
+  }
+  return undefined;
+}`;
+
+export function patchBridgeScriptContent(source) {
+  let content = source;
+
+  if (content.includes(canonicalLidResolver)) {
+    // Already has current canonical LID resolver
+  } else if (content.includes(legacyV1Patch)) {
+    content = content.replace(legacyV1Patch, canonicalLidResolver);
+  } else {
+    content = replaceRequired(
+      content,
+      `// Build LID → phone reverse map from session files (lid-mapping-{phone}.json)
+function buildLidMap() {
+  const map = {};
+  try {
+    for (const f of readdirSync(SESSION_DIR)) {
+      const m = f.match(/^lid-mapping-(\\d+)\\.json$/);
+      if (!m) continue;
+      const phone = m[1];
+      const lid = JSON.parse(readFileSync(path.join(SESSION_DIR, f), 'utf8'));
+      if (lid) map[String(lid)] = phone;
+    }
+  } catch {}
+  return map;
+}
+let lidToPhone = buildLidMap();`,
+      canonicalLidResolver,
+      'LID resolver',
+    );
+  }
 
   const pollSenderMarker = "  const senderPhone = resolveSenderPhone(senderId, senderNumber);\n  const event = {";
   if (!content.includes(pollSenderMarker)) {

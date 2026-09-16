@@ -4,6 +4,7 @@ Never touches accounting, database, or posting logic.
 """
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
+import logging
 import mimetypes
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,8 @@ import httpx
 
 from src.schemas.whatsapp import InboundMessage, OutboundMessage
 from .provider import MediaReference, ProviderError, WhatsAppProvider
+
+logger = logging.getLogger(__name__)
 
 
 class BaileysBridgeWhatsAppProvider(WhatsAppProvider):
@@ -99,6 +102,12 @@ class BaileysBridgeWhatsAppProvider(WhatsAppProvider):
                         phone_candidate = raw_user
 
             if not phone_candidate or not str(phone_candidate).replace("+", "").isdigit():
+                logger.warning(
+                    "Baileys provider dropped message: cannot resolve sender phone (msg_id=%s, sender_id=%s, senderPhone=%s)",
+                    msg_id,
+                    sender_id,
+                    item.get("senderPhone"),
+                )
                 continue
 
             clean_digits = str(phone_candidate).lstrip("+")

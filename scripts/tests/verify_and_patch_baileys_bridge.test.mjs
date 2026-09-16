@@ -77,9 +77,71 @@ test('patches current Hermes bridge for canonical senderPhone resolution', () =>
   assert.match(bridge, /function resolveSenderPhone/);
   assert.equal((bridge.match(/const senderPhone = resolveSenderPhone/g) || []).length, 2);
   assert.match(bridge, /senderNumber,\n\s+senderPhone,/);
+  assert.match(bridge, /lid-mapping-\$\{senderNumber\}_reverse\.json/);
   assert.match(helpers, /senderNumber,\n\s+senderPhone,/);
   assert.match(helpers, /senderId,\n\s+\.\.\.\(senderPhone \? \{ senderPhone \} : \{\}\),/);
   assert.deepEqual(verifyBridgeContents(bridge, helpers), { ok: true });
+});
+
+test('upgrades legacy v1 patched bridge to canonical resilient resolver', () => {
+  const legacyBridge = bridgeSource.replace(
+    `// Build LID → phone reverse map from session files (lid-mapping-{phone}.json)
+function buildLidMap() {
+  const map = {};
+  try {
+    for (const f of readdirSync(SESSION_DIR)) {
+      const m = f.match(/^lid-mapping-(\\d+)\\.json$/);
+      if (!m) continue;
+      const phone = m[1];
+      const lid = JSON.parse(readFileSync(path.join(SESSION_DIR, f), 'utf8'));
+      if (lid) map[String(lid)] = phone;
+    }
+  } catch {}
+  return map;
+}
+let lidToPhone = buildLidMap();`,
+    `// Build LID → phone reverse map from both Hermes mapping file formats.
+function buildLidMap() {
+  const map = {};
+  try {
+    for (const f of readdirSync(SESSION_DIR)) {
+      const mPhone = f.match(/^lid-mapping-(\\d+)\\.json$/);
+      if (mPhone) {
+        const phone = mPhone[1];
+        const lid = JSON.parse(readFileSync(path.join(SESSION_DIR, f), 'utf8'));
+        if (lid) map[String(lid)] = phone;
+        continue;
+      }
+      const mReverse = f.match(/^lid-mapping-(\\d+)_reverse\\.json$/);
+      if (mReverse) {
+        const lid = mReverse[1];
+        const phone = JSON.parse(readFileSync(path.join(SESSION_DIR, f), 'utf8'));
+        if (phone) map[String(lid)] = String(phone);
+      }
+    }
+  } catch {}
+  return map;
+}
+let lidToPhone = buildLidMap();
+
+function resolveSenderPhone(senderId, senderNumber) {
+  if (senderId.endsWith('@s.whatsapp.net')) {
+    const raw = senderNumber.replace(/^\\+/, '');
+    return /^\\d+$/.test(raw) ? raw : undefined;
+  }
+  if (senderId.endsWith('@lid')) {
+    const mapped = lidToPhone[senderNumber];
+    if (!mapped) return undefined;
+    const raw = String(mapped).replace(/^\\+/, '');
+    return /^\\d+$/.test(raw) ? raw : undefined;
+  }
+  return undefined;
+}`,
+  );
+
+  const upgraded = patchBridgeScriptContent(legacyBridge);
+  assert.match(upgraded, /lid-mapping-\$\{senderNumber\}_reverse\.json/);
+  assert.match(upgraded, /function resolveSenderPhone/);
 });
 
 test('patch is idempotent', () => {

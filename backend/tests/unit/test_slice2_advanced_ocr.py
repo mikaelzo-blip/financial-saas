@@ -450,3 +450,20 @@ async def test_document_process_worker_queue_integration(db_session: AsyncSessio
     assert doc.extracted_data.get("total_amount") == "5883000"
     assert doc.extracted_data.get("currency_code") == "IDR"
     assert doc.raw_extraction.get("extraction_mode") == "native"
+
+
+@pytest.mark.asyncio
+async def test_local_provider_handles_empty_or_whitespace_counterparty_matches(tmp_path: Path):
+    """Ensure LocalExtractionProvider does not raise IndexError when counterparty regex matches only whitespace."""
+    img_path = tmp_path / "whitespace_counterparty.png"
+    img = Image.new("RGB", (300, 100), color="white")
+    draw = ImageDraw.Draw(img)
+    # Text with keywords but followed only by spaces/newlines
+    draw.text((10, 10), "Transfer Berhasil\nPenerima   \nRp 50.000", fill="black")
+    img.save(img_path)
+
+    provider = LocalExtractionProvider()
+    result = await provider.extract(img_path, "image/png")
+    assert result is not None
+    assert result.document_type is not None
+

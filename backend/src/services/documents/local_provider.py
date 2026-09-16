@@ -407,7 +407,8 @@ class LocalExtractionProvider:
 
         acc_name_match = re.search(r"\b(?:nama\s+tujuan|nama\s+penerima|penerima)\s*[:=]?\s*([A-Za-z0-9\s.,\-]+)", text, re.I)
         if acc_name_match:
-            first_line = acc_name_match.group(1).strip().splitlines()[0].strip()
+            acc_lines = acc_name_match.group(1).strip().splitlines()
+            first_line = acc_lines[0].strip() if acc_lines else ""
             if len(first_line) > 2:
                 dest_account_name = first_line
                 field_evidence["destination_account_name"] = ExtractedField(
@@ -439,7 +440,8 @@ class LocalExtractionProvider:
             re.I,
         )
         if recip_match:
-            cand_recipient = recip_match.group(1).strip().splitlines()[0].strip()
+            recip_lines = recip_match.group(1).strip().splitlines()
+            cand_recipient = recip_lines[0].strip() if recip_lines else ""
             if len(cand_recipient) > 2 and (re.match(r"^(?:PT|CV|UD|TOKO)\b", cand_recipient, re.I) or not issuer_name):
                 recipient_name = cand_recipient
                 field_evidence["recipient_name"] = ExtractedField(

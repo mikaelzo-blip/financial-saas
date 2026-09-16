@@ -1,7 +1,27 @@
 import { apiClient } from './client';
-import { DocumentResponse } from '../types/api';
+import {
+  DocumentResponse,
+  DocumentOperationsSummaryResponse,
+  DocumentOperationalListResponse,
+  DocumentOperationsListParams,
+  DocumentPostingResponse,
+} from '../types/api';
 
 export const documentsApi = {
+  operationsSummary: async (): Promise<DocumentOperationsSummaryResponse> => {
+    const res = await apiClient.get<DocumentOperationsSummaryResponse>('/operations/documents/summary');
+    return res.data;
+  },
+
+  operationsList: async (params?: DocumentOperationsListParams): Promise<DocumentOperationalListResponse> => {
+    const res = await apiClient.get<DocumentOperationalListResponse>('/operations/documents', { params });
+    return res.data;
+  },
+
+  postAccounting: async (id: string): Promise<DocumentPostingResponse> => {
+    const res = await apiClient.post<DocumentPostingResponse>(`/documents/${id}/post`);
+    return res.data;
+  },
   reviewQueue: async (): Promise<DocumentResponse[]> => {
     try {
       const res = await apiClient.get<DocumentResponse[]>('/documents/review-queue');

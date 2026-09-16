@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 
 from src.api.auth import require_application_user, router as auth_router
 from src.api.v1.documents import router as documents_router
+from src.api.v1.operations import router as operations_router
 from src.api.v1.hermes import router as hermes_router
 from src.api.v1.insights import router as insights_router
 from src.api.v1.project_costing import router as project_costing_router
@@ -50,6 +51,7 @@ application_router.include_router(customer_payments_router)
 application_router.include_router(projects_router)
 application_router.include_router(reference_data_router)
 application_router.include_router(documents_router)
+application_router.include_router(operations_router)
 application_router.include_router(transactions_router)
 application_router.include_router(reversals_router)
 application_router.include_router(review_router)

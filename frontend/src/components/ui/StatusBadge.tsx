@@ -17,6 +17,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   switch (status) {
     // Workflow Statuses
     case 'STAGED':
+    case 'READY_TO_POST':
       label = 'Siap Posting';
       variant = 'info';
       break;
@@ -28,12 +29,41 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
       label = 'Perlu Diperiksa';
       variant = 'warning';
       break;
+    case 'READY_FOR_APPROVAL':
+      label = 'Siap Disetujui';
+      variant = 'info';
+      break;
+    case 'UPLOADED':
+    case 'HASHED':
+      label = 'Diterima';
+      variant = 'neutral';
+      break;
+    case 'QUEUED':
+      label = 'Dalam Antrean';
+      variant = 'info';
+      break;
+    case 'EXTRACTING':
+      label = 'Ekstraksi OCR';
+      variant = 'purple';
+      break;
+    case 'EXTRACTED':
+      label = 'Terekstraksi';
+      variant = 'info';
+      break;
+    case 'MATCHING':
+      label = 'Pencocokan';
+      variant = 'purple';
+      break;
     case 'REVERSED':
       label = 'Dibatalkan';
       variant = 'neutral';
       break;
     case 'REJECTED':
       label = 'Ditolak';
+      variant = 'danger';
+      break;
+    case 'FAILED':
+      label = 'Gagal';
       variant = 'danger';
       break;
 
@@ -87,9 +117,21 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
       break;
 
     // Review Flags
+    case 'AMBIGUOUS_MATCH':
+      label = 'Pencocokan Ambiguitas';
+      variant = 'warning';
+      break;
     case 'AMOUNT_MISMATCH':
       label = 'Selisih Nominal';
       variant = 'danger';
+      break;
+    case 'DATE_MISMATCH':
+      label = 'Tanggal Tidak Cocok';
+      variant = 'warning';
+      break;
+    case 'OCR_LOW_CONFIDENCE':
+      label = 'Keyakinan OCR Rendah';
+      variant = 'warning';
       break;
     case 'DUPLICATE_SUSPECTED':
       label = 'Duplikasi Diduga';

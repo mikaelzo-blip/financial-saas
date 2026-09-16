@@ -1,11 +1,15 @@
 import React from 'react';
 import { FileText, Download, Hash } from 'lucide-react';
-import { DocumentResponse } from '../../types/api';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 
 export interface DocumentPreviewModalProps {
-  document: DocumentResponse | null;
+  document: {
+    document_code: string;
+    file_name: string;
+    file_hash?: string | null;
+    file_size_bytes: number;
+  } | null;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -30,7 +34,7 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
           <div>
             <p className="font-semibold text-slate-900">{document.file_name}</p>
             <p className="text-[10px] text-slate-500 font-mono mt-0.5 flex items-center gap-1">
-              <Hash className="h-3 w-3" /> SHA-256: {document.file_hash.substring(0, 16)}...
+              <Hash className="h-3 w-3" /> SHA-256: {document.file_hash ? `${document.file_hash.substring(0, 16)}...` : 'Belum di-hash'}
             </p>
           </div>
           <span className="font-mono text-slate-600 bg-white px-2 py-1 rounded border border-slate-200">

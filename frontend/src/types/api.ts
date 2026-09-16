@@ -358,6 +358,93 @@ export interface DocumentPostingResponse {
   entry_number?: string;
 }
 
+export interface SafeJobFailure {
+  job_type: string;
+  failure_message?: string;
+  attempt_count: number;
+  failed_at?: string;
+}
+
+export interface QueueHealth {
+  pending_count: number;
+  running_count: number;
+  failed_count: number;
+  completed_count: number;
+  retrying_count: number;
+  oldest_pending_seconds?: number;
+  oldest_running_seconds?: number;
+  near_max_attempts_count: number;
+  latest_failure?: SafeJobFailure;
+  is_paused?: boolean;
+}
+
+export interface DocumentOperationsSummaryResponse {
+  status_counts: Record<string, number>;
+  flag_counts: Record<string, number>;
+  integrity_flags?: Record<string, number>;
+  queue_health: QueueHealth;
+  actionable_counts: Record<string, number>;
+}
+
+export interface DocumentOperationalItem {
+  id: string;
+  organization_id: string;
+  document_code: string;
+  file_name: string;
+  file_hash?: string;
+  file_size_bytes: number;
+  source_channel: string;
+  document_type: DocumentType;
+  received_at: string;
+  updated_at: string;
+  processing_status: 'UPLOADED' | 'HASHED' | 'QUEUED' | 'EXTRACTING' | 'EXTRACTED' | 'MATCHING' | 'REVIEW_REQUIRED' | 'READY_FOR_APPROVAL' | 'READY_TO_POST' | 'POSTED' | 'PROCESSED' | 'REJECTED' | 'FAILED';
+  review_flags: string[];
+  counterparty_name?: string;
+  counterparty_id?: string;
+  project_name?: string;
+  project_code?: string;
+  project_id?: string;
+  amount?: number | string;
+  currency?: string | null;
+  processing_attempts: number;
+  failure_code?: string;
+  failure_message?: string;
+  age_seconds: number;
+  age_display: string;
+  is_stuck: boolean;
+  converted_transaction_id?: string;
+  converted_transaction_code?: string;
+  posting_job_status?: string;
+  can_review: boolean;
+  can_retry: boolean;
+  can_post: boolean;
+}
+
+export interface DocumentOperationalListResponse {
+  items: DocumentOperationalItem[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+  total_pages?: number;
+}
+
+export interface DocumentOperationsListParams {
+  processing_status?: string;
+  action_filter?: string;
+  source_channel?: string;
+  document_type?: string;
+  review_flag?: string;
+  project_id?: string;
+  counterparty_id?: string;
+  failed_or_retrying?: boolean;
+  search?: string;
+  sort_by?: string;
+  sort_dir?: 'asc' | 'desc';
+  page?: number;
+  limit?: number;
+}
+
 export interface CounterpartyResponse {
   id: string;
   organization_id: string;

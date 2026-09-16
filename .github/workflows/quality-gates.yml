@@ -36,6 +36,7 @@ jobs:
       run:
         working-directory: backend
     env:
+      SLICE5_TEST_DATABASE_URL: postgresql+asyncpg://fin001_ci_user:fin001_ci_password@127.0.0.1:5432/fin001_ci_disposable
       FIN_001_TEST_DATABASE_URL: postgresql+asyncpg://fin001_ci_user:fin001_ci_password@127.0.0.1:5432/fin001_ci_disposable
       RECON_001_TEST_DATABASE_URL: postgresql+asyncpg://fin001_ci_user:fin001_ci_password@127.0.0.1:5432/fin001_ci_disposable
       FEATURE_012_TEST_DATABASE_URL: postgresql+asyncpg://fin001_ci_user:fin001_ci_password@127.0.0.1:5432/fin001_ci_disposable
@@ -102,11 +103,11 @@ jobs:
         run: |
           HEADS=$(.venv/bin/python -m alembic heads)
           echo "Alembic heads: $HEADS"
-          echo "$HEADS" | grep -q "027_document_review_ready_to_post (head)" || { echo "FATAL: Unexpected alembic head: $HEADS"; exit 1; }
+          echo "$HEADS" | grep -q "028_document_posting_linkage (head)" || { echo "FATAL: Unexpected alembic head: $HEADS"; exit 1; }
 
           CURRENT=$(.venv/bin/python -m alembic current)
           echo "Alembic current: $CURRENT"
-          echo "$CURRENT" | grep -q "027_document_review_ready_to_post (head)" || { echo "FATAL: Unexpected alembic current: $CURRENT"; exit 1; }
+          echo "$CURRENT" | grep -q "028_document_posting_linkage (head)" || { echo "FATAL: Unexpected alembic current: $CURRENT"; exit 1; }
 
       - name: Verify zero Alembic schema drift
         run: .venv/bin/python -m alembic check
@@ -120,6 +121,9 @@ jobs:
 
       - name: Run required RECON-001 PostgreSQL constraint and concurrency tests
         run: .venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/test_recon_001_postgresql_constraints.py
+
+      - name: Run required Slice 5 PostgreSQL concurrency tests
+        run: .venv/bin/python -m pytest -q -p no:cacheprovider tests/integration/test_slice5_postgresql_concurrency.py
 
       - name: Run full backend test suite
         run: .venv/bin/python -m pytest -q -p no:cacheprovider

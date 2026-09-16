@@ -31,6 +31,7 @@ const statusLabels: Record<DocumentResponse['processing_status'], string> = {
   REVIEW_REQUIRED: 'Perlu Diperiksa',
   READY_FOR_APPROVAL: 'Siap disetujui',
   READY_TO_POST: 'Siap diposting',
+  POSTED: 'Sudah diposting',
   PROCESSED: 'Selesai diproses',
   REJECTED: 'Ditolak',
   FAILED: 'Gagal diproses',
@@ -208,7 +209,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
         </div>
         <span
           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
-            document.processing_status === 'PROCESSED' || document.processing_status === 'READY_TO_POST'
+            document.processing_status === 'PROCESSED' || document.processing_status === 'POSTED' || document.processing_status === 'READY_TO_POST'
               ? 'bg-emerald-100 text-emerald-800'
               : document.processing_status === 'REJECTED'
               ? 'bg-rose-100 text-rose-800'

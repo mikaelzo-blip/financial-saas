@@ -111,10 +111,66 @@ async def handle_document_deferred_analysis(payload: dict, session) -> None:
     logger.info(f"Analyzed session {session_id}: status={doc_sess.status.value}, decision={decision.value}")
 
 
+async def handle_document_post(payload: dict, session) -> None:
+    """
+    Worker handler for DOCUMENT_POST jobs:
+    Converts approved READY_TO_POST document into general ledger transactions
+    via canonical DocumentPostingService.
+    Reuses existing transaction retry logic and system-actor audit convention.
+    Fails closed and avoids endless retries on policy/domain refusals.
+    """
+    import uuid
+    from src.services.document_posting_service import DocumentPostingService
+    from src.core.exceptions import InvariantViolationException
+    from src.services.transaction_retry import run_in_clean_transaction
+
+    doc_id_str = payload.get("document_id")
+    org_id_str = payload.get("organization_id")
+    if not doc_id_str or not org_id_str:
+        logger.warning(f"Invalid payload for DOCUMENT_POST: {payload}")
+        return
+
+    doc_id = uuid.UUID(doc_id_str)
+    org_id = uuid.UUID(org_id_str)
+
+    async def _do_post(sess):
+        svc = DocumentPostingService(sess)
+        return await svc.post_document(
+            organization_id=org_id,
+            document_id=doc_id,
+            actor_id=None,
+            actor_role=None,
+            is_worker=True,
+        )
+
+    try:
+        result = await run_in_clean_transaction(session, _do_post)
+        logger.info(
+            f"DOCUMENT_POST succeeded for document {doc_id}: "
+            f"outcome={result.posting_outcome}, trx={result.transaction_code}"
+        )
+    except InvariantViolationException as exc:
+        failure_reason = (exc.details or {}).get("failure_reason") if exc.details else None
+        if failure_reason in (
+            "POLICY_REQUIRED",
+            "UNSUPPORTED_TRANSACTION_TYPE",
+            "NOT_READY",
+            "UNRESOLVED_REVIEW",
+            "INVALID_CANDIDATE",
+        ):
+            logger.warning(
+                f"DOCUMENT_POST for document {doc_id} skipped due to permanent domain/policy rule: {exc}. "
+                "Document remains in current state for manual action."
+            )
+            return
+        raise
+
+
 def build_worker() -> JobWorker:
     worker = JobWorker(poll_interval_seconds=1.0)
     worker.register_handler("DOCUMENT_PROCESS", handle_document_process)
     worker.register_handler("DOCUMENT_DEFERRED_ANALYSIS", handle_document_deferred_analysis)
+    worker.register_handler("DOCUMENT_POST", handle_document_post)
     return worker
 
 

@@ -22,7 +22,8 @@ from src.models.user import User
 from src.models.enums import UserRole
 from src.schemas.document import (DocumentResponse, DocumentCorrectionRequest,
                                   DocumentRejectionRequest, TransactionCandidate,
-                                  StructuredExtraction)
+                                  StructuredExtraction, DocumentPostingResponse)
+from src.services.document_posting_service import DocumentPostingService
 from src.services.documents.matching import match_entities
 from src.schemas.transaction import TransactionCreate, TransactionResponse
 from src.services.document_service import DocumentService
@@ -516,8 +517,46 @@ async def approve_document_candidate(
             "candidate_status": CandidateStatus.READY_TO_POST.value
         }
     )
+    posting_svc = DocumentPostingService(db)
+    await posting_svc.enqueue_auto_post_if_eligible(org_id, document, candidate)
+
     await db.flush()
     return document
+
+
+@router.post(
+    "/{document_id}/post",
+    response_model=DocumentPostingResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Post Approved Document into General Ledger",
+)
+async def post_document_candidate(
+    document_id: uuid.UUID,
+    org_id: uuid.UUID = Depends(get_current_org_id),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
+    db: AsyncSession = Depends(get_db),
+):
+    async def _do_post(session: AsyncSession):
+        service = DocumentPostingService(session)
+        return await service.post_document(
+            organization_id=org_id,
+            document_id=document_id,
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            is_worker=False,
+        )
+
+    result = await run_in_clean_transaction(db, _do_post)
+    return DocumentPostingResponse(
+        document_id=result.document_id,
+        processing_status=result.processing_status,
+        transaction_id=result.transaction_id,
+        transaction_code=result.transaction_code,
+        already_posted=result.already_posted,
+        posting_outcome=result.posting_outcome,
+        journal_entry_id=result.journal_entry_id,
+        entry_number=result.entry_number,
+    )
 
 
 @router.get("/review-queue", response_model=List[DocumentResponse], summary="List Document Candidates Requiring Review")

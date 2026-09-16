@@ -518,5 +518,3 @@ async def test_bank_transfer_slip_date_and_amount_disclaimer_resilience(tmp_path
     assert result.data.document_number == "20708003319"
     assert result.data.transaction_date == date(2026, 8, 13)
     assert result.data.total_amount == Decimal("48110249.26")
-
-

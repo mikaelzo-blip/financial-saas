@@ -37,6 +37,7 @@ test('bank slip uses transfer fields and never renders legacy goods or due date'
   expect(screen.queryByLabelText('Nomor Faktur / Dokumen')).not.toBeInTheDocument();
   expect(screen.getByLabelText('Referensi Transfer')).toHaveValue('REF-123');
   expect(screen.getByLabelText('Tanggal Transfer / Aplikasi')).toHaveValue('2026-08-13');
+  expect(screen.getByLabelText('Total Nominal')).toHaveValue('48110249.26');
   const evidence = screen.getByRole('region', { name: 'Rincian transfer dari sumber' });
   expect(within(evidence).getByText('EUR 2500.00')).toBeInTheDocument();
   expect(within(evidence).getByText('IDR 48110249.26')).toBeInTheDocument();
@@ -45,12 +46,14 @@ test('bank slip uses transfer fields and never renders legacy goods or due date'
   expect(screen.getByRole('button', { name: 'Setujui untuk Diposting' })).toBeDisabled();
   await userEvent.clear(screen.getByLabelText('Referensi Transfer'));
   await userEvent.type(screen.getByLabelText('Referensi Transfer'), 'REF-NEW');
+  await userEvent.clear(screen.getByLabelText('Total Nominal'));
+  await userEvent.type(screen.getByLabelText('Total Nominal'), '50000000');
   await userEvent.click(screen.getByRole('button', { name: 'Simpan Koreksi' }));
   const changes = onSave.mock.calls[0][0];
   expect(changes.transfer_reference).toBe('REF-NEW');
+  expect(changes.amount).toBe('50000000');
   expect(changes).not.toHaveProperty('invoice_number');
   expect(changes).not.toHaveProperty('due_date');
-  expect(changes).not.toHaveProperty('amount');
 });
 
 test('legacy foreign transfer is never labelled rupiah and missing execution stays blocked', () => {

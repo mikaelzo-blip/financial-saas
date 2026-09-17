@@ -11,9 +11,10 @@
 
 - Document-type-aware bank transfer extraction & review:
   - Bank transfer proof (`TRANSFER_PROOF`) suppresses spurious goods line items table extraction and rendering.
+  - Review form fields are fully editable: Total Nominal is always an editable input field (not fixed or hidden), with manual corrections authoritatively persisted to `total_amount`, candidate `amount`, and `transfer_details.principal`.
   - Form fields adapted: "Referensi Transfer" instead of "Nomor Faktur", transaction/application date instead of invoice/due date.
   - Foreign currency, principal in IDR, admin fees, and settlement/debit total tracked explicitly via `TransferDetails` without synthetic binary-float conversion.
-  - Execution status verification (`REQUESTED` vs `EXECUTED`) and execution evidence tracking. Unconfirmed execution (`TRANSFER_EXECUTION_UNCONFIRMED`) and unverified nominal/fee differences (`TRANSFER_AMOUNT_REVIEW`) flag documents for review and block candidate approval fail-closed.
+  - Execution status verification (`REQUESTED` vs `EXECUTED`) and execution evidence tracking. Unconfirmed execution (`TRANSFER_EXECUTION_UNCONFIRMED`) and unverified nominal/fee differences (`TRANSFER_AMOUNT_REVIEW`) flag documents for review and block candidate approval fail-closed until reviewed and corrected.
   - Transfer proof approval transitions to `READY_TO_POST`, keeping approval distinct from posting. Bank transfer slips are never automatically assumed to be expenses or vendor advances without contextual matching.
 - Project lifecycle transition & frontend crash resilience (`5b2b1b3`):
   - Backend `PATCH /projects/{id}/status` supports both `status` and `project_status` keys.

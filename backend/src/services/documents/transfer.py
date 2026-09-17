@@ -54,8 +54,8 @@ def normalize_transfer_extraction(data):
     updates = {"line_items": [], "due_date": None, "subtotal": None, "vat_amount": None,
                "field_evidence": evidence}
     if details and any((details.principal, details.foreign, details.fee, details.debit)):
-        updates.update(total_amount=principal.amount if principal else None,
-                       currency_code=principal.currency_code if principal else None)
+        updates.update(total_amount=principal.amount if principal else data.total_amount,
+                       currency_code=principal.currency_code if principal else (data.currency_code or "IDR"))
     return data.model_copy(update=updates)
 
 

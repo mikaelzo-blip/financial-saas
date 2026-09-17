@@ -102,3 +102,23 @@ async def test_confirming_execution_cannot_hide_foreign_currency_or_fees(client,
     assert response.status_code == 200, response.text
     assert "TRANSFER_AMOUNT_REVIEW" in response.json()["review_flags"]
     assert response.json()["processing_status"] == "REVIEW_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_transfer_amount_correction_is_persisted_and_authoritative(client, db_session, transfer_review):
+    doc, headers = transfer_review
+    response = await client.post(f"/api/v1/documents/{doc.id}/corrections", headers=headers, json={
+        "changes": {
+            "amount": "48110249.26",
+            "transfer_reference": "REF-CORRECTED",
+            "execution_status": "EXECUTED",
+            "execution_evidence": "Transfer berhasil terkonfirmasi",
+        },
+        "reason": "Koreksi nominal dan referensi oleh peninjau",
+    })
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["extracted_data"]["total_amount"] == "48110249.26"
+    assert body["candidate_transaction"]["amount"] == "48110249.26"
+    assert body["candidate_transaction"]["external_reference"] == "REF-CORRECTED"
+    assert body["processing_status"] == "READY_FOR_APPROVAL"

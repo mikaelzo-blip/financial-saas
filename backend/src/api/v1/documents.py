@@ -198,7 +198,8 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
         "subtotal", "tax", "vat_amount", "description", "external_reference",
         "transfer_reference", "document_number", "invoice_number", "spk_number",
         "bast_number", "due_date", "document_type", "origin_bank", "destination_bank",
-        "destination_account_number", "execution_status", "execution_evidence"
+        "destination_account_number", "execution_status", "execution_evidence",
+        "admin_fee", "currency_code"
     }
     if not data.changes or set(data.changes) - allowed:
         raise HTTPException(status_code=422, detail="Correction contains unsupported fields")
@@ -282,12 +283,25 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
             extracted[ext_field] = data.changes[ext_field]
     if "tax" in data.changes:
         extracted["vat_amount"] = data.changes["tax"]
+    user_amount = None
     if "total_amount" in data.changes:
-        extracted["total_amount"] = data.changes["total_amount"]
-        candidate["amount"] = data.changes["total_amount"]
+        user_amount = str(data.changes["total_amount"]) if data.changes["total_amount"] is not None else None
     if "amount" in data.changes:
-        extracted["total_amount"] = data.changes["amount"]
-        candidate["amount"] = data.changes["amount"]
+        user_amount = str(data.changes["amount"]) if data.changes["amount"] is not None else None
+
+    if user_amount is not None:
+        extracted["total_amount"] = user_amount
+        candidate["amount"] = user_amount
+
+    if "admin_fee" in data.changes:
+        fee_val = str(data.changes["admin_fee"]) if data.changes["admin_fee"] is not None else None
+        extracted["admin_fee"] = fee_val
+
+    if "currency_code" in data.changes:
+        curr_val = str(data.changes["currency_code"]) if data.changes["currency_code"] is not None else "IDR"
+        extracted["currency_code"] = curr_val
+        candidate["currency_code"] = curr_val
+
     if "date" in data.changes:
         extracted["transaction_date"] = data.changes["date"]
         candidate["transaction_date"] = data.changes["date"]
@@ -307,12 +321,29 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
     if "transfer_reference" in data.changes:
         extracted["transfer_reference"] = data.changes["transfer_reference"]
         candidate["external_reference"] = data.changes["transfer_reference"]
+
     if document.document_type == DocumentType.TRANSFER_PROOF:
         details = dict(extracted.get("transfer_details") or {})
         for field in ("execution_status", "execution_evidence"):
             if field in data.changes:
                 old[field] = details.get(field)
                 details[field] = data.changes[field]
+        if user_amount is not None:
+            if details.get("principal"):
+                details["principal"] = dict(details["principal"])
+                details["principal"]["amount"] = user_amount
+            else:
+                details["principal"] = {
+                    "amount": user_amount,
+                    "currency_code": extracted.get("currency_code") or "IDR",
+                    "evidence": "Koreksi manual peninjau",
+                }
+        if "admin_fee" in data.changes:
+            if data.changes["admin_fee"] is None or str(data.changes["admin_fee"]).strip() in ("", "0", "0.00"):
+                details["fee"] = None
+            elif details.get("fee"):
+                details["fee"] = dict(details["fee"])
+                details["fee"]["amount"] = str(data.changes["admin_fee"])
         if details:
             extracted["transfer_details"] = details
         try:
@@ -320,8 +351,12 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
         except ValueError as error:
             raise HTTPException(status_code=422, detail="Invalid transfer evidence") from error
         extracted = transfer_data.model_dump(mode="json")
-        candidate["amount"] = extracted.get("total_amount")
-        candidate["currency_code"] = extracted.get("currency_code")
+        if user_amount is not None:
+            extracted["total_amount"] = user_amount
+            candidate["amount"] = user_amount
+        else:
+            candidate["amount"] = extracted.get("total_amount")
+        candidate["currency_code"] = extracted.get("currency_code") or "IDR"
     document.extracted_data = extracted
 
     # Material corrections invalidate any prior allocation unless the reviewer

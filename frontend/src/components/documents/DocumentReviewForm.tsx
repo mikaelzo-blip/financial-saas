@@ -4,7 +4,7 @@ import { Select } from '../ui/Select';
 import { CounterpartyResponse, DocumentResponse, MatchCandidateResponse, ProjectResponse } from '../../types/api';
 import { formatIDR, formatDate } from '../../utils/formatters';
 import { TransferEvidence } from './TransferEvidence';
-import { sameDecimalValue, transferExecutionLabels, type TransferDetails } from '../../utils/transferReview';
+import { transferExecutionLabels, type TransferDetails } from '../../utils/transferReview';
 import { ShieldCheck, FileText, CheckCircle, AlertTriangle, UserCheck, Layers, History } from 'lucide-react';
 
 interface Props {
@@ -93,11 +93,8 @@ export const DocumentReviewForm: React.FC<Props> = ({
   const [executionStatus, setExecutionStatus] = useState(transferDetails.execution_status || 'UNKNOWN');
   const [executionEvidence, setExecutionEvidence] = useState(transferDetails.execution_evidence || '');
   const transferBlocked = isTransfer && (
-    transferDetails.execution_status !== 'EXECUTED' || !transferDetails.execution_evidence?.trim() ||
-    extracted.currency_code !== 'IDR' || extracted.total_amount == null ||
-    (transferDetails.fee && !sameDecimalValue(transferDetails.fee.amount, '0')) ||
-    (transferDetails.debit && (transferDetails.debit.currency_code !== extracted.currency_code ||
-      !sameDecimalValue(transferDetails.debit.amount, extracted.total_amount)))
+    executionStatus !== 'EXECUTED' ||
+    Boolean(extracted.currency_code && extracted.currency_code !== 'IDR')
   );
 
   const [projectId, setProjectId] = useState(String(candidate.project_id ?? ''));
@@ -163,12 +160,13 @@ export const DocumentReviewForm: React.FC<Props> = ({
       const changes: Record<string, unknown> = {
         project_id: projectId || null,
         counterparty_id: counterpartyId || null,
+        amount: totalAmount || null,
+        transaction_date: transactionDate || null,
         ...(isTransfer ? {
           transfer_reference: invoiceNumber || null,
           execution_status: executionStatus,
-          execution_evidence: executionEvidence || null,
-        } : { invoice_number: invoiceNumber || null, amount: totalAmount || null, due_date: dueDate || null }),
-        transaction_date: transactionDate || null,
+          execution_evidence: executionEvidence || (executionStatus === 'EXECUTED' ? 'Dikonfirmasi oleh peninjau' : null),
+        } : { invoice_number: invoiceNumber || null, due_date: dueDate || null }),
       };
       if (selectedCandidateId) {
         changes.selected_candidate_id = selectedCandidateId;
@@ -186,12 +184,13 @@ export const DocumentReviewForm: React.FC<Props> = ({
       const changes: Record<string, unknown> = {
         project_id: projectId || null,
         counterparty_id: counterpartyId || null,
+        amount: totalAmount || null,
+        transaction_date: transactionDate || null,
         ...(isTransfer ? {
           transfer_reference: invoiceNumber || null,
           execution_status: executionStatus,
-          execution_evidence: executionEvidence || null,
-        } : { invoice_number: invoiceNumber || null, amount: totalAmount || null, due_date: dueDate || null }),
-        transaction_date: transactionDate || null,
+          execution_evidence: executionEvidence || (executionStatus === 'EXECUTED' ? 'Dikonfirmasi oleh peninjau' : null),
+        } : { invoice_number: invoiceNumber || null, due_date: dueDate || null }),
         selected_candidate_id: cand.entity_id,
       };
       await onSave(changes, reason || 'Memilih kandidat pencocokan');
@@ -569,7 +568,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {!isTransfer && <div>
+          <div>
             <label htmlFor="total-amount" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
               Total Nominal
             </label>
@@ -581,7 +580,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
               value={totalAmount}
               onChange={(e) => setTotalAmount(e.target.value)}
             />
-          </div>}
+          </div>
           <div>
             <label htmlFor="transaction-date" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
               {isTransfer ? 'Tanggal Transfer / Aplikasi' : 'Tanggal Transaksi'}
@@ -608,16 +607,40 @@ export const DocumentReviewForm: React.FC<Props> = ({
             onChange={(e) => setDueDate(e.target.value)}
           />
         </div>}
-        {isTransfer && <div className="space-y-2">
-          <label htmlFor="execution-status" className="block text-sm font-semibold">Verifikasi pelaksanaan transfer</label>
-          <Select id="execution-status" value={executionStatus} onChange={e => setExecutionStatus(e.target.value)}>
-            {Object.entries(transferExecutionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </Select>
-          <label htmlFor="execution-evidence" className="block text-sm">Bukti pelaksanaan pada sumber</label>
-          <input id="execution-evidence" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            value={executionEvidence} onChange={e => setExecutionEvidence(e.target.value)} />
-          <p className="text-xs text-slate-700">Konfirmasi hanya jika sumber membuktikan transfer terlaksana. Simpan koreksi sebelum menyetujui.</p>
-        </div>}
+        {isTransfer && (
+          <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+            <label htmlFor="execution-status" className="block font-semibold text-slate-700 uppercase tracking-wider">
+              Status Pelaksanaan Transfer
+            </label>
+            <Select
+              id="execution-status"
+              value={executionStatus}
+              onChange={(e) => {
+                const val = e.target.value;
+                setExecutionStatus(val);
+                if (val === 'EXECUTED' && !executionEvidence) {
+                  setExecutionEvidence('Dikonfirmasi oleh peninjau');
+                }
+              }}
+            >
+              {Object.entries(transferExecutionLabels).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </Select>
+            <div className="mt-2">
+              <label htmlFor="execution-evidence" className="block text-slate-600 mb-1">
+                Catatan Bukti Pelaksanaan (Opsional)
+              </label>
+              <input
+                id="execution-evidence"
+                className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs bg-white"
+                placeholder="Contoh: Tertera 'Transfer Berhasil' pada struk"
+                value={executionEvidence}
+                onChange={(e) => setExecutionEvidence(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
 
         <div className="space-y-2">
           <label htmlFor="project-search" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">

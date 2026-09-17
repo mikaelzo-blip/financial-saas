@@ -11,7 +11,11 @@ import {
   ProjectProfitabilityReportResponse,
   ProjectCashPositionReportResponse,
   BudgetVsActualReportResponse,
-  DashboardSummaryResponse
+  DashboardSummaryResponse,
+  CashFlowTrendResponse,
+  ProjectPerformanceResponse,
+  DashboardActionItemsResponse,
+  CashBankOverviewResponse
 } from '../types/reporting';
 
 export type ReportExportType =
@@ -163,6 +167,33 @@ export const reportsApi = {
     const res = await apiClient.get<BudgetVsActualReportResponse>('/reports/budget-vs-actual', {
       params: { project_id: projectId },
     });
+    return res.data;
+  },
+
+  getCashFlowTrend: async (months: number = 6, asOfDate?: string): Promise<CashFlowTrendResponse> => {
+    const params: Record<string, string | number> = { months };
+    if (asOfDate) params.as_of_date = asOfDate;
+    const res = await apiClient.get<CashFlowTrendResponse>('/reports/dashboard/cash-flow-trend', { params });
+    return res.data;
+  },
+
+  getProjectPerformance: async (status?: string, limit?: number): Promise<ProjectPerformanceResponse> => {
+    const params: Record<string, string | number> = {};
+    if (status) params.status = status;
+    if (limit) params.limit = limit;
+    const res = await apiClient.get<ProjectPerformanceResponse>('/reports/dashboard/project-performance', { params });
+    return res.data;
+  },
+
+  getActionItems: async (asOfDate?: string): Promise<DashboardActionItemsResponse> => {
+    const params = asOfDate ? { as_of_date: asOfDate } : {};
+    const res = await apiClient.get<DashboardActionItemsResponse>('/reports/dashboard/action-items', { params });
+    return res.data;
+  },
+
+  getCashBankOverview: async (asOfDate?: string): Promise<CashBankOverviewResponse> => {
+    const params = asOfDate ? { as_of_date: asOfDate } : {};
+    const res = await apiClient.get<CashBankOverviewResponse>('/reports/cash-bank-overview', { params });
     return res.data;
   },
 };

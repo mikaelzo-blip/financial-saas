@@ -398,5 +398,76 @@ class CALKReportResponse(BaseModel):
     cash_flow_summary: Dict[str, Decimal]
 
 
+# Monthly Cash Flow Trend
+class MonthlyCashFlowTrendItem(BaseModel):
+    period: str  # YYYY-MM
+    month_label: str  # e.g. "Apr 2026"
+    cash_in: Decimal
+    cash_out: Decimal
+    net_cash: Decimal
 
+
+class CashFlowTrendResponse(BaseModel):
+    items: List[MonthlyCashFlowTrendItem]
+
+
+# Project Performance (Kinerja Proyek)
+class ProjectPerformanceItem(BaseModel):
+    project_id: str
+    project_code: str
+    project_name: str
+    customer_name: Optional[str] = None
+    contract_value: Decimal
+    actual_cost: Decimal
+    invoiced_amount: Decimal
+    cash_received: Decimal
+    gross_profit: Decimal
+    gross_margin_percentage: Decimal
+    financial_progress_percentage: Decimal
+    status: str
+    health_status: str  # "NORMAL" | "WARNING" | "CRITICAL"
+
+
+class ProjectPerformanceResponse(BaseModel):
+    items: List[ProjectPerformanceItem]
+    total_active_projects: int
+    total_contract_value: Decimal
+    total_actual_cost: Decimal
+    average_margin_percentage: Decimal
+
+
+# Dashboard Action Items (Perlu Tindakan)
+class DashboardActionItemsResponse(BaseModel):
+    documents_requires_review: int
+    documents_failed: int
+    documents_ready_to_post: int
+    unmatched_bank_movements: int
+    overdue_ar_count: int
+    overdue_ar_amount: Decimal
+    overdue_ap_count: int
+    overdue_ap_amount: Decimal
+    projects_with_warning: int
+    total_action_count: int
+
+
+# Cash & Bank Overview
+class CashBankAccountItem(BaseModel):
+    id: str
+    name: str
+    bank_name: Optional[str] = None
+    account_number: Optional[str] = None
+    account_type: str
+    coa_account_code: str
+    balance: Decimal
+    is_active: bool
+    last_movement_date: Optional[date] = None
+
+
+class CashBankOverviewResponse(BaseModel):
+    total_cash_and_bank: Decimal
+    total_bank: Decimal
+    total_cash: Decimal
+    unmatched_movements_count: int
+    unmatched_amount: Decimal
+    accounts: List[CashBankAccountItem]
 

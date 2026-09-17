@@ -1,21 +1,25 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   Wallet,
-  Building2,
   ArrowDownLeft,
   ArrowUpRight,
-  AlertTriangle,
-  TrendingUp,
-  Flame,
   ShieldCheck,
   ShieldAlert,
+  Scale,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { reportsApi } from '../../api/reports';
 import { formatIDR } from '../../utils/formatters';
 import { Card } from '../../components/ui/Card';
 import { SkeletonLoader } from '../../components/feedback/SkeletonLoader';
+import { ActionItemsSection } from './components/ActionItemsSection';
+import { CashFlowTrendChart } from './components/CashFlowTrendChart';
+import { ProjectPerformanceChart } from './components/ProjectPerformanceChart';
+import { AgingComparisonChart } from './components/AgingComparisonChart';
 import { QuickActionsPanel } from './components/QuickActionsPanel';
 import { RecentActivityTable } from './components/RecentActivityTable';
 import { ExecutiveSummaryCard } from '../../components/ai/ExecutiveSummaryCard';
@@ -23,22 +27,29 @@ import { FinancialQABox } from '../../components/ai/FinancialQABox';
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const [aiSectionOpen, setAiSectionOpen] = useState(false);
 
   const { data: metrics, isLoading } = useQuery({
     queryKey: ['dashboard-financial-summary'],
     queryFn: () => reportsApi.getDashboardSummary(),
   });
 
+  const netLiquidityPosition = metrics
+    ? Number(metrics.cash_and_bank_balance) +
+      Number(metrics.accounts_receivable_outstanding) -
+      Number(metrics.accounts_payable_outstanding)
+    : 0;
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-            Dashboard Manajemen & Keuangan
+          <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
+            Dashboard Keuangan & Operasional
           </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Ringkasan posisi kas riil, runway, pendapatan YTD, piutang (AR), utang (AP), dan integritas pembukuan.
+          <p className="text-xs md:text-sm text-slate-500 mt-1">
+            Ringkasan posisi kas riil, piutang, utang, kinerja proyek, dan tindakan operasional harian.
           </p>
         </div>
         {metrics && (
@@ -58,231 +69,166 @@ export const DashboardPage: React.FC = () => {
         )}
       </div>
 
-      {/* Metric Cards Grid */}
-      {isLoading || !metrics ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <SkeletonLoader count={4} className="h-28 w-full" />
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {/* Row 1: Core Financial KPIs */}
+      {/* SECTION A — PERLU TINDAKAN (Highest Priority) */}
+      <ActionItemsSection />
+
+      {/* SECTION B — POSISI KEUANGAN (Compact 4 Cards) */}
+      <div className="space-y-2">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+          Posisi Keuangan Utama
+        </h3>
+        {isLoading || !metrics ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Total Kas & Bank */}
+            <SkeletonLoader count={4} className="h-24 w-full" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* 1. Kas & Bank */}
             <Card
-              className="p-4 bg-slate-900 text-white cursor-pointer hover:border-blue-500 transition-colors"
-              onClick={() => navigate('/reports/general-ledger')}
+              className="p-4 bg-slate-900 text-white cursor-pointer hover:border-blue-500 transition-colors shadow-xs"
+              onClick={() => navigate('/payment-accounts')}
             >
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-semibold uppercase text-slate-400">Total Kas & Bank</span>
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600/30 text-blue-400">
-                  <Wallet className="h-4 w-4" />
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-600/30 text-blue-400">
+                  <Wallet className="h-3.5 w-3.5" />
                 </div>
               </div>
-              <p className="text-xl font-bold font-mono tabular-nums mt-2 text-white">
+              <p className="text-lg md:text-xl font-bold font-mono tabular-nums mt-1.5 text-white">
                 {formatIDR(metrics.cash_and_bank_balance)}
               </p>
-              <p className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
-                <span>Saldo likuid riil</span>
-                <span className="text-blue-400 underline">Buka Buku Besar &rarr;</span>
-              </p>
-            </Card>
-
-            {/* Cash Runway */}
-            <Card className="p-4 bg-amber-50/60 border-amber-200">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase text-amber-800">Estimasi Cash Runway</span>
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
-                  <Flame className="h-4 w-4" />
-                </div>
+              <div className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+                <span>
+                  {metrics.cash_runway_months !== null
+                    ? `Runway: ${metrics.cash_runway_months} bln`
+                    : 'Saldo likuid'}
+                </span>
+                <span className="text-blue-400 hover:underline">Detail &rarr;</span>
               </div>
-              <p className="text-xl font-bold font-mono tabular-nums mt-2 text-amber-950">
-                {metrics.cash_runway_months !== null ? `${metrics.cash_runway_months} Bulan` : 'N/A'}
-              </p>
-              <p className="text-[10px] text-amber-700 mt-1">
-                Burn rate: {formatIDR(metrics.estimated_monthly_burn_rate)} / bln
-              </p>
             </Card>
 
-            {/* Pendapatan YTD */}
+            {/* 2. Piutang Usaha (AR) */}
             <Card
-              className="p-4 bg-emerald-50/60 border-emerald-200 cursor-pointer hover:border-emerald-500 transition-colors"
-              onClick={() => navigate('/reports/profit-loss')}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase text-emerald-800">Pendapatan YTD</span>
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
-                  <TrendingUp className="h-4 w-4" />
-                </div>
-              </div>
-              <p className="text-xl font-bold font-mono tabular-nums mt-2 text-emerald-950">
-                {formatIDR(metrics.revenue_ytd)}
-              </p>
-              <p className="text-[10px] text-emerald-700 mt-1 flex items-center justify-between">
-                <span>Laba Bersih: {formatIDR(metrics.net_profit_ytd)}</span>
-                <span className="underline">P&L &rarr;</span>
-              </p>
-            </Card>
-
-            {/* Proyek Aktif */}
-            <Card
-              className="p-4 cursor-pointer hover:border-slate-400 transition-colors"
-              onClick={() => navigate('/projects')}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase text-slate-500">Proyek Aktif</span>
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
-                  <Building2 className="h-4 w-4" />
-                </div>
-              </div>
-              <p className="text-xl font-bold font-mono tabular-nums mt-2 text-slate-900">
-                {metrics.active_projects_count} Proyek
-              </p>
-              <p className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
-                <span>Berjalan di lapangan</span>
-                <span className="text-blue-600 underline">Lihat Proyek &rarr;</span>
-              </p>
-            </Card>
-          </div>
-
-          {/* Row 1b: Owner Cash Flow & Project Spending Visibility */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Arus Kas Masuk (MTD) */}
-            <Card className="p-4 bg-emerald-50/40 border-emerald-100">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase text-slate-500">Kas Masuk Bulan Ini</span>
-                <span className="text-xs font-bold text-emerald-600">IN</span>
-              </div>
-              <p className="text-lg font-bold font-mono tabular-nums mt-2 text-emerald-700">
-                {formatIDR(metrics.cash_in_period)}
-              </p>
-              <p className="text-[10px] text-slate-400 mt-1">Penerimaan kas riil</p>
-            </Card>
-
-            {/* Arus Kas Keluar (MTD) */}
-            <Card className="p-4 bg-rose-50/40 border-rose-100">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase text-slate-500">Kas Keluar Bulan Ini</span>
-                <span className="text-xs font-bold text-rose-600">OUT</span>
-              </div>
-              <p className="text-lg font-bold font-mono tabular-nums mt-2 text-rose-700">
-                {formatIDR(metrics.cash_out_period)}
-              </p>
-              <p className="text-[10px] text-slate-400 mt-1">Pengeluaran kas riil</p>
-            </Card>
-
-            {/* Net Cash Flow */}
-            <Card className="p-4 bg-slate-50 border-slate-200">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase text-slate-500">Net Cash Flow (MTD)</span>
-                <span className="text-xs font-mono font-bold text-slate-600">NET</span>
-              </div>
-              <p className={`text-lg font-bold font-mono tabular-nums mt-2 ${
-                Number(metrics.net_cash_flow) >= 0 ? 'text-emerald-700' : 'text-rose-700'
-              }`}>
-                {formatIDR(metrics.net_cash_flow)}
-              </p>
-              <p className="text-[10px] text-slate-400 mt-1">Surplus / defisit kas berjalan</p>
-            </Card>
-
-            {/* Belanja Proyek (MTD) */}
-            <Card
-              className="p-4 bg-blue-50/40 border-blue-100 cursor-pointer hover:border-blue-400 transition-colors"
-              onClick={() => navigate('/projects')}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase text-slate-500">Belanja Proyek Bulan Ini</span>
-                <span className="text-xs font-bold text-blue-600">PROYEK</span>
-              </div>
-              <p className="text-lg font-bold font-mono tabular-nums mt-2 text-blue-800">
-                {formatIDR(metrics.project_spending)}
-              </p>
-              <p className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
-                <span>Biaya langsung proyek</span>
-                <span className="text-blue-600 underline">Lihat Proyek &rarr;</span>
-              </p>
-            </Card>
-          </div>
-
-          {/* Row 2: Sub-ledgers AR, AP, Review Queue */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            {/* WhatsApp Belum Dianalisis */}
-            <Card
-              className="p-4 cursor-pointer hover:border-emerald-400 transition-colors"
-              onClick={() => navigate('/whatsapp-inbox')}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase text-slate-500">WhatsApp Inbox</span>
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                  <Flame className="h-4 w-4" />
-                </div>
-              </div>
-              <p className="text-lg font-bold font-mono tabular-nums mt-2 text-emerald-700">
-                Inbox Aktif
-              </p>
-              <p className="text-[10px] text-slate-400 mt-1">Buka antrean capture &rarr;</p>
-            </Card>
-
-            {/* Piutang Usaha (AR) */}
-            <Card
-              className="p-4 cursor-pointer hover:border-blue-400 transition-colors"
-              onClick={() => navigate('/reports/ar-aging')}
+              className="p-4 bg-white border border-slate-200 cursor-pointer hover:border-blue-400 transition-colors shadow-xs"
+              onClick={() => navigate('/receivables')}
             >
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-semibold uppercase text-slate-500">Piutang Usaha (AR)</span>
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                  <ArrowDownLeft className="h-4 w-4" />
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-50 text-blue-600">
+                  <ArrowDownLeft className="h-3.5 w-3.5" />
                 </div>
               </div>
-              <p className="text-lg font-bold font-mono tabular-nums mt-2 text-blue-600">
+              <p className="text-lg md:text-xl font-bold font-mono tabular-nums mt-1.5 text-blue-700">
                 {formatIDR(metrics.accounts_receivable_outstanding)}
               </p>
-              <p className="text-[10px] text-slate-400 mt-1">Tagihan belum tertagih &bull; Umur Piutang &rarr;</p>
+              <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between">
+                <span>Tagihan belum tertagih</span>
+                <span className="text-blue-600 hover:underline">Tagihan &rarr;</span>
+              </div>
             </Card>
 
-            {/* Utang Usaha (AP) */}
+            {/* 3. Utang Usaha (AP) */}
             <Card
-              className="p-4 cursor-pointer hover:border-rose-400 transition-colors"
-              onClick={() => navigate('/reports/ap-aging')}
+              className="p-4 bg-white border border-slate-200 cursor-pointer hover:border-rose-400 transition-colors shadow-xs"
+              onClick={() => navigate('/payables')}
             >
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase text-slate-500">Utang Usaha (AP)</span>
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-600">
-                  <ArrowUpRight className="h-4 w-4" />
+                <span className="text-[11px] font-semibold uppercase text-slate-500">Utang Vendor (AP)</span>
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-rose-50 text-rose-600">
+                  <ArrowUpRight className="h-3.5 w-3.5" />
                 </div>
               </div>
-              <p className="text-lg font-bold font-mono tabular-nums mt-2 text-rose-600">
+              <p className="text-lg md:text-xl font-bold font-mono tabular-nums mt-1.5 text-rose-700">
                 {formatIDR(metrics.accounts_payable_outstanding)}
               </p>
-              <p className="text-[10px] text-slate-400 mt-1">Kewajiban tagihan vendor &bull; Umur Utang &rarr;</p>
+              <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between">
+                <span>Kewajiban vendor & subkon</span>
+                <span className="text-rose-600 hover:underline">Tagihan &rarr;</span>
+              </div>
             </Card>
 
-            {/* Antrean Review */}
+            {/* 4. Posisi Bersih (Kas + AR - AP) */}
             <Card
-              className="p-4 cursor-pointer hover:border-amber-400 transition-colors"
-              onClick={() => navigate('/review-queue')}
+              className="p-4 bg-white border border-slate-200 cursor-pointer hover:border-emerald-400 transition-colors shadow-xs"
+              onClick={() => navigate('/reports/balance-sheet')}
             >
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold uppercase text-slate-500">Antrean Review</span>
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-                  <AlertTriangle className="h-4 w-4" />
+                <span className="text-[11px] font-semibold uppercase text-slate-500">Posisi Bersih Likuid</span>
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-emerald-50 text-emerald-600">
+                  <Scale className="h-3.5 w-3.5" />
                 </div>
               </div>
-              <p className="text-lg font-bold font-mono tabular-nums mt-2 text-amber-600">
-                {metrics.review_queue_pending_count} Item Menunggu
+              <p className={`text-lg md:text-xl font-bold font-mono tabular-nums mt-1.5 ${
+                netLiquidityPosition >= 0 ? 'text-emerald-700' : 'text-rose-700'
+              }`}>
+                {formatIDR(netLiquidityPosition)}
               </p>
-              <p className="text-[10px] text-slate-400 mt-1">Butuh tindakan resolusi &rarr;</p>
+              <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between">
+                <span>Likuiditas: Kas + AR - AP</span>
+                <span className="text-emerald-600 hover:underline">Laporan &rarr;</span>
+              </div>
             </Card>
           </div>
+        )}
+      </div>
+
+      {/* SECTION C — GRAFIK (Exactly 3 Real Business Charts) */}
+      <div className="space-y-4">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+          Grafik Keputusan Bisnis
+        </h3>
+
+        {/* Top Charts Row: Arus Kas & Aging */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <CashFlowTrendChart />
+          <AgingComparisonChart />
         </div>
-      )}
 
-      {/* Quick Actions Panel */}
-      <ExecutiveSummaryCard />
-      <FinancialQABox />
+        {/* Bottom Chart: Kinerja Proyek */}
+        <div>
+          <ProjectPerformanceChart />
+        </div>
+      </div>
+
+      {/* SECTION D — QUICK ACTIONS & RECENT ACTIVITY */}
       <QuickActionsPanel reviewCount={metrics?.review_queue_pending_count || 0} />
-
-      {/* Recent Activity */}
       <RecentActivityTable />
+
+      {/* SECTION E — COLLAPSIBLE AI ADVISORY SECTION */}
+      <Card className="p-4 border border-slate-200 bg-slate-50/50">
+        <div
+          onClick={() => setAiSectionOpen(!aiSectionOpen)}
+          className="flex items-center justify-between cursor-pointer select-none"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700">
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <div>
+              <h4 className="text-xs md:text-sm font-bold text-slate-900">
+                Wawasan & Asisten Keuangan AI (Advisory)
+              </h4>
+              <p className="text-[11px] text-slate-500">
+                Ringkasan eksekutif, analisis tren, dan tanya-jawab keuangan otomatis
+              </p>
+            </div>
+          </div>
+          <button
+            className="flex items-center gap-1 text-xs text-indigo-600 font-semibold hover:text-indigo-800"
+            aria-label={aiSectionOpen ? 'Tutup Analisis AI' : 'Buka Analisis AI'}
+          >
+            <span>{aiSectionOpen ? 'Sembunyikan' : 'Buka Analisis'}</span>
+            {aiSectionOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+        </div>
+
+        {aiSectionOpen && (
+          <div className="mt-4 pt-4 border-t border-slate-200 space-y-4">
+            <ExecutiveSummaryCard />
+            <FinancialQABox />
+          </div>
+        )}
+      </Card>
     </div>
   );
 };

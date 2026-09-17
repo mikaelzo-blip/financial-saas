@@ -413,6 +413,11 @@ async def test_slice5_postgresql_ap_settlement_concurrency_and_retry(
             },
             review_flags=[],
             matching_results={},
+            extracted_data={
+                "total_amount": "5000000.00",
+                "currency_code": "IDR",
+                "transfer_details": {"execution_status": "EXECUTED", "execution_evidence": "Transfer berhasil"},
+            },
             created_by=manager_id,
         )
         session.add_all([bill, doc])

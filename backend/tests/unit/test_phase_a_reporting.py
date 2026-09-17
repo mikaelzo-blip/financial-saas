@@ -366,3 +366,242 @@ async def test_phase_a_reporting_tenant_isolation(db_session: AsyncSession):
     )
     assert cb2.total_cash_and_bank == Decimal("0.00")
     assert len(cb2.accounts) == 0
+
+
+@pytest.mark.asyncio
+async def test_phase_a_cash_flow_net_neutral_internal_transfers(db_session: AsyncSession):
+    org = Organization(slug=f"transfers-org-{uuid.uuid4().hex[:6]}", legal_name="PT Transfer Neutrality")
+    db_session.add(org)
+    await db_session.flush()
+
+    # Cash & Bank accounts (1101%)
+    acc_bank_a = ChartOfAccount(
+        organization_id=org.id,
+        account_code="1101.01",
+        account_name="Bank BCA",
+        account_type=AccountType.ASSET,
+        normal_balance=NormalBalance.DEBIT,
+        report_group="Kas & Bank"
+    )
+    acc_bank_b = ChartOfAccount(
+        organization_id=org.id,
+        account_code="1101.02",
+        account_name="Bank Mandiri",
+        account_type=AccountType.ASSET,
+        normal_balance=NormalBalance.DEBIT,
+        report_group="Kas & Bank"
+    )
+    # Non-cash accounts
+    acc_rev = ChartOfAccount(
+        organization_id=org.id,
+        account_code="4101.01",
+        account_name="Pendapatan Jasa",
+        account_type=AccountType.REVENUE,
+        normal_balance=NormalBalance.CREDIT,
+        report_group="Pendapatan"
+    )
+    acc_exp = ChartOfAccount(
+        organization_id=org.id,
+        account_code="5101.01",
+        account_name="Biaya Operasional",
+        account_type=AccountType.EXPENSE,
+        normal_balance=NormalBalance.DEBIT,
+        report_group="Biaya"
+    )
+    acc_bank_fee = ChartOfAccount(
+        organization_id=org.id,
+        account_code="5102.01",
+        account_name="Biaya Administrasi Bank",
+        account_type=AccountType.EXPENSE,
+        normal_balance=NormalBalance.DEBIT,
+        report_group="Biaya"
+    )
+    acc_equity = ChartOfAccount(
+        organization_id=org.id,
+        account_code="3101.01",
+        account_name="Modal Disetor Pemilik",
+        account_type=AccountType.EQUITY,
+        normal_balance=NormalBalance.CREDIT,
+        report_group="Ekuitas"
+    )
+    db_session.add_all([acc_bank_a, acc_bank_b, acc_rev, acc_exp, acc_bank_fee, acc_equity])
+    await db_session.flush()
+
+    # 1. Customer payment (External inflow: non-cash -> cash): +100,000,000
+    trx1 = Transaction(
+        organization_id=org.id,
+        transaction_code="TRX-NN-001",
+        transaction_type=TransactionType.CUSTOMER_PAYMENT,
+        transaction_date=date(2026, 3, 5),
+        amount=Decimal("100000000.00"),
+        description="Penerimaan pembayaran piutang customer",
+        source_channel="WEB",
+        workflow_status=WorkflowStatus.POSTED
+    )
+    db_session.add(trx1)
+    await db_session.flush()
+    je1 = JournalEntry(
+        organization_id=org.id,
+        transaction_id=trx1.id,
+        entry_number="JE-NN-001",
+        posting_date=date(2026, 3, 5),
+        description="Penerimaan pembayaran piutang customer",
+        total_debit=Decimal("100000000.00"),
+        total_credit=Decimal("100000000.00")
+    )
+    db_session.add(je1)
+    await db_session.flush()
+    db_session.add_all([
+        JournalLine(journal_entry_id=je1.id, account_id=acc_bank_a.id, debit_amount=Decimal("100000000.00"), credit_amount=Decimal("0.00"), line_number=1),
+        JournalLine(journal_entry_id=je1.id, account_id=acc_rev.id, debit_amount=Decimal("0.00"), credit_amount=Decimal("100000000.00"), line_number=2)
+    ])
+
+    # 2. Vendor payment (External outflow: cash -> non-cash): -40,000,000
+    trx2 = Transaction(
+        organization_id=org.id,
+        transaction_code="TRX-NN-002",
+        transaction_type=TransactionType.PAY_VENDOR_BILL,
+        transaction_date=date(2026, 3, 10),
+        amount=Decimal("40000000.00"),
+        description="Pembayaran utang vendor",
+        source_channel="WEB",
+        workflow_status=WorkflowStatus.POSTED
+    )
+    db_session.add(trx2)
+    await db_session.flush()
+    je2 = JournalEntry(
+        organization_id=org.id,
+        transaction_id=trx2.id,
+        entry_number="JE-NN-002",
+        posting_date=date(2026, 3, 10),
+        description="Pembayaran utang vendor",
+        total_debit=Decimal("40000000.00"),
+        total_credit=Decimal("40000000.00")
+    )
+    db_session.add(je2)
+    await db_session.flush()
+    db_session.add_all([
+        JournalLine(journal_entry_id=je2.id, account_id=acc_exp.id, debit_amount=Decimal("40000000.00"), credit_amount=Decimal("0.00"), line_number=1),
+        JournalLine(journal_entry_id=je2.id, account_id=acc_bank_a.id, debit_amount=Decimal("0.00"), credit_amount=Decimal("40000000.00"), line_number=2)
+    ])
+
+    # 3. Bank charge (External outflow: cash -> non-cash): -15,000
+    trx3 = Transaction(
+        organization_id=org.id,
+        transaction_code="TRX-NN-003",
+        transaction_type=TransactionType.BANK_CHARGE,
+        transaction_date=date(2026, 3, 12),
+        amount=Decimal("15000.00"),
+        description="Biaya administrasi bank bulanan",
+        source_channel="WEB",
+        workflow_status=WorkflowStatus.POSTED
+    )
+    db_session.add(trx3)
+    await db_session.flush()
+    je3 = JournalEntry(
+        organization_id=org.id,
+        transaction_id=trx3.id,
+        entry_number="JE-NN-003",
+        posting_date=date(2026, 3, 12),
+        description="Biaya administrasi bank bulanan",
+        total_debit=Decimal("15000.00"),
+        total_credit=Decimal("15000.00")
+    )
+    db_session.add(je3)
+    await db_session.flush()
+    db_session.add_all([
+        JournalLine(journal_entry_id=je3.id, account_id=acc_bank_fee.id, debit_amount=Decimal("15000.00"), credit_amount=Decimal("0.00"), line_number=1),
+        JournalLine(journal_entry_id=je3.id, account_id=acc_bank_a.id, debit_amount=Decimal("0.00"), credit_amount=Decimal("15000.00"), line_number=2)
+    ])
+
+    # 4. Owner contribution / loan (External inflow: non-cash -> cash): +50,000,000
+    trx4 = Transaction(
+        organization_id=org.id,
+        transaction_code="TRX-NN-004",
+        transaction_type=TransactionType.OWNER_CONTRIBUTION,
+        transaction_date=date(2026, 3, 15),
+        amount=Decimal("50000000.00"),
+        description="Setoran modal pemilik",
+        source_channel="WEB",
+        workflow_status=WorkflowStatus.POSTED
+    )
+    db_session.add(trx4)
+    await db_session.flush()
+    je4 = JournalEntry(
+        organization_id=org.id,
+        transaction_id=trx4.id,
+        entry_number="JE-NN-004",
+        posting_date=date(2026, 3, 15),
+        description="Setoran modal pemilik",
+        total_debit=Decimal("50000000.00"),
+        total_credit=Decimal("50000000.00")
+    )
+    db_session.add(je4)
+    await db_session.flush()
+    db_session.add_all([
+        JournalLine(journal_entry_id=je4.id, account_id=acc_bank_b.id, debit_amount=Decimal("50000000.00"), credit_amount=Decimal("0.00"), line_number=1),
+        JournalLine(journal_entry_id=je4.id, account_id=acc_equity.id, debit_amount=Decimal("0.00"), credit_amount=Decimal("50000000.00"), line_number=2)
+    ])
+
+    # 5. Internal transfer (Internal transfer: cash -> cash): 25,000,000 Bank A -> Bank B
+    # Must be NET NEUTRAL: must NOT increase cash_in or cash_out at company level
+    trx5 = Transaction(
+        organization_id=org.id,
+        transaction_code="TRX-NN-005",
+        transaction_type=TransactionType.INTERBANK_TRANSFER,
+        transaction_date=date(2026, 3, 20),
+        amount=Decimal("25000000.00"),
+        description="Pemindahan dana dari Bank BCA ke Bank Mandiri",
+        source_channel="WEB",
+        workflow_status=WorkflowStatus.POSTED
+    )
+    db_session.add(trx5)
+    await db_session.flush()
+    je5 = JournalEntry(
+        organization_id=org.id,
+        transaction_id=trx5.id,
+        entry_number="JE-NN-005",
+        posting_date=date(2026, 3, 20),
+        description="Pemindahan dana dari Bank BCA ke Bank Mandiri",
+        total_debit=Decimal("25000000.00"),
+        total_credit=Decimal("25000000.00")
+    )
+    db_session.add(je5)
+    await db_session.flush()
+    db_session.add_all([
+        JournalLine(journal_entry_id=je5.id, account_id=acc_bank_b.id, debit_amount=Decimal("25000000.00"), credit_amount=Decimal("0.00"), line_number=1),
+        JournalLine(journal_entry_id=je5.id, account_id=acc_bank_a.id, debit_amount=Decimal("0.00"), credit_amount=Decimal("25000000.00"), line_number=2)
+    ])
+
+    await db_session.flush()
+
+    # Query cash flow trend for March 2026
+    trend_res = await DashboardService.get_cash_flow_trend(
+        session=db_session,
+        organization_id=org.id,
+        months=1,
+        as_of_date=date(2026, 3, 31)
+    )
+    assert len(trend_res.items) == 1
+    march_item = trend_res.items[0]
+
+    # Cash In: 100,000,000 (customer payment) + 50,000,000 (owner contribution) = 150,000,000
+    # Must NOT include 25,000,000 from internal transfer!
+    assert march_item.cash_in == Decimal("150000000.00")
+
+    # Cash Out: 40,000,000 (vendor bill) + 15,000 (bank fee) = 40,015,000
+    # Must NOT include 25,000,000 from internal transfer!
+    assert march_item.cash_out == Decimal("40015000.00")
+
+    # Net Cash: 150,000,000 - 40,015,000 = 109,985,000
+    assert march_item.net_cash == Decimal("109985000.00")
+
+    # Also verify get_dashboard_summary MTD numbers
+    summary_res = await DashboardService.get_dashboard_summary(
+        session=db_session,
+        organization_id=org.id,
+        as_of_date=date(2026, 3, 31)
+    )
+    assert summary_res.cash_in_period == Decimal("150000000.00")
+    assert summary_res.cash_out_period == Decimal("40015000.00")
+    assert summary_res.net_cash_flow == Decimal("109985000.00")

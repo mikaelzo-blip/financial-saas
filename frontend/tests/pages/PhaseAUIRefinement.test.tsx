@@ -256,7 +256,13 @@ describe('Phase A UI/UX Refinements', () => {
       expect(screen.getByText('Utang Vendor (AP)')).toBeInTheDocument();
       expect(screen.getByText('Posisi Bersih Likuid')).toBeInTheDocument();
 
-      // Section C: 3 Real Business Charts
+      // Section C: Arus Kas Bulan Ini (Monthly Cash Summary)
+      expect(screen.getByText('Arus Kas Bulan Ini')).toBeInTheDocument();
+      expect(screen.getByText('Uang Masuk')).toBeInTheDocument();
+      expect(screen.getByText('Uang Keluar')).toBeInTheDocument();
+      expect(screen.getByText('Arus Kas Bersih')).toBeInTheDocument();
+
+      // Section D: 3 Real Business Charts
       expect(screen.getByText('Arus Kas 6 Bulan Terakhir')).toBeInTheDocument();
       expect(screen.getByText('Kinerja Proyek Aktif')).toBeInTheDocument();
       expect(screen.getByText('Umur Piutang & Utang (Aging)')).toBeInTheDocument();
@@ -315,7 +321,7 @@ describe('Phase A UI/UX Refinements', () => {
 
       expect(await screen.findByText('Semua Tugas Operasional Tuntas')).toBeInTheDocument();
       expect(screen.getByText('Data arus kas belum tersedia')).toBeInTheDocument();
-      expect(screen.getByText('Belum ada proyek aktif')).toBeInTheDocument();
+      expect(screen.getByText('Belum ada proyek aktif dengan data keuangan.')).toBeInTheDocument();
       expect(screen.getByText('Tidak ada piutang atau utang outstanding')).toBeInTheDocument();
     });
   });

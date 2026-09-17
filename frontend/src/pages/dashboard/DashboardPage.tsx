@@ -17,6 +17,7 @@ import { formatIDR } from '../../utils/formatters';
 import { Card } from '../../components/ui/Card';
 import { SkeletonLoader } from '../../components/feedback/SkeletonLoader';
 import { ActionItemsSection } from './components/ActionItemsSection';
+import { MonthlyCashFlowSection } from './components/MonthlyCashFlowSection';
 import { CashFlowTrendChart } from './components/CashFlowTrendChart';
 import { ProjectPerformanceChart } from './components/ProjectPerformanceChart';
 import { AgingComparisonChart } from './components/AgingComparisonChart';
@@ -172,7 +173,10 @@ export const DashboardPage: React.FC = () => {
         )}
       </div>
 
-      {/* SECTION C — GRAFIK (Exactly 3 Real Business Charts) */}
+      {/* SECTION C — ARUS KAS BULAN INI (Compact Cash In, Cash Out, Net) */}
+      <MonthlyCashFlowSection />
+
+      {/* SECTION D — GRAFIK KEPUTUSAN BISNIS (Exactly 3 Real Business Charts) */}
       <div className="space-y-4">
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
           Grafik Keputusan Bisnis

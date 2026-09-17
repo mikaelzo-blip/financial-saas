@@ -3,7 +3,7 @@ import calendar
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional, List
-from sqlalchemy import select, and_, or_, func
+from sqlalchemy import select, and_, or_, func, case
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,25 +57,56 @@ class DashboardService:
         cash_balance = Decimal(str((await session.execute(cash_stmt)).scalar() or "0.00"))
 
         # 1b. Cash In, Cash Out, and Net Cash Flow (MTD / Current Month)
+        # Net-neutral management cash flow aggregation:
+        # Group cash debits and credits per journal entry first.
+        # An internal cash transfer (e.g. Bank A -> Bank B) has net = 0 at company level,
+        # so it does not inflate gross cash-in or gross cash-out.
         start_of_month = date(as_of.year, as_of.month, 1)
-        cash_flow_stmt = select(
-            func.coalesce(func.sum(JournalLine.debit_amount), Decimal("0.00")),
-            func.coalesce(func.sum(JournalLine.credit_amount), Decimal("0.00"))
-        ).join(
-            JournalEntry, JournalLine.journal_entry_id == JournalEntry.id
-        ).join(
-            ChartOfAccount, JournalLine.account_id == ChartOfAccount.id
-        ).where(
-            and_(
-                JournalEntry.organization_id == organization_id,
-                JournalEntry.posting_date >= start_of_month,
-                JournalEntry.posting_date <= as_of,
-                ChartOfAccount.account_code.like("1101%")
+        entry_cash_mtd_subq = (
+            select(
+                JournalEntry.id.label("journal_entry_id"),
+                func.coalesce(
+                    func.sum(JournalLine.debit_amount - JournalLine.credit_amount),
+                    Decimal("0.00"),
+                ).label("entry_net_cash"),
             )
+            .join(JournalLine, JournalLine.journal_entry_id == JournalEntry.id)
+            .join(ChartOfAccount, JournalLine.account_id == ChartOfAccount.id)
+            .where(
+                and_(
+                    JournalEntry.organization_id == organization_id,
+                    JournalEntry.posting_date >= start_of_month,
+                    JournalEntry.posting_date <= as_of,
+                    ChartOfAccount.account_code.like("1101%"),
+                )
+            )
+            .group_by(JournalEntry.id)
+            .subquery()
+        )
+
+        cash_flow_stmt = select(
+            func.coalesce(
+                func.sum(
+                    case(
+                        (entry_cash_mtd_subq.c.entry_net_cash > 0, entry_cash_mtd_subq.c.entry_net_cash),
+                        else_=Decimal("0.00"),
+                    )
+                ),
+                Decimal("0.00"),
+            ).label("cash_in"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (entry_cash_mtd_subq.c.entry_net_cash < 0, -entry_cash_mtd_subq.c.entry_net_cash),
+                        else_=Decimal("0.00"),
+                    )
+                ),
+                Decimal("0.00"),
+            ).label("cash_out"),
         )
         dr_cash, cr_cash = (await session.execute(cash_flow_stmt)).one()
-        cash_in_period = Decimal(str(dr_cash))
-        cash_out_period = Decimal(str(cr_cash))
+        cash_in_period = Decimal(str(dr_cash or "0.00"))
+        cash_out_period = Decimal(str(cr_cash or "0.00"))
         net_cash_flow = cash_in_period - cash_out_period
 
         # 1c. Project Spending (MTD)
@@ -278,24 +309,55 @@ class DashboardService:
             period_str = f"{target_year}-{target_month:02d}"
             label_str = f"{id_months[target_month - 1]} {target_year}"
 
-            stmt = select(
-                func.coalesce(func.sum(JournalLine.debit_amount), Decimal("0.00")),
-                func.coalesce(func.sum(JournalLine.credit_amount), Decimal("0.00"))
-            ).join(
-                JournalEntry, JournalLine.journal_entry_id == JournalEntry.id
-            ).join(
-                ChartOfAccount, JournalLine.account_id == ChartOfAccount.id
-            ).where(
-                and_(
-                    JournalEntry.organization_id == organization_id,
-                    JournalEntry.posting_date >= start_m,
-                    JournalEntry.posting_date <= end_m,
-                    ChartOfAccount.account_code.like("1101%")
+            # Net-neutral management cash flow aggregation:
+            # Group cash debits and credits per journal entry first.
+            # An internal cash transfer (e.g. Bank A -> Bank B) has net = 0 at company level,
+            # so it does not inflate gross cash-in or gross cash-out.
+            entry_cash_subq = (
+                select(
+                    JournalEntry.id.label("journal_entry_id"),
+                    func.coalesce(
+                        func.sum(JournalLine.debit_amount - JournalLine.credit_amount),
+                        Decimal("0.00"),
+                    ).label("entry_net_cash"),
                 )
+                .join(JournalLine, JournalLine.journal_entry_id == JournalEntry.id)
+                .join(ChartOfAccount, JournalLine.account_id == ChartOfAccount.id)
+                .where(
+                    and_(
+                        JournalEntry.organization_id == organization_id,
+                        JournalEntry.posting_date >= start_m,
+                        JournalEntry.posting_date <= end_m,
+                        ChartOfAccount.account_code.like("1101%"),
+                    )
+                )
+                .group_by(JournalEntry.id)
+                .subquery()
             )
-            dr, cr = (await session.execute(stmt)).one()
-            c_in = Decimal(str(dr))
-            c_out = Decimal(str(cr))
+
+            flow_stmt = select(
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (entry_cash_subq.c.entry_net_cash > 0, entry_cash_subq.c.entry_net_cash),
+                            else_=Decimal("0.00"),
+                        )
+                    ),
+                    Decimal("0.00"),
+                ).label("cash_in"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (entry_cash_subq.c.entry_net_cash < 0, -entry_cash_subq.c.entry_net_cash),
+                            else_=Decimal("0.00"),
+                        )
+                    ),
+                    Decimal("0.00"),
+                ).label("cash_out"),
+            )
+            dr, cr = (await session.execute(flow_stmt)).one()
+            c_in = Decimal(str(dr or "0.00"))
+            c_out = Decimal(str(cr or "0.00"))
             items.append(
                 MonthlyCashFlowTrendItem(
                     period=period_str,

@@ -51,6 +51,8 @@ export const ProjectPerformanceChart: React.FC = () => {
     progressPct: Number(p.financial_progress_percentage) || 0,
   }));
 
+  const chartHeight = Math.max(180, Math.min(chartData.length * 48 + 48, 320));
+
   return (
     <Card className="p-5 flex flex-col justify-between">
       <div className="flex items-center justify-between mb-4">
@@ -66,12 +68,12 @@ export const ProjectPerformanceChart: React.FC = () => {
       </div>
 
       {isLoading ? (
-        <div className="h-64 flex flex-col justify-center">
-          <SkeletonLoader count={4} className="h-10 w-full mb-2" />
+        <div className="h-44 flex flex-col justify-center">
+          <SkeletonLoader count={3} className="h-8 w-full mb-2" />
         </div>
       ) : isError ? (
-        <div className="h-64 flex flex-col items-center justify-center text-center p-4">
-          <AlertCircle className="h-8 w-8 text-rose-500 mb-2" />
+        <div className="h-44 flex flex-col items-center justify-center text-center p-4 bg-rose-50/30 rounded-lg border border-rose-100">
+          <AlertCircle className="h-6 w-6 text-rose-500 mb-1.5" />
           <p className="text-xs font-semibold text-slate-700">Gagal memuat data kinerja proyek</p>
           <button
             onClick={() => refetch()}
@@ -81,14 +83,14 @@ export const ProjectPerformanceChart: React.FC = () => {
           </button>
         </div>
       ) : !hasData ? (
-        <div className="h-64 flex flex-col items-center justify-center text-center p-4 bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
-          <p className="text-xs font-medium text-slate-600">Belum ada proyek aktif</p>
+        <div className="h-44 flex flex-col items-center justify-center text-center p-4 bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
+          <p className="text-xs font-medium text-slate-600">Belum ada proyek aktif dengan data keuangan.</p>
           <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
             Data perbandingan kontrak dan biaya akan tampil saat proyek aktif memiliki pembukuan.
           </p>
         </div>
       ) : (
-        <div className="h-64 w-full" data-testid="project-performance-chart-container">
+        <div style={{ height: `${chartHeight}px` }} className="w-full" data-testid="project-performance-chart-container">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               layout="vertical"

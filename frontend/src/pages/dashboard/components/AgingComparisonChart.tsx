@@ -95,12 +95,12 @@ export const AgingComparisonChart: React.FC = () => {
       </div>
 
       {isLoading ? (
-        <div className="h-64 flex flex-col justify-center">
-          <SkeletonLoader count={4} className="h-10 w-full mb-2" />
+        <div className="h-56 flex flex-col justify-center">
+          <SkeletonLoader count={3} className="h-8 w-full mb-2" />
         </div>
       ) : isError ? (
-        <div className="h-64 flex flex-col items-center justify-center text-center p-4">
-          <AlertCircle className="h-8 w-8 text-rose-500 mb-2" />
+        <div className="h-56 flex flex-col items-center justify-center text-center p-4 bg-rose-50/30 rounded-lg border border-rose-100">
+          <AlertCircle className="h-6 w-6 text-rose-500 mb-1.5" />
           <p className="text-xs font-semibold text-slate-700">Gagal memuat umur piutang & utang</p>
           <button
             onClick={() => {
@@ -113,14 +113,14 @@ export const AgingComparisonChart: React.FC = () => {
           </button>
         </div>
       ) : !hasData ? (
-        <div className="h-64 flex flex-col items-center justify-center text-center p-4 bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
+        <div className="h-56 flex flex-col items-center justify-center text-center p-4 bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
           <p className="text-xs font-medium text-slate-600">Tidak ada piutang atau utang outstanding</p>
           <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
             Seluruh invoice pelanggan dan bill vendor saat ini sudah lunas atau belum ada tagihan berjalan.
           </p>
         </div>
       ) : (
-        <div className="h-64 w-full" data-testid="aging-comparison-chart-container">
+        <div className="h-56 w-full" data-testid="aging-comparison-chart-container">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />

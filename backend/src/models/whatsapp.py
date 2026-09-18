@@ -33,6 +33,36 @@ class WhatsAppSenderMapping(Base):
     )
 
 
+class WhatsAppDocumentSession(Base):
+    __tablename__ = "whatsapp_document_sessions"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "session_code", name="uq_wa_session_org_code"),
+        Index("idx_wa_session_phone_status", "organization_id", "phone_number", "status"),
+        Index("idx_wa_session_window", "status", "window_expires_at"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    phone_number: Mapped[str] = mapped_column(String(32), nullable=False)
+    session_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="OPEN", server_default="OPEN", nullable=False)
+
+    first_message_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_message_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    window_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    hard_max_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    ack_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ack_wamid: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+    document_ids: Mapped[list] = mapped_column(JSON().with_variant(JSONB(), "postgresql"), default=list, nullable=False)
+    message_wamids: Mapped[list] = mapped_column(JSON().with_variant(JSONB(), "postgresql"), default=list, nullable=False)
+    captions: Mapped[list] = mapped_column(JSON().with_variant(JSONB(), "postgresql"), default=list, nullable=False)
+    session_metadata: Mapped[dict] = mapped_column(JSON().with_variant(JSONB(), "postgresql"), default=dict, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
 class WhatsAppMessageLog(Base):
     __tablename__ = "whatsapp_message_logs"
     __table_args__ = (
@@ -52,6 +82,9 @@ class WhatsAppMessageLog(Base):
     media_size_bytes: Mapped[int | None] = mapped_column(BigInteger)
     hermes_submission_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("hermes_submissions.id"))
     document_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("documents.id"))
+    session_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("whatsapp_document_sessions.id", ondelete="SET NULL"), nullable=True)
+    provider_timestamp: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    media_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     delivery_status: Mapped[str] = mapped_column(String(32), nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

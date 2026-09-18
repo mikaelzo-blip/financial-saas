@@ -38,7 +38,7 @@ from src.models.journal import JournalEntry, JournalLine
 from src.models.payable import VendorBill, VendorPaymentAllocation, VendorAdvance
 from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation, CustomerRetentionRelease
 from src.models.hermes import HermesSubmission
-from src.models.whatsapp import WhatsAppSenderMapping, WhatsAppMessageLog, WhatsAppClarificationSession
+from src.models.whatsapp import WhatsAppSenderMapping, WhatsAppDocumentSession, WhatsAppMessageLog, WhatsAppClarificationSession
 from src.models.ai_insight import AIInsightLog, AIConversationSession, AIConversationMessage
 from src.models.accounting_period import AccountingPeriod
 from src.models.background_job import BackgroundJob
@@ -100,6 +100,7 @@ __all__ = [
     "CustomerRetentionRelease",
     "HermesSubmission",
     "WhatsAppSenderMapping",
+    "WhatsAppDocumentSession",
     "WhatsAppMessageLog",
     "WhatsAppClarificationSession",
     "AIInsightLog",

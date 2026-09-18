@@ -1,7 +1,7 @@
 """SaaS-owned state endpoints. Only this boundary accesses channel persistence."""
 import uuid
 from decimal import Decimal, InvalidOperation
-from typing import Literal
+from typing import Literal, Optional, List, Dict, Any
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.whatsapp_auth import require_adapter, require_whatsapp_machine, require_whatsapp_admin
 from src.core.database import get_db
 from src.models.user import User
-from src.models.whatsapp import WhatsAppSenderMapping, WhatsAppMessageLog, WhatsAppClarificationSession
+from src.models.whatsapp import WhatsAppSenderMapping, WhatsAppMessageLog, WhatsAppClarificationSession, WhatsAppDocumentSession
 from src.models.document import Document, DocumentCorrection
 from src.models.project import Project
 from src.models.enums import DocumentProcessingStatus, ProjectStatus, CostCategory
@@ -140,9 +140,18 @@ async def finish_rejection(data: RejectionFinish, db: AsyncSession = Depends(get
 async def claim_message(event: InboundMessage, org: uuid.UUID = Depends(require_whatsapp_machine), db: AsyncSession = Depends(get_db)):
     if not await active_sender(db, event.sender_phone, org):
         raise HTTPException(403, "Sender unavailable")
-    log = WhatsAppMessageLog(organization_id=org, wamid=event.wamid, direction="INBOUND", phone_number=event.sender_phone,
-        message_type=event.message_type, raw_text="".join(c for c in event.text if c.isprintable() or c == "\n"),
-        media_mime_type=event.mime_type, delivery_status="PROCESSING")
+    log = WhatsAppMessageLog(
+        organization_id=org,
+        wamid=event.wamid,
+        direction="INBOUND",
+        phone_number=event.sender_phone,
+        message_type=event.message_type,
+        raw_text="".join(c for c in event.text if c.isprintable() or c == "\n"),
+        media_mime_type=event.mime_type,
+        delivery_status="PROCESSING",
+        provider_timestamp=event.timestamp,
+        media_id=event.media_id,
+    )
     try:
         async with db.begin_nested():
             db.add(log)
@@ -162,6 +171,10 @@ class LogUpdate(PhoneRequest):
     outbound_text: str | None = Field(default=None, max_length=4096)
     outbound_status: Literal["DELIVERED", "FAILED"] = "DELIVERED"
     media_size_bytes: int | None = Field(default=None, ge=0, le=25 * 1024 * 1024)
+    error_message: str | None = Field(default=None, max_length=4096)
+    secondary_outbound_wamid: str | None = Field(default=None, max_length=128)
+    secondary_outbound_text: str | None = Field(default=None, max_length=4096)
+    secondary_outbound_status: Literal["DELIVERED", "FAILED"] = "DELIVERED"
 
 
 @router.post(PREFIX + "/messages/finish")
@@ -176,11 +189,39 @@ async def finish_message(data: LogUpdate, org: uuid.UUID = Depends(require_whats
             raise HTTPException(404, "Reference not found")
     log.delivery_status, log.document_id = data.delivery_status, data.document_id
     log.hermes_submission_id, log.media_size_bytes = data.hermes_submission_id, data.media_size_bytes
+    if data.error_message:
+        log.error_message = data.error_message
     if data.outbound_wamid:
         existing = await db.scalar(select(WhatsAppMessageLog.id).where(WhatsAppMessageLog.organization_id == org, WhatsAppMessageLog.wamid == data.outbound_wamid))
         if not existing:
             db.add(WhatsAppMessageLog(organization_id=org, wamid=data.outbound_wamid, direction="OUTBOUND", phone_number=data.phone_number,
                 message_type="TEXT", raw_text=data.outbound_text, delivery_status=data.outbound_status, document_id=data.document_id))
+    if data.secondary_outbound_wamid:
+        existing_sec = await db.scalar(select(WhatsAppMessageLog.id).where(WhatsAppMessageLog.organization_id == org, WhatsAppMessageLog.wamid == data.secondary_outbound_wamid))
+        if not existing_sec:
+            db.add(WhatsAppMessageLog(organization_id=org, wamid=data.secondary_outbound_wamid, direction="OUTBOUND", phone_number=data.phone_number,
+                message_type="TEXT", raw_text=data.secondary_outbound_text, delivery_status=data.secondary_outbound_status, document_id=data.document_id))
+
+    # Candidate Document Session grouping & persistence (Sections 2, 3, 4, 5)
+    try:
+        from src.services.documents.whatsapp_session_service import WhatsAppSessionService
+        msg_ts = log.provider_timestamp or log.created_at
+        sess, _ = await WhatsAppSessionService.record_inbound_message(
+            db=db,
+            organization_id=org,
+            phone_number=data.phone_number,
+            wamid=data.wamid,
+            message_type=log.message_type,
+            text=log.raw_text,
+            provider_timestamp=msg_ts,
+            document_id=data.document_id,
+            media_id=log.media_id,
+        )
+        if sess:
+            log.session_id = sess.id
+    except Exception:
+        pass
+
     await db.commit()
     return {"status": "success"}
 
@@ -328,71 +369,125 @@ async def open_clarification(data: PromptRequest, org: uuid.UUID = Depends(requi
 
 @router.post(PREFIX + "/notifications")
 async def pending_notifications(org: uuid.UUID = Depends(require_whatsapp_machine), db: AsyncSession = Depends(get_db)):
+    """Keep WhatsApp document intake silent after its one acknowledgement per session.
+
+    Section 10, 11, 12:
+    - Exactly one ACK ("Oke, saya catat.") per finalized candidate session.
+    - Zero retry or failure spam: OCR, matching, and queue failures remain silent in chat.
+    - Failures remain visible in the web SaaS.
+    """
     await expire_sessions(db, org)
-    logs = (await db.scalars(select(WhatsAppMessageLog).where(WhatsAppMessageLog.organization_id == org,
-        WhatsAppMessageLog.direction == "INBOUND", WhatsAppMessageLog.document_id.is_not(None)))).all()
+    from src.services.documents.whatsapp_session_service import WhatsAppSessionService
+    await WhatsAppSessionService.finalize_expired_sessions(db, org)
+
     notices = []
-    for log in logs:
-        sender = await active_sender(db, log.phone_number, org)
+    sessions_to_ack = await WhatsAppSessionService.get_sessions_needing_ack(db, org)
+    for sess in sessions_to_ack:
+        sender = await active_sender(db, sess.phone_number, org)
         if not sender:
             continue
-        doc = await db.scalar(select(Document).where(Document.organization_id == org, Document.id == log.document_id))
-        if not doc or doc.processing_status in {DocumentProcessingStatus.UPLOADED, DocumentProcessingStatus.HASHED, DocumentProcessingStatus.EXTRACTING, DocumentProcessingStatus.MATCHING}:
-            continue
-        key = "result-" + str(doc.id)
-        buttons = []
-        body = f"[{doc.document_code}] Hasil ekstraksi: {doc.processing_status.value}. Review dan persetujuan melalui SaaS."
-        session = await db.scalar(select(WhatsAppClarificationSession).where(WhatsAppClarificationSession.organization_id == org,
-            WhatsAppClarificationSession.document_id == doc.id, WhatsAppClarificationSession.phone_number == sender.phone_number,
-            WhatsAppClarificationSession.status == "PENDING"))
-        if doc.processing_status == DocumentProcessingStatus.REVIEW_REQUIRED and {"PROJECT_UNKNOWN", "PROJECT_AMBIGUOUS"}.intersection(doc.review_flags):
-            # Serialize session creation per sender; never associate numeric replies to two documents.
-            await db.scalar(select(WhatsAppSenderMapping).where(WhatsAppSenderMapping.id == sender.id).with_for_update())
-            previous = await db.scalar(select(WhatsAppClarificationSession.id).where(WhatsAppClarificationSession.organization_id == org,
-                WhatsAppClarificationSession.document_id == doc.id, WhatsAppClarificationSession.phone_number == sender.phone_number))
-            if previous and not session:
+        key = f"session-ack-{sess.id}"
+        existing = await db.scalar(select(WhatsAppMessageLog).where(
+            WhatsAppMessageLog.organization_id == org,
+            WhatsAppMessageLog.wamid == key,
+            WhatsAppMessageLog.direction == "OUTBOUND",
+        ))
+        if existing:
+            if existing.delivery_status == "DELIVERED":
                 continue
-            if not session:
-                active = await db.scalar(select(WhatsAppClarificationSession.id).where(WhatsAppClarificationSession.organization_id == org,
-                    WhatsAppClarificationSession.phone_number == sender.phone_number, WhatsAppClarificationSession.status == "PENDING"))
-                if active:
+            if existing.delivery_status == "PROCESSING":
+                log_time = existing.created_at
+                if log_time.tzinfo is None:
+                    log_time = log_time.replace(tzinfo=timezone.utc)
+                if (datetime.now(timezone.utc) - log_time).total_seconds() < 30.0:
                     continue
-                projects = (await db.scalars(select(Project).where(Project.organization_id == org, Project.project_status == ProjectStatus.ACTIVE).order_by(Project.project_code).limit(3))).all()
-                if projects:
-                    session = WhatsAppClarificationSession(organization_id=org, phone_number=sender.phone_number, document_id=doc.id,
-                        question_type="SELECT_PROJECT", options_payload={str(i): str(project.id) for i, project in enumerate(projects, 1)})
-                    db.add(session)
-                    await db.flush()
-        if session:
-            key = "prompt-" + str(session.id)
-            body = f"[{doc.document_code}] Pilih jawaban klarifikasi {session.question_type} (bukan persetujuan):"
-            for choice, value in session.options_payload.items():
-                label = value
-                if session.question_type == "SELECT_PROJECT":
-                    project = await db.scalar(select(Project).where(Project.id == uuid.UUID(value), Project.organization_id == org))
-                    if not project:
-                        continue
-                    label = project.project_name
-                body += f"\n{choice}: {label}"
-                buttons.append({"id": str(session.id) + ":" + choice, "title": choice})
-            if len(buttons) > 3:
-                buttons = []  # Numeric list for providers with three-button limits.
-        if not await db.scalar(select(WhatsAppMessageLog.id).where(WhatsAppMessageLog.organization_id == org, WhatsAppMessageLog.wamid == key)):
-            notices.append({"key": key, "phone_number": sender.phone_number, "document_id": str(doc.id), "body": body, "buttons": buttons})
+        first_doc_id = sess.document_ids[0] if sess.document_ids else None
+        notices.append({
+            "key": key,
+            "phone_number": sess.phone_number,
+            "document_id": first_doc_id,
+            "body": "Oke, saya catat.",
+            "buttons": [],
+        })
+
     await db.commit()
     return {"notices": notices}
 
 
 class NoticeClaim(PhoneRequest):
-    key: str = Field(pattern=r"^(prompt|result)-[0-9a-f-]{36}$")
-    document_id: uuid.UUID
+    key: str = Field(pattern=r"^(prompt|result|session-ack)-[0-9a-f-]{36}$")
+    document_id: uuid.UUID | None = None
     body: str = Field(max_length=4096)
 
 
 @router.post(PREFIX + "/notifications/claim")
 async def claim_notice(data: NoticeClaim, org: uuid.UUID = Depends(require_whatsapp_machine), db: AsyncSession = Depends(get_db)):
-    if not await active_sender(db, data.phone_number, org) or not await db.scalar(select(Document.id).where(Document.organization_id == org, Document.id == data.document_id)):
+    if not await active_sender(db, data.phone_number, org):
         raise HTTPException(404, "Notification unavailable")
+    if data.document_id and not await db.scalar(select(Document.id).where(Document.organization_id == org, Document.id == data.document_id)):
+        raise HTTPException(404, "Notification unavailable")
+
+    now = datetime.now(timezone.utc)
+
+    if data.key.startswith("session-ack-"):
+        from src.services.documents.whatsapp_session_service import WhatsAppSessionService
+        session_id = uuid.UUID(data.key.replace("session-ack-", ""))
+        sess = await db.scalar(
+            select(WhatsAppDocumentSession).where(
+                WhatsAppDocumentSession.id == session_id,
+                WhatsAppDocumentSession.organization_id == org,
+            ).with_for_update()
+        )
+        if not sess:
+            raise HTTPException(404, "Session not found")
+        if sess.ack_sent_at is not None:
+            return {"claimed": False}
+
+        existing_log = await db.scalar(
+            select(WhatsAppMessageLog).where(
+                WhatsAppMessageLog.organization_id == org,
+                WhatsAppMessageLog.wamid == data.key,
+                WhatsAppMessageLog.direction == "OUTBOUND",
+            ).with_for_update()
+        )
+        if existing_log:
+            if existing_log.delivery_status == "DELIVERED":
+                sess.ack_sent_at = existing_log.created_at
+                sess.ack_wamid = data.key
+                meta = dict(sess.session_metadata or {})
+                meta["ack_status"] = "SENT_CONFIRMED"
+                sess.session_metadata = meta
+                await db.commit()
+                return {"claimed": False}
+            elif existing_log.delivery_status == "PROCESSING":
+                log_time = existing_log.created_at
+                if log_time.tzinfo is None:
+                    log_time = log_time.replace(tzinfo=timezone.utc)
+                if (now - log_time).total_seconds() < 30.0:
+                    return {"claimed": False}
+                existing_log.created_at = now
+                existing_log.delivery_status = "PROCESSING"
+                existing_log.error_message = None
+            else:
+                existing_log.created_at = now
+                existing_log.delivery_status = "PROCESSING"
+                existing_log.error_message = None
+        else:
+            db.add(WhatsAppMessageLog(
+                organization_id=org,
+                wamid=data.key,
+                direction="OUTBOUND",
+                phone_number=data.phone_number,
+                message_type="TEXT",
+                raw_text=data.body,
+                delivery_status="PROCESSING",
+                document_id=data.document_id,
+            ))
+
+        await WhatsAppSessionService.mark_session_ack_claimed(db, org, session_id, data.key, claimed_at=now)
+        await db.commit()
+        return {"claimed": True}
+
     try:
         async with db.begin_nested():
             db.add(WhatsAppMessageLog(organization_id=org, wamid=data.key, direction="OUTBOUND", phone_number=data.phone_number,
@@ -400,21 +495,101 @@ async def claim_notice(data: NoticeClaim, org: uuid.UUID = Depends(require_whats
             await db.flush()
     except IntegrityError:
         return {"claimed": False}
+
     await db.commit()
     return {"claimed": True}
+
+
+class FinalizeSessionsRequest(BaseModel):
+    as_of: Optional[datetime] = None
+
+
+@router.post(PREFIX + "/sessions/finalize")
+async def finalize_sessions_endpoint(
+    data: Optional[FinalizeSessionsRequest] = None,
+    org: uuid.UUID = Depends(require_whatsapp_machine),
+    db: AsyncSession = Depends(get_db),
+):
+    from src.services.documents.whatsapp_session_service import WhatsAppSessionService
+    as_of = data.as_of if data else None
+    finalized = await WhatsAppSessionService.finalize_expired_sessions(db, org, as_of=as_of)
+    await db.commit()
+    return {"finalized_count": len(finalized), "session_ids": [str(s.id) for s in finalized]}
+
+
+class ReconstructBacklogRequest(BaseModel):
+    messages: List[Dict[str, Any]]
+    as_of: Optional[datetime] = None
+
+
+@router.post(PREFIX + "/sessions/reconstruct_backlog")
+async def reconstruct_backlog_endpoint(
+    data: ReconstructBacklogRequest,
+    org: uuid.UUID = Depends(require_whatsapp_machine),
+    db: AsyncSession = Depends(get_db),
+):
+    from src.services.documents.whatsapp_session_service import WhatsAppSessionService
+    sessions = await WhatsAppSessionService.reconstruct_backlog(
+        db=db,
+        organization_id=org,
+        messages=data.messages,
+        as_of=data.as_of,
+    )
+    await db.commit()
+    return {
+        "reconstructed_session_count": len(sessions),
+        "sessions": [
+            {
+                "session_id": str(s.id),
+                "session_code": s.session_code,
+                "phone_number": s.phone_number,
+                "document_count": len(s.document_ids),
+                "message_count": len(s.message_wamids),
+                "first_message_at": s.first_message_at.isoformat(),
+                "last_message_at": s.last_message_at.isoformat(),
+            }
+            for s in sessions
+        ],
+    }
 
 
 class NoticeFinish(BaseModel):
     model_config = ConfigDict(extra="forbid")
     key: str
     delivered: bool
+    outbound_wamid: Optional[str] = None
+    error_message: Optional[str] = None
 
 
 @router.post(PREFIX + "/notifications/finish")
 async def finish_notice(data: NoticeFinish, org: uuid.UUID = Depends(require_whatsapp_machine), db: AsyncSession = Depends(get_db)):
-    log = await db.scalar(select(WhatsAppMessageLog).where(WhatsAppMessageLog.organization_id == org, WhatsAppMessageLog.wamid == data.key, WhatsAppMessageLog.direction == "OUTBOUND"))
+    log = await db.scalar(select(WhatsAppMessageLog).where(
+        WhatsAppMessageLog.organization_id == org,
+        WhatsAppMessageLog.wamid == data.key,
+        WhatsAppMessageLog.direction == "OUTBOUND",
+    ).with_for_update())
     if not log:
         raise HTTPException(404, "Notification not found")
-    log.delivery_status = "DELIVERED" if data.delivered else "FAILED"
+
+    now = datetime.now(timezone.utc)
+    if data.delivered:
+        log.delivery_status = "DELIVERED"
+        if data.key.startswith("session-ack-"):
+            from src.services.documents.whatsapp_session_service import WhatsAppSessionService
+            session_id = uuid.UUID(data.key.replace("session-ack-", ""))
+            await WhatsAppSessionService.mark_session_ack_confirmed(
+                db, org, session_id, wamid=data.outbound_wamid or data.key, sent_at=now
+            )
+    else:
+        log.delivery_status = "FAILED"
+        if data.error_message:
+            log.error_message = data.error_message
+        if data.key.startswith("session-ack-"):
+            from src.services.documents.whatsapp_session_service import WhatsAppSessionService
+            session_id = uuid.UUID(data.key.replace("session-ack-", ""))
+            await WhatsAppSessionService.mark_session_ack_failed(
+                db, org, session_id, error_message=data.error_message
+            )
+
     await db.commit()
     return {"status": "success"}

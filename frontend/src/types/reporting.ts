@@ -373,5 +373,73 @@ export interface ConsultantReconciliationReport {
   summary: ConsultantReconciliationSummary;
 }
 
+export interface MonthlyCashFlowTrendItem {
+  period: string;
+  month_label: string;
+  cash_in: number | string;
+  cash_out: number | string;
+  net_cash: number | string;
+}
 
+export interface CashFlowTrendResponse {
+  items: MonthlyCashFlowTrendItem[];
+}
+
+export interface ProjectPerformanceItem {
+  project_id: string;
+  project_code: string;
+  project_name: string;
+  customer_name?: string | null;
+  contract_value: number | string;
+  actual_cost: number | string;
+  invoiced_amount: number | string;
+  cash_received: number | string;
+  gross_profit: number | string;
+  gross_margin_percentage: number | string;
+  financial_progress_percentage: number | string;
+  status: string;
+  health_status: 'NORMAL' | 'WARNING' | 'CRITICAL';
+}
+
+export interface ProjectPerformanceResponse {
+  items: ProjectPerformanceItem[];
+  total_active_projects: number;
+  total_contract_value: number | string;
+  total_actual_cost: number | string;
+  average_margin_percentage: number | string;
+}
+
+export interface DashboardActionItemsResponse {
+  documents_requires_review: number;
+  documents_failed: number;
+  documents_ready_to_post: number;
+  unmatched_bank_movements: number;
+  overdue_ar_count: number;
+  overdue_ar_amount: number | string;
+  overdue_ap_count: number | string;
+  overdue_ap_amount: number | string;
+  projects_with_warning: number;
+  total_action_count: number;
+}
+
+export interface CashBankAccountItem {
+  id: string;
+  name: string;
+  bank_name?: string | null;
+  account_number?: string | null;
+  account_type: 'BANK' | 'KAS';
+  coa_account_code: string;
+  balance: number | string;
+  is_active: boolean;
+  last_movement_date?: string | null;
+}
+
+export interface CashBankOverviewResponse {
+  total_cash_and_bank: number | string;
+  total_bank: number | string;
+  total_cash: number | string;
+  unmatched_movements_count: number;
+  unmatched_amount: number | string;
+  accounts: CashBankAccountItem[];
+}
 

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.api.deps import get_current_org_id
+from src.models.enums import ProjectStatus
 from src.schemas.reporting import (
     IntegrityReportResponse,
     TrialBalanceResponse,
@@ -21,7 +22,11 @@ from src.schemas.reporting import (
     BudgetVsActualReportResponse,
     DashboardSummaryResponse,
     EquityChangesReportResponse,
-    CALKReportResponse
+    CALKReportResponse,
+    CashFlowTrendResponse,
+    ProjectPerformanceResponse,
+    DashboardActionItemsResponse,
+    CashBankOverviewResponse,
 )
 from src.services.reporting.integrity_service import IntegrityService
 from src.services.reporting.trial_balance_service import TrialBalanceService
@@ -184,6 +189,75 @@ async def get_dashboard_summary(
         organization_id=org_id,
         as_of_date=as_of_date
     )
+
+
+@router.get("/dashboard/cash-flow-trend", response_model=CashFlowTrendResponse)
+async def get_cash_flow_trend(
+    months: int = Query(6, ge=1, le=24, description="Number of months to trend"),
+    as_of_date: Optional[date] = None,
+    org_id: uuid.UUID = Depends(get_current_org_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Generate N-month historical cash flow trend (Inflow, Outflow, Net) based on posted journal entries.
+    """
+    return await DashboardService.get_cash_flow_trend(
+        session=db,
+        organization_id=org_id,
+        months=months,
+        as_of_date=as_of_date
+    )
+
+
+@router.get("/dashboard/project-performance", response_model=ProjectPerformanceResponse)
+async def get_project_performance(
+    status: Optional[ProjectStatus] = Query(None, description="Filter by project status"),
+    limit: Optional[int] = Query(None, ge=1, le=100, description="Limit count of projects returned"),
+    org_id: uuid.UUID = Depends(get_current_org_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Generate project contract vs actual cost performance overview.
+    """
+    return await DashboardService.get_project_performance(
+        session=db,
+        organization_id=org_id,
+        status_filter=status,
+        limit=limit
+    )
+
+
+@router.get("/dashboard/action-items", response_model=DashboardActionItemsResponse)
+async def get_dashboard_action_items(
+    as_of_date: Optional[date] = None,
+    org_id: uuid.UUID = Depends(get_current_org_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Generate actionable pending operations items requiring human attention.
+    """
+    return await DashboardService.get_action_items(
+        session=db,
+        organization_id=org_id,
+        as_of_date=as_of_date
+    )
+
+
+@router.get("/cash-bank-overview", response_model=CashBankOverviewResponse)
+async def get_cash_bank_overview(
+    as_of_date: Optional[date] = None,
+    org_id: uuid.UUID = Depends(get_current_org_id),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Generate operational cash and bank accounts overview with live balances and last movements.
+    """
+    return await DashboardService.get_cash_bank_overview(
+        session=db,
+        organization_id=org_id,
+        as_of_date=as_of_date
+    )
+
 
 
 @router.get("/cash-flow", response_model=CashFlowReportResponse)

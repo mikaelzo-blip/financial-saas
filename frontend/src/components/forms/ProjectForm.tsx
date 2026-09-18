@@ -4,6 +4,7 @@ import { masterApi } from '../../api/master';
 import { ProjectCreateInput } from '../../api/projects';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { CurrencyInput } from '../ui/CurrencyInput';
 import { Select } from '../ui/Select';
 
 export interface ProjectFormProps {
@@ -97,12 +98,11 @@ export const ProjectForm: React.FC<ProjectFormProps> = ({
         </div>
 
         <div>
-          <Input
+          <CurrencyInput
             label="Nilai Kontrak Awal (Rp) *"
-            type="number"
             value={contractValue}
             onChange={(e) => setContractValue(e.target.value)}
-            placeholder="Contoh: 500000000"
+            placeholder="Contoh: 500.000.000"
             error={errors.contractValue}
             required
           />

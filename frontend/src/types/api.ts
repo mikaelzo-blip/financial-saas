@@ -345,6 +345,7 @@ export interface DocumentResponse {
   failure_code?: string;
   failure_message?: string;
   corrections?: DocumentCorrectionResponse[];
+  source_metadata?: Record<string, any>;
 }
 
 export interface DocumentPostingResponse {

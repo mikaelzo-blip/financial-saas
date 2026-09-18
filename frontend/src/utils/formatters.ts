@@ -73,3 +73,26 @@ export function formatDateTime(dateString: string | undefined | null): string {
     return dateString;
   }
 }
+
+export function formatFailureReason(code?: string | null, message?: string | null): string {
+  if (!code && !message) return '';
+  switch (code) {
+    case 'DOWNLOAD_FAILED':
+      return 'Gagal mengunduh file dari WhatsApp';
+    case 'OCR_CORRUPT_PAYLOAD':
+    case 'CorruptedPayload':
+      return 'File dokumen rusak atau tidak terbaca';
+    case 'UNSUPPORTED_MEDIA':
+      return 'Format file tidak didukung';
+    case 'MEDIA_TOO_LARGE':
+      return 'Ukuran file melebihi batas';
+    case 'MIME_MISMATCH':
+      return 'Format file tidak sesuai ekstensi';
+    case 'INVALID_MEDIA_ID':
+      return 'File WhatsApp sudah kedaluwarsa';
+    case 'FileNotFound':
+      return 'File dokumen tidak ditemukan';
+    default:
+      return message || code || 'Gagal diproses';
+  }
+}

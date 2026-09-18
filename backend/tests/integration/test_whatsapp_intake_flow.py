@@ -3,6 +3,7 @@ import hmac
 import json
 import time
 import asyncio
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -68,7 +69,10 @@ async def wa(client, db_session, monkeypatch, tmp_path):
     for user, phone in zip(users, phones):
         response = await client.post("/api/v1/integrations/whatsapp/senders", headers={"Authorization": "Bearer " + create_access_token(user.id), "X-Organization-ID": str(user.organization_id)}, json={"user_id": str(user.id), "phone_number": phone, "display_name": user.full_name, "role_in_org": "PROJECT_MANAGER"})
         assert response.status_code == 201, response.text
-    return {"client": client, "provider": provider, "orgs": organizations, "users": users, "phones": phones, "service": service}
+    try:
+        yield {"client": client, "provider": provider, "orgs": organizations, "users": users, "phones": phones, "service": service}
+    finally:
+        await service.close()
 
 
 async def send(wa, *, phone=None, wamid="wamid.intake-0001", text=None, timestamp=None):
@@ -84,6 +88,7 @@ async def send(wa, *, phone=None, wamid="wamid.intake-0001", text=None, timestam
 
 
 async def test_intake_caption_metadata_replay_and_hash_duplicate(wa, db_session):
+    now = datetime.now(timezone.utc)
     response = await send(wa)
     assert response.status_code == 200, response.text
     doc = await db_session.scalar(select(Document))
@@ -91,13 +96,18 @@ async def test_intake_caption_metadata_replay_and_hash_duplicate(wa, db_session)
     assert doc.organization_id == wa["orgs"][0].id
     assert doc.source_metadata["caption"] == "Nota 50 sak semen Proyek Ruko Thamrin"
     assert doc.source_metadata["wamid"] == "wamid.intake-0001"
-    assert "Nota diterima" in wa["provider"].outbound[0].body_text
+    # Silent during grouping window; 1 ACK upon session finalization
+    assert len(wa["provider"].outbound) == 0
+    await wa["service"].deliver_pending_notifications(as_of=now + timedelta(seconds=65))
+    assert wa["provider"].outbound[0].body_text == "Oke, saya catat."
     assert (await send(wa)).status_code == 200
+    await wa["service"].deliver_pending_notifications(as_of=now + timedelta(seconds=70))
     assert len(wa["provider"].outbound) == 1
     assert wa["provider"].downloads == 1
     assert (await send(wa, wamid="wamid.same-content-0002")).status_code == 200
+    await wa["service"].deliver_pending_notifications(as_of=now + timedelta(seconds=75))
     assert await db_session.scalar(select(func.count()).select_from(Document)) == 1
-    assert "sebelumnya" in wa["provider"].outbound[-1].body_text
+    assert wa["provider"].outbound[-1].body_text == "Oke, saya catat."
     assert await db_session.scalar(select(func.count()).select_from(WhatsAppMessageLog)) == 4
 
 
@@ -142,7 +152,7 @@ async def test_download_failure_is_logged_and_requests_resend(wa, db_session):
     assert response.status_code == 200
     log = await db_session.scalar(select(WhatsAppMessageLog).where(WhatsAppMessageLog.direction == "INBOUND"))
     assert log.delivery_status == "DOWNLOAD_FAILED"
-    assert "kirim ulang" in wa["provider"].outbound[-1].body_text
+    assert len(wa["provider"].outbound) == 0
     assert await db_session.scalar(select(func.count()).select_from(Document)) == 0
 
 
@@ -170,3 +180,16 @@ async def test_real_feature005_pipeline_stages_transfer_for_review(wa, db_sessio
     assert doc.extracted_data["total_amount"] == "18500000.01"
     assert doc.review_flags
     assert await db_session.scalar(select(func.count()).select_from(JournalEntry)) == 0
+
+
+async def test_live_whatsapp_intake_creates_canonical_document_without_legacy_inbox_message(wa, db_session):
+    from src.models.inbox import InboxMessage
+    response = await send(wa)
+    assert response.status_code == 200
+    doc = await db_session.scalar(select(Document))
+    assert doc is not None
+    assert doc.source_channel == "WHATSAPP"
+
+    # Invariant: live WhatsApp uses canonical Document intake, NOT legacy remote InboxMessage
+    inbox_count = await db_session.scalar(select(func.count()).select_from(InboxMessage))
+    assert inbox_count == 0

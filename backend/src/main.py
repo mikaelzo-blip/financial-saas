@@ -29,6 +29,9 @@ async def lifespan(app: FastAPI):
             await worker
         with suppress(asyncio.CancelledError):
             await baileys_worker
+        whatsapp_service = getattr(app.state, "whatsapp_service", None)
+        if whatsapp_service is not None:
+            await whatsapp_service.close()
 
 
 def create_application() -> FastAPI:

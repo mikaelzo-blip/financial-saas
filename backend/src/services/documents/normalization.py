@@ -1,7 +1,7 @@
 import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from typing import Generic, Literal, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
@@ -41,9 +41,12 @@ def parse_candidate_money(raw: str | None) -> NormalizedCandidate[Decimal]:
     # Strip common Indonesian trailing notation like ",-" or ".-" (e.g. Rp 1.250.000,-)
     clean_raw = re.sub(r"[,.]\s*[-–—]$", "", clean_raw)
 
-    token = re.sub(r"(?i)^(?:.*?(?:rp\.?|idr))\s*|\s", "", clean_raw)
+    token = re.sub(r"(?i)^(?:.*?(?:rp\.?|idr))\s*", "", clean_raw)
+    # Strip tax percentage or label prefixes like "PPN (11%):", "VAT 12%:", "Total:", "Subtotal:"
+    token = re.sub(r"(?i)^(?:ppn|vat|pajak(?:\s+pertambahan\s+nilai)?)\s*(?:\(?\s*\d+\s*%\s*\)?)?\s*[:=]?\s*", "", token)
     # If there's still non-numeric prefix like "PPN:", strip non-digits at the beginning
     token = re.sub(r"^[^\d]+", "", token)
+    token = re.sub(r"\s+", "", token)
     if not re.fullmatch(r"\d[\d.,]*", token):
         return NormalizedCandidate(value=None, confidence=Decimal("0"), evidence=raw, validation_status="INVALID")
 
@@ -124,3 +127,214 @@ def parse_candidate_date(raw: str | None) -> NormalizedCandidate[date]:
             return NormalizedCandidate(value=None, confidence=Decimal("0"), evidence=raw, validation_status="INVALID")
 
     return NormalizedCandidate(value=None, confidence=Decimal("0"), evidence=raw, validation_status="INVALID")
+
+
+def extract_document_monetary_totals(text: str | None) -> dict[str, Any]:
+    """Extract and distinguish subtotal, vat_amount, and total_amount from document text.
+
+    Enforces strict semantic priority for canonical total_amount:
+    1. GRAND TOTAL / TOTAL BAYAR / TOTAL PEMBAYARAN / JUMLAH DIBAYARKAN
+    2. TOTAL AMOUNT / TOTAL TAGIHAN / JUMLAH TAGIHAN / TOTAL TRANSFER / JUMLAH TRANSFER
+    3. AMOUNT DUE / TOTAL DUE / BALANCE DUE / JUMLAH JATUH TEMPO
+    4. NET PAYABLE / TOTAL PAYABLE / NET AMOUNT / JUMLAH BERSIH
+    5. TOTAL (generic final total line, excluding subtotal/ex-tax/dpp/qty)
+    6. Calculated sum (subtotal + vat_amount) if both present
+    7. Standalone formatted currency
+    8. Subtotal only as fallback when no final total exists.
+
+    Invariants:
+    - Never select Ex Tax, Subtotal, or DPP as total_amount when a final total is present.
+    """
+    from typing import Any
+
+    empty_cand = parse_candidate_money(None)
+    if not text or not text.strip():
+        return {
+            "total_amount": None,
+            "total_evidence": None,
+            "total_candidate": empty_cand,
+            "subtotal": None,
+            "subtotal_evidence": None,
+            "subtotal_candidate": empty_cand,
+            "vat_amount": None,
+            "vat_evidence": None,
+            "vat_candidate": empty_cand,
+        }
+
+    # 1. Subtotal / Ex-Tax / DPP extraction
+    subtotal_cand = empty_cand
+    subtotal_val: Decimal | None = None
+    subtotal_ev: str | None = None
+    sub_patterns = [
+        r"\b(?:sub[\s-]*total|dpp|dasar\s+pengenaan\s+pajak|ex[\s-]*tax|exclusive\s+tax|sebelum\s+pajak|total\s+dpp|total\s+sebelum\s+pajak|total[\s-]+ex[\s-]*tax)\b\s*[:=]?\s*(?:Rp\.?|IDR)?\s*([\d.,\-]+)",
+    ]
+    for pat in sub_patterns:
+        for m in re.finditer(pat, text, re.I):
+            cand = parse_candidate_money(m.group(0))
+            if cand.value is None:
+                cand = parse_candidate_money(m.group(1))
+            if cand.value is not None:
+                subtotal_cand = cand
+                subtotal_val = cand.value
+                subtotal_ev = m.group(0).strip()
+                break
+        if subtotal_val is not None:
+            break
+
+    # 2. VAT / PPN Amount extraction
+    vat_cand = empty_cand
+    vat_val: Decimal | None = None
+    vat_ev: str | None = None
+    vat_patterns = [
+        r"\b(?:ppn|vat|pajak\s+pertambahan\s+nilai|pajak)(?:\s*\(?\s*1[12]\s*%\s*\)?)?\s*[:=]?\s*(?:Rp\.?|IDR)?\s*([\d.,\-]+)",
+    ]
+    for pat in vat_patterns:
+        for m in re.finditer(pat, text, re.I):
+            cand = parse_candidate_money(m.group(0))
+            if cand.value is None:
+                cand = parse_candidate_money(m.group(1))
+            if cand.value is not None:
+                vat_cand = cand
+                vat_val = cand.value
+                vat_ev = m.group(0).strip()
+                break
+        if vat_val is not None:
+            break
+
+    # 3. Total Amount extraction by priority
+    total_cand = empty_cand
+    total_val: Decimal | None = None
+    total_ev: str | None = None
+
+    # Priority 1: GRAND TOTAL
+    p1_patterns = [
+        r"\b(?:grand\s+total|total\s+bayar|total\s+pembayaran|jumlah\s+pembayaran|jumlah\s+dibayarkan)\b\s*[:=]?\s*(?:Rp\.?|IDR)?\s*([\d.,\-]+)",
+    ]
+    for pat in p1_patterns:
+        for m in re.finditer(pat, text, re.I):
+            cand = parse_candidate_money(m.group(0))
+            if cand.value is not None:
+                total_cand = cand
+                total_val = cand.value
+                total_ev = m.group(0).strip()
+                break
+        if total_val is not None:
+            break
+
+    # Priority 2: TOTAL AMOUNT / TOTAL TAGIHAN / JUMLAH TAGIHAN / TOTAL TRANSFER / JUMLAH TRANSFER
+    if total_val is None:
+        p2_patterns = [
+            r"\b(?:total\s+amount|total\s+tagihan|jumlah\s+tagihan|total\s+transfer|jumlah\s+transfer)\b\s*[:=]?\s*(?:Rp\.?|IDR)?\s*([\d.,\-]+)",
+        ]
+        for pat in p2_patterns:
+            for m in re.finditer(pat, text, re.I):
+                cand = parse_candidate_money(m.group(0))
+                if cand.value is not None:
+                    total_cand = cand
+                    total_val = cand.value
+                    total_ev = m.group(0).strip()
+                    break
+            if total_val is not None:
+                break
+
+    # Priority 3: AMOUNT DUE / TOTAL DUE
+    if total_val is None:
+        p3_patterns = [
+            r"\b(?:amount\s+due|total\s+due|balance\s+due|jumlah\s+jatuh\s+tempo)\b\s*[:=]?\s*(?:Rp\.?|IDR)?\s*([\d.,\-]+)",
+        ]
+        for pat in p3_patterns:
+            for m in re.finditer(pat, text, re.I):
+                cand = parse_candidate_money(m.group(0))
+                if cand.value is not None:
+                    total_cand = cand
+                    total_val = cand.value
+                    total_ev = m.group(0).strip()
+                    break
+            if total_val is not None:
+                break
+
+    # Priority 4: NET PAYABLE
+    if total_val is None:
+        p4_patterns = [
+            r"\b(?:net\s+payable|total\s+payable|net\s+amount|jumlah\s+bersih)\b\s*[:=]?\s*(?:Rp\.?|IDR)?\s*([\d.,\-]+)",
+        ]
+        for pat in p4_patterns:
+            for m in re.finditer(pat, text, re.I):
+                cand = parse_candidate_money(m.group(0))
+                if cand.value is not None:
+                    total_cand = cand
+                    total_val = cand.value
+                    total_ev = m.group(0).strip()
+                    break
+            if total_val is not None:
+                break
+
+    # Priority 5: Generic TOTAL (where TOTAL is NOT subtotal/dpp/ex-tax/qty/item)
+    if total_val is None:
+        p5_pat = r"(?<!sub\s)(?<!sub)(?<!sub-)(?<!dpp\s)(?<!dpp)(?<!ex\s)(?<!ex-)\b(?:total|jumlah)\b(?!\s*[-:]?\s*(?:ex[\s-]*tax|dpp|sebelum\s+pajak|qty|kuantiti|barang|item|items))\s*[:=]?\s*(?:Rp\.?|IDR)?\s*([\d.,\-]+)"
+        p5_matches = []
+        for m in re.finditer(p5_pat, text, re.I):
+            cand = parse_candidate_money(m.group(0))
+            if cand.value is not None:
+                p5_matches.append((m, cand))
+
+        if p5_matches:
+            if subtotal_val is not None and vat_val is not None:
+                expected = subtotal_val + vat_val
+                exact_match = next((mc for mc in p5_matches if mc[1].value == expected), None)
+                if exact_match:
+                    m, cand = exact_match
+                    total_cand, total_val, total_ev = cand, cand.value, m.group(0).strip()
+
+            if total_val is None:
+                non_sub = [mc for mc in p5_matches if mc[1].value != subtotal_val]
+                if non_sub:
+                    m, cand = non_sub[-1]
+                    total_cand, total_val, total_ev = cand, cand.value, m.group(0).strip()
+                elif p5_matches:
+                    m, cand = p5_matches[-1]
+                    total_cand, total_val, total_ev = cand, cand.value, m.group(0).strip()
+
+    # Priority 6: If subtotal and vat exist, check if the mathematical sum appears in text
+    if total_val is None and subtotal_val is not None and vat_val is not None:
+        expected_total = subtotal_val + vat_val
+        for m in re.finditer(r"(?:Rp\.?|IDR)?\s*([\d.,]+)", text, re.I):
+            cand = parse_candidate_money(m.group(0))
+            if cand.value == expected_total:
+                total_cand, total_val, total_ev = cand, cand.value, m.group(0).strip()
+                break
+        if total_val is None:
+            total_val = expected_total
+            total_ev = f"Calculated: {subtotal_val} + {vat_val}"
+            total_cand = NormalizedCandidate(value=total_val, confidence=Decimal("0.95"), evidence=total_ev, validation_status="VALID")
+
+    # Priority 7: Standalone formatted currency
+    if total_val is None:
+        for pat in [r"(?:Rp\.?|IDR)\s*([\d.,\-]+)", r"\b\d{1,3}(?:\.\d{3})+(?:,\d{2})?\b|\b\d{1,3}(?:,\d{3})+(?:\.\d{2})?\b"]:
+            candidates = []
+            for m in re.finditer(pat, text, re.I):
+                cand = parse_candidate_money(m.group(0))
+                if cand.value is not None and cand.value != subtotal_val:
+                    candidates.append((m, cand))
+            if candidates:
+                m, cand = candidates[-1]
+                total_cand, total_val, total_ev = cand, cand.value, m.group(0).strip()
+                break
+
+    # Priority 8: Subtotal only as fallback when no final total exists
+    if total_val is None and subtotal_val is not None:
+        total_val = subtotal_val
+        total_ev = subtotal_ev
+        total_cand = subtotal_cand
+
+    return {
+        "total_amount": total_val,
+        "total_evidence": total_ev,
+        "total_candidate": total_cand,
+        "subtotal": subtotal_val,
+        "subtotal_evidence": subtotal_ev,
+        "subtotal_candidate": subtotal_cand,
+        "vat_amount": vat_val,
+        "vat_evidence": vat_ev,
+        "vat_candidate": vat_cand,
+    }

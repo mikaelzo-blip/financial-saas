@@ -22,7 +22,11 @@ from src.services.documents.exceptions import (
 )
 from src.services.documents.extraction import ExtractionResult
 from src.services.documents.image_processing import run_ocr_with_orientation
-from src.services.documents.normalization import parse_candidate_date, parse_candidate_money
+from src.services.documents.normalization import (
+    extract_document_monetary_totals,
+    parse_candidate_date,
+    parse_candidate_money,
+)
 from src.services.documents.quality_gate import evaluate_page_text_quality
 from src.services.documents.rasterizer import open_pdf_document, render_pdf_page_to_image
 from src.services.documents.table_extractor import extract_line_items_from_text
@@ -204,61 +208,38 @@ class LocalExtractionProvider:
 
         field_evidence: Dict[str, ExtractedField] = {}
 
-        # 1. Total Amount extraction
-        total_amount = None
-        total_candidate = parse_candidate_money(None)
-
-        total_match = re.search(
-            r"\b(?:grand\s+total|total\s+bayar|total\s+tagihan|total\s+transfer|total\s+pembayaran|total\s+amount|jumlah\s+transfer|jumlah\s+tagihan|(?<!sub)total|jumlah)\s*[:=]?\s*(?:Rp\.?|IDR)?\s*([\d.,\-]+)",
-            text,
-            re.I,
-        )
-        if not total_match:
-            total_match = re.search(r"(?:Rp\.?|IDR)\s*([\d.,\-]+)", text, re.I)
-        if not total_match:
-            # Standalone formatted currency
-            total_match = re.search(r"\b\d{1,3}(?:\.\d{3})+(?:,\d{2})?\b|\b\d{1,3}(?:,\d{3})+(?:\.\d{2})?\b", text)
-
-        if total_match:
-            raw_val = total_match.group(0)
-            total_candidate = parse_candidate_money(raw_val)
-            total_amount = total_candidate.value
+        # 1-3. Financial Totals Extraction (Grand Total, Subtotal, VAT)
+        # Uses strict semantic priority: Grand Total > Total Amount > Amount Due > Net Payable > Subtotal fallback
+        totals = extract_document_monetary_totals(text)
+        total_amount = totals["total_amount"]
+        total_candidate = totals["total_candidate"]
+        if total_amount is not None:
             field_evidence["total_amount"] = ExtractedField(
-                value=str(total_amount) if total_amount is not None else None,
-                confidence=ocr_score if total_amount is not None else Decimal("0.0"),
-                evidence=total_match.group(0),
+                value=str(total_amount),
+                confidence=ocr_score,
+                evidence=totals["total_evidence"],
                 validation_status=total_candidate.validation_status,
             )
 
-        # 2. VAT / PPN Amount extraction
-        vat_match = re.search(r"(?:ppn|vat|pajak)(?:\s*1[12]%)?\s*[:=]?\s*(?:Rp\.?|IDR)?\s*([\d.,\-]+)", text, re.I)
-        vat_amount = None
-        if vat_match:
-            raw_vat = vat_match.group(0)
-            vat_cand = parse_candidate_money(raw_vat)
-            vat_amount = vat_cand.value
-            if vat_amount is not None:
-                field_evidence["vat_amount"] = ExtractedField(
-                    value=str(vat_amount),
-                    confidence=ocr_score,
-                    evidence=vat_match.group(0),
-                    validation_status=vat_cand.validation_status,
-                )
+        vat_amount = totals["vat_amount"]
+        vat_cand = totals["vat_candidate"]
+        if vat_amount is not None:
+            field_evidence["vat_amount"] = ExtractedField(
+                value=str(vat_amount),
+                confidence=ocr_score,
+                evidence=totals["vat_evidence"],
+                validation_status=vat_cand.validation_status,
+            )
 
-        # 3. Subtotal extraction
-        subtotal_match = re.search(r"(?:subtotal|sub\s+total|dpp|ex\s+tax)\s*[:=]?\s*[\s\S]{0,10}?([\d.,\-]+)", text, re.I)
-        subtotal_amount = None
-        if subtotal_match:
-            raw_sub = subtotal_match.group(0)
-            sub_cand = parse_candidate_money(raw_sub)
-            subtotal_amount = sub_cand.value
-            if subtotal_amount is not None:
-                field_evidence["subtotal"] = ExtractedField(
-                    value=str(subtotal_amount),
-                    confidence=ocr_score,
-                    evidence=subtotal_match.group(0),
-                    validation_status=sub_cand.validation_status,
-                )
+        subtotal_amount = totals["subtotal"]
+        sub_cand = totals["subtotal_candidate"]
+        if subtotal_amount is not None:
+            field_evidence["subtotal"] = ExtractedField(
+                value=str(subtotal_amount),
+                confidence=ocr_score,
+                evidence=totals["subtotal_evidence"],
+                validation_status=sub_cand.validation_status,
+            )
 
         # 4. Dates extraction (transaction date and due date)
         tx_date: Optional[date] = None

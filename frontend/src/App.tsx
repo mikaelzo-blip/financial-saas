@@ -59,7 +59,7 @@ export const App: React.FC = () => {
                 <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="dashboard" element={<DashboardPage />} />
                 <Route path="whatsapp-inbox" element={<WhatsAppInboxPage />} />
-                <Route path="inbox" element={<Navigate to="/whatsapp-inbox" replace />} />
+                <Route path="inbox" element={<Navigate to="/documents" replace />} />
                 <Route path="bank-reconciliation" element={<BankReconciliationPage />} />
                 
                 {/* Projects */}

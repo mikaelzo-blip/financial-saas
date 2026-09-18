@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from sqlalchemy import and_, select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.counterparty import Counterparty
@@ -16,6 +17,7 @@ from src.models.payable import VendorBill
 from src.models.receivable import CustomerInvoice
 from src.models.enums import DocumentType
 from src.schemas.document import StructuredExtraction, LineItem
+from src.services.documents.caption_hints import extract_caption_hints
 
 
 class ConfidenceBand(str, Enum):
@@ -218,6 +220,7 @@ async def match_projects(
     organization_id: uuid.UUID,
     data: StructuredExtraction,
     matched_counterparty_id: Optional[uuid.UUID] = None,
+    source_metadata: Optional[Dict[str, Any]] = None,
 ) -> List[MatchCandidate]:
     """Match projects scoped strictly to organization_id."""
     stmt = select(Project).where(Project.organization_id == organization_id)
@@ -229,6 +232,12 @@ async def match_projects(
     spk_norm = normalize_doc_number(data.spk_number)
     doc_norm = normalize_doc_number(data.document_number)
     text_content = ((data.description or "") + " " + (data.raw_text or "")).casefold()
+
+    caption = (source_metadata or {}).get("caption") or ""
+    hints = (source_metadata or {}).get("hints") or {}
+    project_hint = hints.get("project_hint") or ""
+    caption_norm = normalize_party_name(caption)
+    hint_norm = normalize_party_name(project_hint)
 
     candidates: List[MatchCandidate] = []
 
@@ -256,10 +265,19 @@ async def match_projects(
             positive_signals.append("CUSTOMER_PROJECT_RELATION")
             scores["customer"] = 0.8
 
-        # 4. Project name match (supporting only)
+        # 4. Project name match from OCR document content (supporting only)
         if p_name_norm and (p_name_norm in text_content or SequenceMatcher(None, p_name_norm, text_content).ratio() > 0.60):
             positive_signals.append("PROJECT_NAME_MATCH")
             scores["name"] = 0.70
+
+        # 5. Caption / Project hint match (supporting evidence only, never ground truth)
+        target_hint = hint_norm or caption_norm
+        if p_name_norm and target_hint:
+            if (target_hint in p_name_norm
+                or p_name_norm in target_hint
+                or SequenceMatcher(None, p_name_norm, target_hint).ratio() > 0.60):
+                positive_signals.append("CAPTION_PROJECT_HINT")
+                scores["caption"] = 0.68
 
         if "EXACT_PROJECT_CODE" in positive_signals:
             total_score = Decimal("0.96")
@@ -273,6 +291,10 @@ async def match_projects(
             total_score = Decimal("0.72")
             band = ConfidenceBand.MEDIUM
             explanation = f"Supporting match for project {proj.project_code} via name mention."
+        elif "CAPTION_PROJECT_HINT" in positive_signals:
+            total_score = Decimal("0.70")
+            band = ConfidenceBand.MEDIUM
+            explanation = f"Supporting match for project {proj.project_code} via caption hint ({project_hint or caption})."
         else:
             continue
 
@@ -299,19 +321,34 @@ async def match_vendor_bills(
     data: StructuredExtraction,
     matched_counterparty_id: Optional[uuid.UUID] = None,
     matched_project_id: Optional[uuid.UUID] = None,
+    source_metadata: Optional[Dict[str, Any]] = None,
 ) -> MatchResult:
     """Match open VendorBills scoped strictly to organization_id."""
-    stmt = select(VendorBill).where(
-        and_(
-            VendorBill.organization_id == organization_id,
-            VendorBill.status.in_(["UNPAID", "PARTIALLY_PAID"]),
+    stmt = (
+        select(VendorBill)
+        .options(
+            selectinload(VendorBill.allocations),
+            selectinload(VendorBill.vendor),
+            selectinload(VendorBill.project),
+        )
+        .where(
+            and_(
+                VendorBill.organization_id == organization_id,
+                VendorBill.status.in_(["UNPAID", "PARTIALLY_PAID"]),
+            )
         )
     )
     bills = list((await session.scalars(stmt)).all())
     if not bills:
         return MatchResult(ranked_candidates=[], requires_review=True, explanation="No open vendor bills found.")
 
-    doc_num_norm = normalize_doc_number(data.invoice_number or data.document_number or data.transfer_reference)
+    caption_hints = (source_metadata or {}).get("hints") or {}
+    if not caption_hints and (source_metadata or {}).get("caption"):
+        caption_hints = extract_caption_hints((source_metadata or {}).get("caption"))
+    caption_project_hint = caption_hints.get("project_hint")
+    caption_payment_intent = caption_hints.get("payment_intent")
+
+    doc_num_norm = normalize_doc_number(data.invoice_number or data.document_number)
     candidates: List[MatchCandidate] = []
 
     for bill in bills:
@@ -319,17 +356,36 @@ async def match_vendor_bills(
         negative_signals: List[str] = []
         scores: Dict[str, float] = {}
 
-        # 1. Invoice number
+        # 1. Invoice number & Document reference
         b_code_norm = normalize_doc_number(bill.bill_code)
-        if doc_num_norm and b_code_norm:
-            if b_code_norm == doc_num_norm:
-                positive_signals.append("EXACT_INVOICE_NUMBER")
-                scores["identifier"] = 1.0
-            else:
-                negative_signals.append("INVOICE_NUMBER_MISMATCH")
-                scores["identifier"] = 0.0
+        raw_text_norm = normalize_doc_number(data.raw_text)
+        desc_norm = normalize_doc_number(data.description)
+        trf_ref_norm = normalize_doc_number(data.transfer_reference)
+        caption_norm = normalize_doc_number(caption_hints.get("raw_caption"))
+
+        if doc_num_norm and b_code_norm and doc_num_norm == b_code_norm:
+            positive_signals.append("EXACT_INVOICE_NUMBER")
+            scores["identifier"] = 1.0
+        elif b_code_norm and (
+            (raw_text_norm and b_code_norm in raw_text_norm)
+            or (desc_norm and b_code_norm in desc_norm)
+            or (trf_ref_norm and b_code_norm in trf_ref_norm)
+            or (caption_norm and b_code_norm in caption_norm)
+        ):
+            positive_signals.append("INVOICE_NUMBER_IN_EVIDENCE")
+            scores["identifier"] = 0.95
+        elif doc_num_norm and b_code_norm and doc_num_norm != b_code_norm:
+            negative_signals.append("INVOICE_NUMBER_MISMATCH")
+            scores["identifier"] = 0.0
         else:
             scores["identifier"] = 0.0
+
+        # SPK / PO reference check
+        if data.spk_number or data.document_number:
+            spk_norm = normalize_doc_number(data.spk_number or data.document_number)
+            if bill.project and normalize_doc_number(bill.project.project_code) == spk_norm:
+                positive_signals.append("SPK_PROJECT_MATCH")
+                scores["identifier"] = max(scores["identifier"], 0.8)
 
         # 2. Vendor identity
         if matched_counterparty_id:
@@ -342,16 +398,34 @@ async def match_vendor_bills(
         else:
             scores["vendor"] = 0.5 if data.issuer_name else 0.0
 
-        # 3. Amount
+        # 3. Amount & Partial payment
+        paid_amount = bill.calculate_paid_amount()
+        outstanding = bill.calculate_outstanding_amount()
         if data.total_amount is not None:
-            if bill.total_amount == data.total_amount or bill.calculate_outstanding_amount() == data.total_amount:
+            if abs(data.total_amount - bill.total_amount) <= Decimal("1.00"):
                 positive_signals.append("EXACT_AMOUNT")
                 scores["amount"] = 1.0
+            elif paid_amount > Decimal("0.00") and abs(data.total_amount - outstanding) <= Decimal("1.00"):
+                positive_signals.append("EXACT_OUTSTANDING_AMOUNT")
+                scores["amount"] = 1.0
+            elif Decimal("0.00") < data.total_amount <= outstanding:
+                positive_signals.append("VALID_PARTIAL_AMOUNT")
+                scores["amount"] = 0.75
+            elif data.total_amount > outstanding:
+                negative_signals.append("AMOUNT_MISMATCH")
+                scores["amount"] = 0.0
             else:
                 negative_signals.append("AMOUNT_MISMATCH")
                 scores["amount"] = 0.0
         else:
             scores["amount"] = 0.0
+
+        # Caption payment intent matching
+        if caption_payment_intent == "SETTLEMENT" and data.total_amount is not None and abs(data.total_amount - outstanding) <= Decimal("1.00"):
+            positive_signals.append("SETTLEMENT_MATCH")
+            scores["amount"] = max(scores["amount"], 0.95)
+        elif caption_payment_intent == "DOWN_PAYMENT" and paid_amount == Decimal("0.00"):
+            positive_signals.append("DOWN_PAYMENT_MATCH")
 
         # 4. Date proximity
         if data.transaction_date and bill.bill_date:
@@ -364,13 +438,15 @@ async def match_vendor_bills(
                 scores["date"] = 0.7
             elif diff_days <= 30:
                 scores["date"] = 0.4
+            elif data.transaction_date >= bill.bill_date and diff_days <= 90:
+                scores["date"] = 0.3
             else:
                 negative_signals.append("DATE_FAR")
                 scores["date"] = 0.0
         else:
             scores["date"] = 0.3
 
-        # 5. Project
+        # 5. Project & Caption project hint
         if matched_project_id and bill.project_id:
             if bill.project_id == matched_project_id:
                 positive_signals.append("PROJECT_MATCH")
@@ -379,6 +455,13 @@ async def match_vendor_bills(
                 scores["project"] = 0.0
         else:
             scores["project"] = 0.0
+
+        if caption_project_hint and bill.project:
+            proj_hint_norm = normalize_party_name(caption_project_hint)
+            b_proj_norm = normalize_party_name(f"{bill.project.project_code} {bill.project.project_name}")
+            if proj_hint_norm and (proj_hint_norm in b_proj_norm or b_proj_norm in proj_hint_norm):
+                positive_signals.append("CAPTION_PROJECT_MATCH")
+                scores["project"] = max(scores["project"], 0.85)
 
         # Composite score calculation
         total = (
@@ -395,7 +478,7 @@ async def match_vendor_bills(
         elif "AMOUNT_MISMATCH" in negative_signals:
             total = min(total, 0.70)
             band = ConfidenceBand.MEDIUM
-        elif "EXACT_INVOICE_NUMBER" in positive_signals and "EXACT_VENDOR" in positive_signals and "EXACT_AMOUNT" in positive_signals:
+        elif ("EXACT_INVOICE_NUMBER" in positive_signals or "INVOICE_NUMBER_IN_EVIDENCE" in positive_signals) and "EXACT_VENDOR" in positive_signals and ("EXACT_AMOUNT" in positive_signals or "EXACT_OUTSTANDING_AMOUNT" in positive_signals):
             total = max(total, 0.95)
             band = ConfidenceBand.HIGH
         elif total >= 0.85 and not negative_signals:
@@ -415,6 +498,20 @@ async def match_vendor_bills(
             exp_parts.append(f"Conflicts: {', '.join(negative_signals)}")
         explanation = f"VendorBill {bill.bill_code}: " + "; ".join(exp_parts)
 
+        scoring_details = {
+            **scores,
+            "entity_code": bill.bill_code,
+            "counterparty_id": str(bill.vendor_id),
+            "counterparty_name": bill.vendor.name if bill.vendor else "",
+            "project_id": str(bill.project_id) if bill.project_id else None,
+            "total_amount": float(bill.total_amount),
+            "paid_amount": float(paid_amount),
+            "outstanding_amount": float(outstanding),
+            "current_payment": float(data.total_amount) if data.total_amount else 0.0,
+            "proposed_allocation": float(min(data.total_amount, outstanding)) if data.total_amount else 0.0,
+            "after_allocation_outstanding": float(max(Decimal("0.00"), outstanding - (data.total_amount or Decimal("0.00")))),
+        }
+
         candidate = MatchCandidate(
             entity_type="VENDOR_BILL",
             entity_id=bill.id,
@@ -423,7 +520,7 @@ async def match_vendor_bills(
             positive_signals=positive_signals,
             negative_signals=negative_signals,
             explanation=explanation,
-            scoring_details=scores,
+            scoring_details=scoring_details,
             target_model="VendorBill",
         )
         candidates.append(candidate)
@@ -457,19 +554,34 @@ async def match_customer_invoices(
     data: StructuredExtraction,
     matched_counterparty_id: Optional[uuid.UUID] = None,
     matched_project_id: Optional[uuid.UUID] = None,
+    source_metadata: Optional[Dict[str, Any]] = None,
 ) -> MatchResult:
     """Match open CustomerInvoices scoped strictly to organization_id."""
-    stmt = select(CustomerInvoice).where(
-        and_(
-            CustomerInvoice.organization_id == organization_id,
-            CustomerInvoice.status.in_(["UNPAID", "PARTIALLY_PAID"]),
+    stmt = (
+        select(CustomerInvoice)
+        .options(
+            selectinload(CustomerInvoice.allocations),
+            selectinload(CustomerInvoice.customer),
+            selectinload(CustomerInvoice.project),
+        )
+        .where(
+            and_(
+                CustomerInvoice.organization_id == organization_id,
+                CustomerInvoice.status.in_(["UNPAID", "PARTIALLY_PAID"]),
+            )
         )
     )
     invoices = list((await session.scalars(stmt)).all())
     if not invoices:
         return MatchResult(ranked_candidates=[], requires_review=True, explanation="No open customer invoices found.")
 
-    doc_num_norm = normalize_doc_number(data.invoice_number or data.document_number or data.transfer_reference)
+    caption_hints = (source_metadata or {}).get("hints") or {}
+    if not caption_hints and (source_metadata or {}).get("caption"):
+        caption_hints = extract_caption_hints((source_metadata or {}).get("caption"))
+    caption_project_hint = caption_hints.get("project_hint")
+    caption_payment_intent = caption_hints.get("payment_intent")
+
+    doc_num_norm = normalize_doc_number(data.invoice_number or data.document_number)
     candidates: List[MatchCandidate] = []
 
     for inv in invoices:
@@ -477,17 +589,36 @@ async def match_customer_invoices(
         negative_signals: List[str] = []
         scores: Dict[str, float] = {}
 
-        # 1. Invoice number
+        # 1. Invoice number & Document reference
         inv_code_norm = normalize_doc_number(inv.invoice_code)
-        if doc_num_norm and inv_code_norm:
-            if inv_code_norm == doc_num_norm:
-                positive_signals.append("EXACT_INVOICE_NUMBER")
-                scores["identifier"] = 1.0
-            else:
-                negative_signals.append("INVOICE_NUMBER_MISMATCH")
-                scores["identifier"] = 0.0
+        raw_text_norm = normalize_doc_number(data.raw_text)
+        desc_norm = normalize_doc_number(data.description)
+        trf_ref_norm = normalize_doc_number(data.transfer_reference)
+        caption_norm = normalize_doc_number(caption_hints.get("raw_caption"))
+
+        if doc_num_norm and inv_code_norm and doc_num_norm == inv_code_norm:
+            positive_signals.append("EXACT_INVOICE_NUMBER")
+            scores["identifier"] = 1.0
+        elif inv_code_norm and (
+            (raw_text_norm and inv_code_norm in raw_text_norm)
+            or (desc_norm and inv_code_norm in desc_norm)
+            or (trf_ref_norm and inv_code_norm in trf_ref_norm)
+            or (caption_norm and inv_code_norm in caption_norm)
+        ):
+            positive_signals.append("INVOICE_NUMBER_IN_EVIDENCE")
+            scores["identifier"] = 0.95
+        elif doc_num_norm and inv_code_norm and doc_num_norm != inv_code_norm:
+            negative_signals.append("INVOICE_NUMBER_MISMATCH")
+            scores["identifier"] = 0.0
         else:
             scores["identifier"] = 0.0
+
+        # SPK / Project code check
+        if data.spk_number or data.document_number:
+            spk_norm = normalize_doc_number(data.spk_number or data.document_number)
+            if inv.project and normalize_doc_number(inv.project.project_code) == spk_norm:
+                positive_signals.append("SPK_PROJECT_MATCH")
+                scores["identifier"] = max(scores["identifier"], 0.8)
 
         # 2. Customer identity
         if matched_counterparty_id:
@@ -500,16 +631,34 @@ async def match_customer_invoices(
         else:
             scores["customer"] = 0.5 if data.recipient_name else 0.0
 
-        # 3. Amount
+        # 3. Amount & Partial payment
+        paid_amount = inv.calculate_paid_amount()
+        outstanding = inv.calculate_outstanding_amount()
         if data.total_amount is not None:
-            if inv.total_amount == data.total_amount or inv.calculate_outstanding_amount() == data.total_amount:
+            if abs(data.total_amount - inv.total_amount) <= Decimal("1.00"):
                 positive_signals.append("EXACT_AMOUNT")
                 scores["amount"] = 1.0
+            elif paid_amount > Decimal("0.00") and abs(data.total_amount - outstanding) <= Decimal("1.00"):
+                positive_signals.append("EXACT_OUTSTANDING_AMOUNT")
+                scores["amount"] = 1.0
+            elif Decimal("0.00") < data.total_amount <= outstanding:
+                positive_signals.append("VALID_PARTIAL_AMOUNT")
+                scores["amount"] = 0.75
+            elif data.total_amount > outstanding:
+                negative_signals.append("AMOUNT_MISMATCH")
+                scores["amount"] = 0.0
             else:
                 negative_signals.append("AMOUNT_MISMATCH")
                 scores["amount"] = 0.0
         else:
             scores["amount"] = 0.0
+
+        # Caption payment intent matching
+        if caption_payment_intent == "SETTLEMENT" and data.total_amount is not None and abs(data.total_amount - outstanding) <= Decimal("1.00"):
+            positive_signals.append("SETTLEMENT_MATCH")
+            scores["amount"] = max(scores["amount"], 0.95)
+        elif caption_payment_intent == "DOWN_PAYMENT" and paid_amount == Decimal("0.00"):
+            positive_signals.append("DOWN_PAYMENT_MATCH")
 
         # 4. Date proximity
         if data.transaction_date and inv.invoice_date:
@@ -522,13 +671,15 @@ async def match_customer_invoices(
                 scores["date"] = 0.7
             elif diff_days <= 30:
                 scores["date"] = 0.4
+            elif data.transaction_date >= inv.invoice_date and diff_days <= 90:
+                scores["date"] = 0.3
             else:
                 negative_signals.append("DATE_FAR")
                 scores["date"] = 0.0
         else:
             scores["date"] = 0.3
 
-        # 5. Project
+        # 5. Project & Caption project hint
         if matched_project_id and inv.project_id:
             if inv.project_id == matched_project_id:
                 positive_signals.append("PROJECT_MATCH")
@@ -537,6 +688,13 @@ async def match_customer_invoices(
                 scores["project"] = 0.0
         else:
             scores["project"] = 0.0
+
+        if caption_project_hint and inv.project:
+            proj_hint_norm = normalize_party_name(caption_project_hint)
+            i_proj_norm = normalize_party_name(f"{inv.project.project_code} {inv.project.project_name}")
+            if proj_hint_norm and (proj_hint_norm in i_proj_norm or i_proj_norm in proj_hint_norm):
+                positive_signals.append("CAPTION_PROJECT_MATCH")
+                scores["project"] = max(scores["project"], 0.85)
 
         # Composite score calculation
         total = (
@@ -553,7 +711,7 @@ async def match_customer_invoices(
         elif "AMOUNT_MISMATCH" in negative_signals:
             total = min(total, 0.70)
             band = ConfidenceBand.MEDIUM
-        elif "EXACT_INVOICE_NUMBER" in positive_signals and "EXACT_CUSTOMER" in positive_signals and "EXACT_AMOUNT" in positive_signals:
+        elif ("EXACT_INVOICE_NUMBER" in positive_signals or "INVOICE_NUMBER_IN_EVIDENCE" in positive_signals) and "EXACT_CUSTOMER" in positive_signals and ("EXACT_AMOUNT" in positive_signals or "EXACT_OUTSTANDING_AMOUNT" in positive_signals):
             total = max(total, 0.95)
             band = ConfidenceBand.HIGH
         elif total >= 0.85 and not negative_signals:
@@ -573,6 +731,20 @@ async def match_customer_invoices(
             exp_parts.append(f"Conflicts: {', '.join(negative_signals)}")
         explanation = f"CustomerInvoice {inv.invoice_code}: " + "; ".join(exp_parts)
 
+        scoring_details = {
+            **scores,
+            "entity_code": inv.invoice_code,
+            "counterparty_id": str(inv.customer_id),
+            "counterparty_name": inv.customer.name if inv.customer else "",
+            "project_id": str(inv.project_id) if inv.project_id else None,
+            "total_amount": float(inv.total_amount),
+            "paid_amount": float(paid_amount),
+            "outstanding_amount": float(outstanding),
+            "current_payment": float(data.total_amount) if data.total_amount else 0.0,
+            "proposed_allocation": float(min(data.total_amount, outstanding)) if data.total_amount else 0.0,
+            "after_allocation_outstanding": float(max(Decimal("0.00"), outstanding - (data.total_amount or Decimal("0.00")))),
+        }
+
         candidate = MatchCandidate(
             entity_type="CUSTOMER_INVOICE",
             entity_id=inv.id,
@@ -581,7 +753,7 @@ async def match_customer_invoices(
             positive_signals=positive_signals,
             negative_signals=negative_signals,
             explanation=explanation,
-            scoring_details=scores,
+            scoring_details=scoring_details,
             target_model="CustomerInvoice",
         )
         candidates.append(candidate)
@@ -614,6 +786,7 @@ async def match_entities(
     organization_id: uuid.UUID,
     data: StructuredExtraction,
     document_type: Optional[DocumentType] = None,
+    source_metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     result: Dict[str, Any] = {
         "counterparty_id": None,
@@ -670,7 +843,13 @@ async def match_entities(
     matched_cp_uuid = uuid.UUID(result["counterparty_id"]) if result["counterparty_id"] else None
 
     # 2. Project matching
-    proj_candidates = await match_projects(session, organization_id, data, matched_counterparty_id=matched_cp_uuid)
+    proj_candidates = await match_projects(
+        session,
+        organization_id,
+        data,
+        matched_counterparty_id=matched_cp_uuid,
+        source_metadata=source_metadata,
+    )
     for c in proj_candidates:
         result["match_candidates"].append(c.model_dump(mode="json"))
 
@@ -726,31 +905,42 @@ async def match_entities(
 
     if document_type == DocumentType.CUSTOMER_INVOICE:
         target_match_result = await match_customer_invoices(
-            session, organization_id, data, matched_counterparty_id=matched_cp_uuid, matched_project_id=matched_proj_uuid
+            session, organization_id, data, matched_counterparty_id=matched_cp_uuid, matched_project_id=matched_proj_uuid,
+            source_metadata=source_metadata,
         )
     elif document_type == DocumentType.VENDOR_INVOICE:
         target_match_result = await match_vendor_bills(
-            session, organization_id, data, matched_counterparty_id=matched_cp_uuid, matched_project_id=matched_proj_uuid
+            session, organization_id, data, matched_counterparty_id=matched_cp_uuid, matched_project_id=matched_proj_uuid,
+            source_metadata=source_metadata,
         )
     elif document_type == DocumentType.TRANSFER_PROOF:
         if role == "CUSTOMER":
             target_match_result = await match_customer_invoices(
-                session, organization_id, data, matched_counterparty_id=matched_cp_uuid, matched_project_id=matched_proj_uuid
+                session, organization_id, data, matched_counterparty_id=matched_cp_uuid, matched_project_id=matched_proj_uuid,
+                source_metadata=source_metadata,
             )
         elif role == "VENDOR":
             target_match_result = await match_vendor_bills(
-                session, organization_id, data, matched_counterparty_id=matched_cp_uuid, matched_project_id=matched_proj_uuid
+                session, organization_id, data, matched_counterparty_id=matched_cp_uuid, matched_project_id=matched_proj_uuid,
+                source_metadata=source_metadata,
             )
         else:
-            inv_res = await match_customer_invoices(session, organization_id, data, matched_project_id=matched_proj_uuid)
-            bill_res = await match_vendor_bills(session, organization_id, data, matched_project_id=matched_proj_uuid)
+            inv_res = await match_customer_invoices(
+                session, organization_id, data, matched_project_id=matched_proj_uuid, source_metadata=source_metadata,
+            )
+            bill_res = await match_vendor_bills(
+                session, organization_id, data, matched_project_id=matched_proj_uuid, source_metadata=source_metadata,
+            )
             if inv_res.primary_candidate and not bill_res.primary_candidate:
                 target_match_result = inv_res
             elif bill_res.primary_candidate and not inv_res.primary_candidate:
                 target_match_result = bill_res
-            elif inv_res.ambiguous or bill_res.ambiguous:
+            elif inv_res.ambiguous or bill_res.ambiguous or (inv_res.primary_candidate and bill_res.primary_candidate):
                 result["ambiguous"] = True
                 result["requires_review"] = True
+                # Combine ranked candidates for manual selection
+                for c in (inv_res.ranked_candidates + bill_res.ranked_candidates):
+                    result["match_candidates"].append(c.model_dump(mode="json"))
 
     if target_match_result:
         for c in target_match_result.ranked_candidates:
@@ -767,6 +957,13 @@ async def match_entities(
             result["allocation_confidence"] = f"{prim.score:.4f}"
             if prim.confidence_band != ConfidenceBand.HIGH:
                 result["requires_review"] = True
+            cand_cp_id = prim.scoring_details.get("counterparty_id")
+            if not result.get("counterparty_id") and cand_cp_id:
+                result["counterparty_id"] = str(cand_cp_id)
+                result["counterparty_role"] = "VENDOR" if prim.entity_type == "VENDOR_BILL" else "CUSTOMER"
+            cand_proj_id = prim.scoring_details.get("project_id")
+            if not result.get("project_id") and cand_proj_id:
+                result["project_id"] = str(cand_proj_id)
         else:
             result["requires_review"] = True
 

@@ -1,8 +1,9 @@
 import uuid
 from decimal import Decimal
 from src.models.enums import (CandidateStatus, CostCategory, DocumentType,
-                              ReviewFlag, TransactionType)
+                              ExpenseCategory, ReviewFlag, TransactionType)
 from src.schemas.document import StructuredExtraction, TransactionCandidate
+from src.services.documents.expense_classifier import classify_expense
 
 
 SUPPORTING_DOCUMENT_TYPES = {
@@ -26,28 +27,67 @@ def build_candidate(document_id: uuid.UUID, document_type: DocumentType,
         return None
     proposed = None
     category = None
+    expense_cat = None
     force_review = document_type in {DocumentType.TRANSFER_PROOF, DocumentType.RECEIPT}
     if document_type == DocumentType.TRANSFER_PROOF:
         # Direction is a proposal only; evidence of cash movement never proves expense.
         role = matches.get("counterparty_role")
-        proposed = (TransactionType.CUSTOMER_PAYMENT if role == "CUSTOMER" else
-                    TransactionType.PAY_VENDOR_BILL if role == "VENDOR" else None)
-    elif document_type == DocumentType.RECEIPT:
-        proposed, category = TransactionType.DIRECT_PURCHASE, CostCategory.MAT
-    elif document_type == DocumentType.VENDOR_INVOICE:
-        proposed, category = TransactionType.VENDOR_BILL, CostCategory.MAT
+        target_type = matches.get("allocation_target_type")
+        if target_type == "VENDOR_BILL" or role == "VENDOR":
+            proposed = TransactionType.PAY_VENDOR_BILL
+        elif target_type in ("CUSTOMER_INVOICE", "CustomerInvoice") or role == "CUSTOMER":
+            proposed = TransactionType.CUSTOMER_PAYMENT
+        else:
+            proposed = None
+    elif document_type in {DocumentType.RECEIPT, DocumentType.VENDOR_INVOICE}:
+        caption = matches.get("caption") or (matches.get("source_metadata") or {}).get("caption")
+        proj_hint = data.project_reference
+        raw_desc = data.description or (data.line_items[0].description if data.line_items else "") or data.raw_text or ""
+        matched_pid = matches.get("project_id")
+        if matched_pid and isinstance(matched_pid, str):
+            try:
+                matched_pid = uuid.UUID(matched_pid)
+            except Exception:
+                pass
+
+        exp_res = classify_expense(
+            raw_description=raw_desc,
+            caption=caption,
+            matched_project_id=matched_pid,
+            vendor_name=data.issuer_name or data.recipient_name,
+            document_text=data.raw_text,
+            document_project_hint=proj_hint,
+        )
+        matches["expense_classification"] = exp_res.to_dict()
+
+        if exp_res.cost_category:
+            category = exp_res.cost_category
+            expense_cat = None
+        elif exp_res.expense_category:
+            category = None
+            expense_cat = exp_res.expense_category
+        else:
+            category = CostCategory.MAT
+            expense_cat = None
+
+        if document_type == DocumentType.RECEIPT:
+            proposed = TransactionType.DIRECT_PURCHASE
+        else:
+            proposed = TransactionType.VENDOR_BILL
     elif document_type == DocumentType.CUSTOMER_INVOICE:
         proposed = TransactionType.CUSTOMER_INVOICE
 
     status = CandidateStatus.REVIEW_REQUIRED if (flags or force_review) else CandidateStatus.READY_FOR_APPROVAL
+    resolved_proj_id = None if expense_cat else matches.get("project_id")
     return TransactionCandidate(
         id=uuid.uuid5(uuid.NAMESPACE_URL, f"document:{document_id}"),
         proposed_transaction_type=proposed,
         counterparty_id=matches.get("counterparty_id"),
-        project_id=matches.get("project_id"),
+        project_id=resolved_proj_id,
         payment_account_id=matches.get("payment_account_id"),
         allocation_target_id=matches.get("allocation_target_id"),
         cost_category=category,
+        expense_category=expense_cat,
         transaction_date=data.transaction_date,
         amount=data.total_amount,
         currency_code=data.currency_code or "IDR",
@@ -85,11 +125,24 @@ def derive_flags(document_type: DocumentType, data: StructuredExtraction, matche
             if not matches_total and not matches_subtotal:
                 flags.append(ReviewFlag.AMOUNT_MISMATCH.value)
 
+    if matches.get("ambiguous"):
+        flags.append(ReviewFlag.AMBIGUOUS_MATCH.value)
+
     if document_type in {DocumentType.VENDOR_INVOICE, DocumentType.TRANSFER_PROOF} and not matches.get("counterparty_id"):
         flags.append(ReviewFlag.VENDOR_UNKNOWN.value)
     if document_type == DocumentType.CUSTOMER_INVOICE and not matches.get("counterparty_id"):
         flags.append(ReviewFlag.CUSTOMER_UNKNOWN.value)
     if document_type in {DocumentType.VENDOR_INVOICE, DocumentType.CUSTOMER_INVOICE} and not matches.get("project_id"):
         flags.append(ReviewFlag.PROJECT_UNKNOWN.value)
+    if document_type == DocumentType.TRANSFER_PROOF and not matches.get("allocation_target_id"):
+        flags.append(ReviewFlag.ACCOUNT_REVIEW.value)
+
+    # Expense classification checks
+    exp_info = matches.get("expense_classification")
+    if exp_info and exp_info.get("review_required"):
+        if not matches.get("project_id") and exp_info.get("management_category") == "BBM / Transportasi":
+            flags.append(ReviewFlag.PROJECT_UNKNOWN.value)
+        if "CAPTION_PROJECT_MISMATCH" in exp_info.get("classification_conflicts", []):
+            flags.append(ReviewFlag.AMBIGUOUS_MATCH.value)
 
     return list(dict.fromkeys(flags))

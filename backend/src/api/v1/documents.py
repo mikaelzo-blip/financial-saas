@@ -152,7 +152,11 @@ async def retry_document(document_id: uuid.UUID,
     async def retry(session: AsyncSession):
         service = DocumentService(session)
         document = await service.get_document(org_id, document_id)
-        if document.processing_status not in {DocumentProcessingStatus.FAILED, DocumentProcessingStatus.REVIEW_REQUIRED}:
+        if document.processing_status not in {
+            DocumentProcessingStatus.FAILED,
+            DocumentProcessingStatus.REVIEW_REQUIRED,
+            DocumentProcessingStatus.QUEUED,
+        }:
             raise HTTPException(status_code=409, detail="Document is not in a retryable state")
         document.processing_status = DocumentProcessingStatus.QUEUED
         await session.flush()
@@ -247,12 +251,14 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
 
             if bill:
                 candidate["allocation_target_id"] = str(bill.id)
+                candidate["proposed_transaction_type"] = TransactionType.PAY_VENDOR_BILL.value
                 if not candidate.get("counterparty_id") and bill.vendor_id:
                     candidate["counterparty_id"] = str(bill.vendor_id)
                 if not candidate.get("project_id") and bill.project_id:
                     candidate["project_id"] = str(bill.project_id)
             elif invoice:
                 candidate["allocation_target_id"] = str(invoice.id)
+                candidate["proposed_transaction_type"] = TransactionType.CUSTOMER_PAYMENT.value
                 if not candidate.get("counterparty_id") and invoice.customer_id:
                     candidate["counterparty_id"] = str(invoice.customer_id)
                 if not candidate.get("project_id") and invoice.project_id:
@@ -266,6 +272,8 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
             else:
                 raise HTTPException(status_code=422, detail="Selected candidate is not available in this organization")
             matching_results["ambiguous"] = False
+            if document.review_flags:
+                document.review_flags = [f for f in document.review_flags if f != ReviewFlag.AMBIGUOUS_MATCH.value]
 
     # Synchronize extracted fields
     if "document_type" in data.changes and data.changes["document_type"]:
@@ -387,6 +395,9 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
         "date": "OCR_LOW_CONFIDENCE",
     }
     cleared = {resolved[key] for key, value in data.changes.items() if key in resolved and value}
+    if data.changes.get("allocation_target_id") or data.changes.get("selected_candidate_id"):
+        cleared.add(ReviewFlag.ACCOUNT_REVIEW.value)
+        cleared.add(ReviewFlag.AMBIGUOUS_MATCH.value)
     document.review_flags = [flag for flag in document.review_flags if flag not in cleared]
     if matching_results.get("ambiguous"):
         if ReviewFlag.AMBIGUOUS_MATCH.value not in document.review_flags:
@@ -460,6 +471,17 @@ async def approve_document_candidate(
     candidate = TransactionCandidate.model_validate(document.candidate_transaction)
     if not candidate.proposed_transaction_type or not candidate.transaction_date or not candidate.amount:
         raise HTTPException(status_code=422, detail="Candidate is incomplete")
+
+    if document.document_type == DocumentType.TRANSFER_PROOF:
+        if candidate.proposed_transaction_type in {
+            TransactionType.DIRECT_PURCHASE,
+            TransactionType.VENDOR_BILL,
+            TransactionType.CUSTOMER_INVOICE,
+        }:
+            raise HTTPException(
+                status_code=422,
+                detail="Transfer proof cannot be approved as direct purchase, bill, or invoice; it must be an allocation payment"
+            )
 
     if candidate.proposed_transaction_type == TransactionType.CUSTOMER_PAYMENT and not candidate.allocation_target_id:
         raise HTTPException(status_code=409, detail="Customer payment requires an invoice allocation")

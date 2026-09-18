@@ -184,6 +184,7 @@ class ProjectService:
             project.pic_user_id = data.pic_user_id
 
         await self.session.flush()
+        await self.session.refresh(project)
         return project
 
     async def update_project_status(
@@ -276,6 +277,7 @@ class ProjectService:
             project.actual_end_date = date.today()
 
         await self.session.flush()
+        await self.session.refresh(project)
         return project
 
     async def update_variation_order(
@@ -291,6 +293,7 @@ class ProjectService:
         project.variation_order_value = variation_order_value
         project.revised_contract_value = project.calculate_revised_contract_value()
         await self.session.flush()
+        await self.session.refresh(project)
         return project
 
     async def get_project_budgets(

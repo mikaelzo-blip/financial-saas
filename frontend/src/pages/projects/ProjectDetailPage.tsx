@@ -10,6 +10,7 @@ import { Card } from '../../components/ui/Card';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { SkeletonLoader } from '../../components/feedback/SkeletonLoader';
 import { useToast } from '../../components/feedback/Toast';
+import { formatApiError } from '../../utils/errors';
 import { ProjectProfitabilityTab } from './components/ProjectProfitabilityTab';
 
 export const ProjectDetailPage: React.FC = () => {
@@ -29,11 +30,12 @@ export const ProjectDetailPage: React.FC = () => {
     mutationFn: (newStatus: ProjectStatus) => projectsApi.updateStatus(id!, newStatus),
     onSuccess: (updated) => {
       queryClient.setQueryData(['project', id], updated);
+      queryClient.invalidateQueries({ queryKey: ['project', id] });
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       success(`Status proyek berhasil diubah ke ${updated.project_status}.`);
     },
     onError: (err: any) => {
-      error(err.response?.data?.detail || 'Gagal mengubah status proyek.');
+      error(formatApiError(err, 'Gagal mengubah status proyek.'));
     },
   });
 

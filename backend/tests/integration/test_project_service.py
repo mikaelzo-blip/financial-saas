@@ -255,3 +255,29 @@ async def test_project_rest_api_endpoints(client: AsyncClient, db_session: Async
     assert not_found_resp.status_code == 404
     err = not_found_resp.json()
     assert err["error"]["code"] == "NOT_FOUND"
+
+    # 5. PATCH /projects/{id}/status with missing 'status' field returns 422
+    wrong_payload_resp = await client.patch(
+        f"/api/v1/projects/{project_id}/status",
+        json={"project_status": "ACTIVE"},
+        headers={"X-Organization-ID": str(org.id)}
+    )
+    assert wrong_payload_resp.status_code == 422
+
+    # 6. PATCH /projects/{id}/status with canonical {"status": "ACTIVE"} activates project
+    activate_resp = await client.patch(
+        f"/api/v1/projects/{project_id}/status",
+        json={"status": "ACTIVE"},
+        headers={"X-Organization-ID": str(org.id)}
+    )
+    assert activate_resp.status_code == 200
+    assert activate_resp.json()["project_status"] == "ACTIVE"
+
+    # 7. PATCH /projects/{id}/status with invalid lifecycle (e.g. back to PLANNED) fails with 422 INVARIANT_VIOLATION
+    invalid_lifecycle_resp = await client.patch(
+        f"/api/v1/projects/{project_id}/status",
+        json={"status": "PLANNED"},
+        headers={"X-Organization-ID": str(org.id)}
+    )
+    assert invalid_lifecycle_resp.status_code == 422
+    assert invalid_lifecycle_resp.json()["error"]["code"] == "INVARIANT_VIOLATION"

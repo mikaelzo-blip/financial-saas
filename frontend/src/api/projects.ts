@@ -41,7 +41,7 @@ export const projectsApi = {
 
   updateStatus: async (id: string, newStatus: ProjectStatus): Promise<ProjectResponse> => {
     const res = await apiClient.patch<ProjectResponse>(`/projects/${id}/status`, {
-      project_status: newStatus,
+      status: newStatus,
     });
     return res.data;
   },

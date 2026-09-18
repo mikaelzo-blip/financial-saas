@@ -28,7 +28,22 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const showToast = useCallback(
-    (message: string, type: ToastType = 'info', duration: number = 4000) => {
+    (rawMessage: unknown, type: ToastType = 'info', duration: number = 4000) => {
+      let message = '';
+      if (typeof rawMessage === 'string') {
+        message = rawMessage;
+      } else if (rawMessage instanceof Error) {
+        message = rawMessage.message;
+      } else if (Array.isArray(rawMessage)) {
+        message = rawMessage
+          .map((item) => (typeof item === 'object' && item !== null && 'msg' in item ? String(item.msg) : String(item)))
+          .join('; ');
+      } else if (typeof rawMessage === 'object' && rawMessage !== null) {
+        message = JSON.stringify(rawMessage);
+      } else {
+        message = String(rawMessage ?? '');
+      }
+
       const id = Math.random().toString(36).substring(2, 9);
       const newToast: Toast = { id, type, message, duration };
       setToasts((prev) => [...prev, newToast]);

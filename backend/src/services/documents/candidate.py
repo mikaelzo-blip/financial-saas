@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 from src.models.enums import (CandidateStatus, CostCategory, DocumentType,
                               ReviewFlag, TransactionType)
 from src.schemas.document import StructuredExtraction, TransactionCandidate
@@ -73,6 +74,16 @@ def derive_flags(document_type: DocumentType, data: StructuredExtraction, matche
                 flags.append(ReviewFlag.OCR_LOW_CONFIDENCE.value)
         elif field_val.validation_status == "INVALID":
             flags.append(ReviewFlag.OCR_LOW_CONFIDENCE.value)
+
+    # Consistency validation: line items sum vs total_amount / subtotal
+    if data.line_items and data.total_amount is not None:
+        valid_line_amounts = [it.amount for it in data.line_items if it.amount is not None]
+        if valid_line_amounts and len(valid_line_amounts) == len(data.line_items):
+            line_sum = sum(valid_line_amounts)
+            matches_total = abs(line_sum - data.total_amount) <= Decimal("1.00")
+            matches_subtotal = (data.subtotal is not None and abs(line_sum - data.subtotal) <= Decimal("1.00"))
+            if not matches_total and not matches_subtotal:
+                flags.append(ReviewFlag.AMOUNT_MISMATCH.value)
 
     if document_type in {DocumentType.VENDOR_INVOICE, DocumentType.TRANSFER_PROOF} and not matches.get("counterparty_id"):
         flags.append(ReviewFlag.VENDOR_UNKNOWN.value)

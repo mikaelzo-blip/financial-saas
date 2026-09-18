@@ -35,6 +35,7 @@ _HEADER_RULES: List[Tuple[DocumentType, str, int, str]] = [
     (DocumentType.PURCHASE_ORDER, r"\b(?:purchase\s+order|pesanan\s+pembelian|order\s+pembelian)\b", 65, "header: purchase-order"),
     (DocumentType.RECEIPT, r"\b(?:struk\s+pembelian|purchase\s+receipt|kuitansi|kwitansi|nota\s+kontan|nota\s+pembelian|nota\s+toko)\b", 60, "header: purchase-receipt"),
     (DocumentType.CONTRACT, r"\b(?:perjanjian\s+kontrak|surat\s+perjanjian|kontrak\s+kerja|perjanjian\s+pemborongan)\b", 60, "header: contract"),
+    (DocumentType.QUOTATION, r"\b(?:quotation|penawaran\s+harga|surat\s+penawaran|proforma\s+invoice|faktur\s+proforma)\b", 65, "header: quotation"),
 ]
 
 # Body signals: (pattern, score, signal_name) per document type
@@ -54,8 +55,8 @@ _BODY_SIGNALS: Dict[DocumentType, List[Tuple[str, int, str]]] = {
     ],
     DocumentType.VENDOR_INVOICE: [
         (r"\b(?:jatuh\s+tempo|due\s+date)\b", 20, "invoice-duedate"),
-        (r"\b(?:subtotal|sub\s+total|dpp)\b", 20, "invoice-subtotal"),
-        (r"\b(?:ppn\s*1[12]%|vat\s*1[12]%|pajak\s+pertambahan\s+nilai)\b", 20, "invoice-vat"),
+        (r"\b(?:sub[\s-]*total|dpp)\b", 20, "invoice-subtotal"),
+        (r"\b(?:ppn\s*\(?1[12]%\)?|vat\s*\(?1[12]%\)?|pajak\s+pertambahan\s+nilai)\b", 20, "invoice-vat"),
         (r"\b(?:termin|termin\s+ke|syarat\s+pembayaran)\b", 15, "invoice-payment-terms"),
         (r"\b(?:INV|FAK|BILL)[-/][A-Z0-9-/]+", 25, "invoice-number-pattern"),
         (r"\b(?:faktur|invoice)\b", 10, "invoice-keyword"),
@@ -100,6 +101,11 @@ _BODY_SIGNALS: Dict[DocumentType, List[Tuple[str, int, str]]] = {
     DocumentType.CONTRACT: [
         (r"\b(?:pasal\s+\d+|ayat\s+\d+)\b", 30, "contract-clauses"),
         (r"\b(?:perjanjian\s+ini|kedua\s+belah\s+pihak)\b", 25, "contract-agreement"),
+    ],
+    DocumentType.QUOTATION: [
+        (r"\b(?:penawaran\s+harga|quotation|proforma)\b", 30, "quotation-keywords"),
+        (r"\b(?:masa\s+berlaku|valid\s+until|validity)\b", 25, "quotation-validity"),
+        (r"\b(?:syarat\s+pembayaran|payment\s+terms|terms\s+of\s+payment)\b", 20, "quotation-terms"),
     ],
 }
 

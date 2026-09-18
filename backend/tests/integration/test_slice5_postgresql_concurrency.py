@@ -54,7 +54,7 @@ from src.services.transaction_retry import run_in_clean_transaction
 from src.worker import handle_document_post
 
 POSTGRES_URL_ENV = "FIN_001_TEST_DATABASE_URL"
-EXPECTED_ALEMBIC_HEAD = "028_document_posting_linkage"
+EXPECTED_ALEMBIC_HEAD = "029_whatsapp_document_sessions"
 
 pytestmark = pytest.mark.postgresql
 

@@ -103,11 +103,11 @@ jobs:
         run: |
           HEADS=$(.venv/bin/python -m alembic heads)
           echo "Alembic heads: $HEADS"
-          echo "$HEADS" | grep -q "028_document_posting_linkage (head)" || { echo "FATAL: Unexpected alembic head: $HEADS"; exit 1; }
+          echo "$HEADS" | grep -q "029_whatsapp_document_sessions (head)" || { echo "FATAL: Unexpected alembic head: $HEADS"; exit 1; }
 
           CURRENT=$(.venv/bin/python -m alembic current)
           echo "Alembic current: $CURRENT"
-          echo "$CURRENT" | grep -q "028_document_posting_linkage (head)" || { echo "FATAL: Unexpected alembic current: $CURRENT"; exit 1; }
+          echo "$CURRENT" | grep -q "029_whatsapp_document_sessions (head)" || { echo "FATAL: Unexpected alembic current: $CURRENT"; exit 1; }
 
       - name: Verify zero Alembic schema drift
         run: .venv/bin/python -m alembic check

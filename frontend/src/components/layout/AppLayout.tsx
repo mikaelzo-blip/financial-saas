@@ -20,7 +20,6 @@ import {
   TrendingUp,
   Landmark,
   Scale,
-  MessageSquare,
   CheckSquare,
   ChevronDown,
   ChevronRight,
@@ -42,9 +41,9 @@ export const AppLayout: React.FC = () => {
   const [reportsOpen, setReportsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Sub-items for Inbox
+  // Sub-items for Inbox (Dokumen Bukti, Perlu Diperiksa)
+  // Legacy WhatsApp Inbox is hidden from primary nav until Unified Inbox Phase B
   const inboxItems = [
-    { label: 'WhatsApp Inbox', path: '/whatsapp-inbox', icon: MessageSquare },
     { label: 'Dokumen Bukti', path: '/documents', icon: FileText },
     { label: 'Perlu Diperiksa', path: '/review-queue', icon: AlertTriangle },
   ];

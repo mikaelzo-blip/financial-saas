@@ -22,7 +22,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
       variant = 'info';
       break;
     case 'POSTED':
-      label = 'Terposting';
+      label = 'Sudah Diposting';
       variant = 'success';
       break;
     case 'REVIEW_REQUIRED':
@@ -35,24 +35,18 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
       break;
     case 'UPLOADED':
     case 'HASHED':
-      label = 'Diterima';
-      variant = 'neutral';
-      break;
     case 'QUEUED':
-      label = 'Dalam Antrean';
+      label = 'Menunggu';
       variant = 'info';
       break;
     case 'EXTRACTING':
-      label = 'Ekstraksi OCR';
+    case 'MATCHING':
+      label = 'Sedang Diproses';
       variant = 'purple';
       break;
     case 'EXTRACTED':
       label = 'Terekstraksi';
       variant = 'info';
-      break;
-    case 'MATCHING':
-      label = 'Pencocokan';
-      variant = 'purple';
       break;
     case 'REVERSED':
       label = 'Dibatalkan';
@@ -63,7 +57,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
       variant = 'danger';
       break;
     case 'FAILED':
-      label = 'Gagal';
+      label = 'Gagal Diproses';
       variant = 'danger';
       break;
 

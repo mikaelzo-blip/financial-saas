@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   FileText,
   UploadCloud,
@@ -25,7 +25,7 @@ import {
   DocumentType,
   WhatsAppIntegrationStatusResponse,
 } from '../../types/api';
-import { formatIDR, formatDate } from '../../utils/formatters';
+import { formatIDR, formatDate, formatFailureReason } from '../../utils/formatters';
 import { formatDocumentType, formatSourceChannel } from '../../utils/labels';
 import { Button } from '../../components/ui/Button';
 import { StatusBadge } from '../../components/ui/StatusBadge';
@@ -52,21 +52,52 @@ const FLAG_LABELS: Record<string, string> = {
 
 export const DocumentListPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [selectedDoc, setSelectedDoc] = useState<DocumentOperationalItem | null>(null);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
 
-  // Filters & Pagination State
-  const [actionFilter, setActionFilter] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<string>('');
-  const [documentTypeFilter, setDocumentTypeFilter] = useState<string>('');
-  const [sourceChannelFilter, setSourceChannelFilter] = useState<string>('');
-  const [reviewFlagFilter, setReviewFlagFilter] = useState<string>('');
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  const [sortBy, setSortBy] = useState<string>('created_at');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
-  const [page, setPage] = useState<number>(1);
+  // Filters & Pagination State initialized from URL query parameters if present
+  const [actionFilter, setActionFilter] = useState<string>(searchParams.get('action') || '');
+  const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') || '');
+  const [documentTypeFilter, setDocumentTypeFilter] = useState<string>(searchParams.get('document_type') || '');
+  const [sourceChannelFilter, setSourceChannelFilter] = useState<string>(searchParams.get('source_channel') || '');
+  const [reviewFlagFilter, setReviewFlagFilter] = useState<string>(searchParams.get('review_flag') || '');
+  const [searchTerm, setSearchTerm] = useState<string>(searchParams.get('search') || '');
+  const [sortBy, setSortBy] = useState<string>(searchParams.get('sort_by') || 'created_at');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>((searchParams.get('sort_dir') as 'asc' | 'desc') || 'desc');
+  const [page, setPage] = useState<number>(Number(searchParams.get('page')) || 1);
   const pageSize = 10;
+
+  // Sync state to URL search parameters so returning to /documents preserves filters
+  React.useEffect(() => {
+    const params = new URLSearchParams();
+    if (actionFilter) params.set('action', actionFilter);
+    if (statusFilter) params.set('status', statusFilter);
+    if (documentTypeFilter) params.set('document_type', documentTypeFilter);
+    if (sourceChannelFilter) params.set('source_channel', sourceChannelFilter);
+    if (reviewFlagFilter) params.set('review_flag', reviewFlagFilter);
+    if (searchTerm) params.set('search', searchTerm);
+    if (sortBy && sortBy !== 'created_at') params.set('sort_by', sortBy);
+    if (sortDir && sortDir !== 'desc') params.set('sort_dir', sortDir);
+    if (page > 1) params.set('page', String(page));
+    setSearchParams(params, { replace: true });
+  }, [actionFilter, statusFilter, documentTypeFilter, sourceChannelFilter, reviewFlagFilter, searchTerm, sortBy, sortDir, page, setSearchParams]);
+
+  const getReturnUrl = () => {
+    const params = new URLSearchParams();
+    if (actionFilter) params.set('action', actionFilter);
+    if (statusFilter) params.set('status', statusFilter);
+    if (documentTypeFilter) params.set('document_type', documentTypeFilter);
+    if (sourceChannelFilter) params.set('source_channel', sourceChannelFilter);
+    if (reviewFlagFilter) params.set('review_flag', reviewFlagFilter);
+    if (searchTerm) params.set('search', searchTerm);
+    if (sortBy && sortBy !== 'created_at') params.set('sort_by', sortBy);
+    if (sortDir && sortDir !== 'desc') params.set('sort_dir', sortDir);
+    if (page > 1) params.set('page', String(page));
+    const qs = params.toString();
+    return qs ? `/documents?${qs}` : '/documents';
+  };
 
   // Actions loading state
   const [postingId, setPostingId] = useState<string | null>(null);
@@ -788,11 +819,12 @@ export const DocumentListPage: React.FC = () => {
                           </div>
                         )}
                         {doc.failure_code && (
-                          <div className="text-[10px] text-rose-700 font-mono flex items-center gap-1">
+                          <div className="text-[10px] text-rose-700 flex items-center gap-1 font-medium">
                             <AlertOctagon className="h-3 w-3 shrink-0" />
-                            <span className="truncate max-w-[140px]" title={doc.failure_message || doc.failure_code}>
-                              {doc.failure_code}
+                            <span className="truncate max-w-[160px]" title={doc.failure_code}>
+                              {formatFailureReason(doc.failure_code, doc.failure_message)}
                             </span>
+                            <span className="sr-only">{doc.failure_code}</span>
                           </div>
                         )}
                         {doc.processing_attempts > 0 && doc.processing_status !== 'POSTED' && (
@@ -903,7 +935,13 @@ export const DocumentListPage: React.FC = () => {
                           <Button
                             size="sm"
                             variant="primary"
-                            onClick={() => navigate(`/documents/${doc.id}/review`)}
+                            onClick={() => {
+                              const returnUrl = getReturnUrl();
+                              const searchPart = returnUrl.includes('?') ? returnUrl.slice(returnUrl.indexOf('?')) : '';
+                              navigate(`/documents/${doc.id}/review${searchPart}`, {
+                                state: { returnTo: returnUrl },
+                              });
+                            }}
                           >
                             Periksa
                           </Button>

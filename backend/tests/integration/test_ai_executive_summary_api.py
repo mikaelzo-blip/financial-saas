@@ -1,6 +1,5 @@
 import asyncio
 from decimal import Decimal
-from time import perf_counter
 
 import pytest
 from src.models.user import User
@@ -52,13 +51,31 @@ async def test_exec_auth_tenant_dates_and_no_financial_writes(client, db_session
 
 @pytest.mark.asyncio
 async def test_provider_timeout_returns_fast_fallback(client, db_session, monkeypatch):
+    from src.core.config import settings
     from src.services.ai.mock_provider import MockAIInsightProvider
-    async def timeout(*args, **kwargs):
-        await asyncio.sleep(15)
-    monkeypatch.setattr(MockAIInsightProvider, 'generate', timeout)
+
+    provider_started = asyncio.Event()
+    provider_cancelled = asyncio.Event()
+
+    async def slow_provider(*args, **kwargs):
+        provider_started.set()
+        try:
+            await asyncio.sleep(15)
+        except asyncio.CancelledError:
+            provider_cancelled.set()
+            raise
+
+    monkeypatch.setattr(MockAIInsightProvider, 'generate', slow_provider)
+    monkeypatch.setattr(settings, 'AI_INSIGHT_TIMEOUT_SECONDS', 0.05)
     _, _, headers = await insight_identity(db_session)
-    started = perf_counter()
-    response = await client.get(URL, headers=headers)
-    assert perf_counter() - started < .5
+
+    response = await asyncio.wait_for(
+        client.get(URL, headers=headers),
+        timeout=2.0,
+    )
+    assert provider_started.is_set()
+    assert provider_cancelled.is_set()
     assert response.status_code == 200
-    assert response.json()['provider_metadata']['provider'] == 'DETERMINISTIC_FALLBACK'
+    body = response.json()
+    assert body['provider_metadata']['provider'] == 'DETERMINISTIC_FALLBACK'
+    assert body['provider_metadata']['fallback_reason'] == 'PROVIDER_UNAVAILABLE_OR_INVALID'

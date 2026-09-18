@@ -96,18 +96,40 @@ class JobWorker:
                 await session.commit()
             return True
 
+    async def recover_stuck_documents(self) -> int:
+        async with self.session_factory() as session:
+            queue_svc = JobQueueService(session)
+            count = await queue_svc.recover_orphaned_queued_documents()
+            if count > 0:
+                await session.commit()
+                logger.info(f"Worker {self.worker_id} recovered {count} orphaned queued documents.")
+            return count
+
     async def run(self) -> None:
         """
         Main worker loop.
         """
         self.is_running = True
         logger.info(f"Starting Background Job Worker {self.worker_id}...")
+        try:
+            await self.recover_stuck_documents()
+        except Exception as e:
+            logger.error(f"Error during initial stuck document recovery: {e}")
 
+        idle_cycles = 0
         while self.is_running:
             try:
                 processed = await self.execute_one_job()
                 if not processed:
+                    idle_cycles += 1
+                    if idle_cycles % 15 == 0:
+                        try:
+                            await self.recover_stuck_documents()
+                        except Exception as e:
+                            logger.error(f"Error during periodic stuck document recovery: {e}")
                     await asyncio.sleep(self.poll_interval)
+                else:
+                    idle_cycles = 0
             except asyncio.CancelledError:
                 break
             except Exception as e:

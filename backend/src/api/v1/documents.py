@@ -399,6 +399,21 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
 
     document.matching_results = matching_results
 
+    resolved = {
+        "project_id": ["PROJECT_UNKNOWN"],
+        "counterparty_id": ["VENDOR_UNKNOWN", "CUSTOMER_UNKNOWN"],
+        "selected_candidate_id": ["AMBIGUOUS_MATCH"],
+        "allocation_target_id": ["AMBIGUOUS_MATCH"],
+        "amount": ["OCR_LOW_CONFIDENCE", "AMOUNT_MISMATCH"],
+        "total_amount": ["OCR_LOW_CONFIDENCE", "AMOUNT_MISMATCH"],
+        "transaction_date": ["OCR_LOW_CONFIDENCE", "DATE_MISMATCH"],
+        "date": ["OCR_LOW_CONFIDENCE", "DATE_MISMATCH"],
+    }
+    cleared = set()
+    for key, value in data.changes.items():
+        if key in resolved and value:
+            cleared.update(resolved[key])
+
     validated = TransactionCandidate.model_validate(candidate)
     if validated.proposed_transaction_type is not None:
         PostingRuleRegistry.validate_generic_ingestion(validated.proposed_transaction_type)
@@ -437,17 +452,6 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
     await validate_allocation_target(db, org_id, validated)
 
     document.candidate_transaction = validated.model_dump(mode="json")
-    resolved = {
-        "project_id": "PROJECT_UNKNOWN",
-        "counterparty_id": "VENDOR_UNKNOWN",
-        "selected_candidate_id": "AMBIGUOUS_MATCH",
-        "allocation_target_id": "AMBIGUOUS_MATCH",
-        "amount": "OCR_LOW_CONFIDENCE",
-        "total_amount": "OCR_LOW_CONFIDENCE",
-        "transaction_date": "OCR_LOW_CONFIDENCE",
-        "date": "OCR_LOW_CONFIDENCE",
-    }
-    cleared = {resolved[key] for key, value in data.changes.items() if key in resolved and value}
     if data.changes.get("allocation_target_id") or data.changes.get("selected_candidate_id"):
         cleared.add(ReviewFlag.ACCOUNT_REVIEW.value)
         cleared.add(ReviewFlag.AMBIGUOUS_MATCH.value)

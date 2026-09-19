@@ -201,7 +201,7 @@ git commit -m "feat(documents): allow per-line recording categories on LineItem"
 - Test: `backend/tests/unit/test_expense_classifier_services.py` (create)
 
 **Interfaces:**
-- Produces: `classify_expense("JASA ANGKUT ...")` → `cost_category=CostCategory.LOG`; `classify_expense("STAMP")` → `expense_category=ExpenseCategory.OTHER_OPERATIONAL`; `classify_expense("JASA PASANG BEARING")` → `cost_category=CostCategory.SUB`; `classify_expense("JASA PEMBUATAN DOKUMEN")` → `expense_category=ExpenseCategory.OFFICE_ADMIN`. Consumed by Task 4.
+- Produces: `classify_expense("JASA ANGKUT ...")` → `cost_category=CostCategory.LOG`; `classify_expense("STAMP")` → `expense_category=ExpenseCategory.OTHER_OPERATIONAL`; `classify_expense("JASA PASANG BEARING")` → `cost_category=CostCategory.SUB`; `classify_expense("JASA PEMBUATAN DOKUMEN")` → `expense_category=ExpenseCategory.OFFICE_ADMIN`; `classify_expense("BIAYA PERIJINAN SBU")` → `expense_category=ExpenseCategory.PERMITS`. Consumed by Task 4.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -247,6 +247,14 @@ def test_document_service_is_office_admin():
     res = classify_expense(raw_description="JASA PEMBUATAN DOKUMEN PROYEK")
     assert res.cost_category is None
     assert res.expense_category is ExpenseCategory.OFFICE_ADMIN
+
+
+def test_permit_and_licensing_is_permits_expense():
+    # The company's Laba Rugi carries a distinct "BIAYA PERIJINAN *SBU" line, so
+    # permits map to the PERMITS account (6105), not OFFICE_ADMIN (6103).
+    res = classify_expense(raw_description="BIAYA PERIJINAN SBU")
+    assert res.cost_category is None
+    assert res.expense_category is ExpenseCategory.PERMITS
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -264,7 +272,11 @@ _RE_STAMP_DUTY = re.compile(
     re.IGNORECASE,
 )
 _RE_DOC_SERVICE = re.compile(
-    r"\b(?:jasa\s+pembuatan\s+dokumen|pembuatan\s+dokumen|administrasi|perizinan|legalitas|notaris)\b",
+    r"\b(?:jasa\s+pembuatan\s+dokumen|pembuatan\s+dokumen|administrasi)\b",
+    re.IGNORECASE,
+)
+_RE_PERMITS = re.compile(
+    r"\b(?:perizinan|perijinan|izin|legalitas|notaris|sertifikasi|sbu)\b",
     re.IGNORECASE,
 )
 _RE_FREIGHT = re.compile(
@@ -313,6 +325,23 @@ In `classify_expense`, insert this block immediately **before** `# 3. Default fa
             cost_category=None,
             expense_category=ExpenseCategory.OFFICE_ADMIN,
             proposed_account_or_rule="6103 - Beban Operasional Kantor dan Administrasi",
+            classification_confidence=Decimal("0.80"),
+            classification_signals=signals,
+            classification_conflicts=conflicts,
+            review_required=False,
+        )
+
+    if _RE_PERMITS.search(full_text):
+        signals.append("PERMITS_KEYWORD_DETECTED")
+        return ExpenseClassificationResult(
+            raw_description=raw,
+            normalized_description="Perizinan / Legalitas",
+            project_id=None,
+            project_confidence=Decimal("0.00"),
+            management_category="Perizinan & Legalitas",
+            cost_category=None,
+            expense_category=ExpenseCategory.PERMITS,
+            proposed_account_or_rule="6105 - Beban Legal, Perizinan, dan Sertifikasi Perusahaan",
             classification_confidence=Decimal("0.80"),
             classification_signals=signals,
             classification_conflicts=conflicts,
@@ -658,7 +687,6 @@ git commit -m "feat(documents): accept corrected line_items in the corrections e
 
 **Files:**
 - Modify: `backend/src/services/document_posting_service.py` (add `build_line_allocations`, use it at line ~425-446)
-- Modify: `backend/src/api/v1/documents.py` (`is_candidate_ready_for_approval`, lines 46-103)
 - Test: `backend/tests/unit/test_posting_line_allocations.py` (create)
 
 **Interfaces:**
@@ -720,9 +748,17 @@ def test_same_category_lines_are_merged_into_one_allocation():
     assert allocs[0].amount == Decimal("300")
 
 
-def test_returns_none_when_no_line_has_a_category():
+def test_returns_none_when_no_line_items():
+    assert build_line_allocations({"line_items": []}, _candidate()) is None
+
+
+def test_returns_none_when_no_category_anywhere():
+    # No line category AND no document-level category -> keep legacy single path.
     extracted = {"line_items": [{"description": "X", "amount": "100"}]}
-    assert build_line_allocations(extracted, _candidate()) is None
+    bare = SimpleNamespace(
+        project_id=None, cost_category=None, expense_category=None, amount=Decimal("100")
+    )
+    assert build_line_allocations(extracted, bare) is None
 
 
 def test_uncategorised_lines_fall_back_to_document_category():
@@ -778,9 +814,10 @@ def build_line_allocations(
 ) -> Optional[List[TransactionAllocationInput]]:
     """Group invoice line items into one allocation per (project, cost, expense) bucket.
 
-    Returns None when no line carries a category, so the caller keeps the
-    existing single-category behaviour. Uncategorised lines inherit the
-    document-level category so their amount is never dropped.
+    Returns None when there are no line items, or when neither the lines nor the
+    document carry any category — so the caller keeps the existing single-category
+    behaviour. Uncategorised lines inherit the document-level category so their
+    amount is never dropped.
     """
     items = (extracted_data or {}).get("line_items") or []
     if not items:
@@ -811,6 +848,9 @@ def build_line_allocations(
         groups[key] = groups.get(key, Decimal("0.00")) + Decimal(str(raw_amount))
 
     if not groups:
+        return None
+    # No category anywhere (neither line nor document): keep the legacy path.
+    if all(key[1] is None and key[2] is None for key in groups):
         return None
 
     allocations = [
@@ -899,7 +939,7 @@ Expected: no `FAILED` lines (the new 5 pass; pre-existing skips remain).
 - [ ] **Step 7: Commit**
 
 ```bash
-git add backend/src/services/document_posting_service.py backend/src/api/v1/documents.py backend/tests/unit/test_posting_line_allocations.py
+git add backend/src/services/document_posting_service.py backend/tests/unit/test_posting_line_allocations.py
 git commit -m "feat(documents): post one invoice across multiple accounts per line item"
 ```
 

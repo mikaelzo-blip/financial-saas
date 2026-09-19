@@ -29,6 +29,32 @@ export const PAYMENT_ACCOUNT_REQUIRED_TRANSACTION_TYPES = new Set<TransactionTyp
   'PAY_VENDOR_BILL',
 ]);
 
+// Keep in sync with backend/src/services/documents/status.py (EVIDENCE_DOCUMENT_TYPES).
+export const EVIDENCE_DOCUMENT_TYPES: ReadonlySet<string> = new Set<string>([
+  // Supporting documents
+  'SPK',
+  'CONTRACT',
+  'BAST',
+  'SURAT_JALAN',
+  'PROGRESS_REPORT',
+  'TIMESHEET',
+  'PURCHASE_ORDER',
+  'PO_CUSTOMER',
+  'TAX_INVOICE',
+  'WITHHOLDING_DOCUMENT',
+  'OTHER_TAX_DOCUMENT',
+  // Evidence-only orphans
+  'BANK_STATEMENT',
+  'QUOTATION',
+  'VARIATION_ORDER',
+  'SUBCONTRACT_AGREEMENT',
+  'PETTY_CASH_PROOF',
+  'CUSTOMER_RECEIPT',
+]);
+
+export const isEvidenceDocument = (documentType: string | undefined | null): boolean =>
+  Boolean(documentType && EVIDENCE_DOCUMENT_TYPES.has(documentType));
+
 export const isPaymentAccountRequired = (
   transactionType: TransactionType | undefined,
   documentType?: string,

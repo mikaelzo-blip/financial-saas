@@ -14,6 +14,7 @@ const LABELS: Record<string, string> = {
   SUB: 'Jasa / Subkontraktor',
   TRN: 'Bensin & Transport (proyek)',
   EQP: 'Peralatan / Sewa Alat',
+  LOG: 'Jasa Angkut / Ekspedisi (proyek)',
   TRAVEL_OFFICE: 'Bensin / Kendaraan (kantor)',
   OFFICE_ADMIN: 'ATK / Operasional Kantor',
   OTHER_OPERATIONAL: 'Lain-lain',

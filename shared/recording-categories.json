@@ -3,6 +3,7 @@
   { "value": "SUB", "kind": "cost", "requiresProject": true },
   { "value": "TRN", "kind": "cost", "requiresProject": true },
   { "value": "EQP", "kind": "cost", "requiresProject": true },
+  { "value": "LOG", "kind": "cost", "requiresProject": true },
   { "value": "TRAVEL_OFFICE", "kind": "expense", "requiresProject": false },
   { "value": "OFFICE_ADMIN", "kind": "expense", "requiresProject": false },
   { "value": "OTHER_OPERATIONAL", "kind": "expense", "requiresProject": false }

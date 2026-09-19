@@ -29,6 +29,7 @@ def test_loads_every_recording_category_in_order():
         "SUB",
         "TRN",
         "EQP",
+        "LOG",
         "TRAVEL_OFFICE",
         "OFFICE_ADMIN",
         "OTHER_OPERATIONAL",
@@ -36,9 +37,9 @@ def test_loads_every_recording_category_in_order():
 
 
 def test_project_required_cost_categories_matches_curated_business_rule():
-    # Only these four cost categories require a project (spec D4). The other five
-    # CostCategory members (LAB, TRV, LOG, SIT, OTH) are deliberately NOT included.
-    assert PROJECT_REQUIRED_COST_CATEGORIES == {"MAT", "SUB", "TRN", "EQP"}
+    # LOG (logistics & freight) joined the project-required cost categories so
+    # "JASA ANGKUT" lines can book to HPP 5101 instead of falling to 6199.
+    assert PROJECT_REQUIRED_COST_CATEGORIES == {"MAT", "SUB", "TRN", "EQP", "LOG"}
 
 
 def test_every_category_is_a_real_enum_member():

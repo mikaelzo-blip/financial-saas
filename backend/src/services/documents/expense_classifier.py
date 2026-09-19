@@ -78,6 +78,26 @@ _RE_OFFICE_INDICATOR = re.compile(
     r"\b(?:kantor|office|administrasi)\b",
     re.IGNORECASE,
 )
+_RE_STAMP_DUTY = re.compile(
+    r"\b(?:materai|meterai|stamp|tempel)\b",
+    re.IGNORECASE,
+)
+_RE_DOC_SERVICE = re.compile(
+    r"\b(?:jasa\s+pembuatan\s+dokumen|pembuatan\s+dokumen|administrasi)\b",
+    re.IGNORECASE,
+)
+_RE_PERMITS = re.compile(
+    r"\b(?:perizinan|perijinan|izin|legalitas|notaris|sertifikasi|sbu)\b",
+    re.IGNORECASE,
+)
+_RE_FREIGHT = re.compile(
+    r"\b(?:jasa\s+angkut|angkut|kirim|pengiriman|ekspedisi|freight|logistik|ongkos\s+kirim|kargo)\b",
+    re.IGNORECASE,
+)
+_RE_INSTALLATION = re.compile(
+    r"\b(?:pasang|pemasangan|instalasi|instal|bearing|servis|perbaikan|maintenance|subkon|subkontraktor)\b",
+    re.IGNORECASE,
+)
 
 
 def classify_expense(
@@ -229,6 +249,96 @@ def classify_expense(
             classification_signals=signals,
             classification_conflicts=conflicts,
             review_required=review_required,
+        )
+
+    # 2b. Service / stamp-duty classification (line-item aware)
+    # Stamp duty and document preparation are administrative overhead, never HPP,
+    # even when the document carries a project.
+    if _RE_STAMP_DUTY.search(full_text):
+        signals.append("STAMP_DUTY_KEYWORD_DETECTED")
+        return ExpenseClassificationResult(
+            raw_description=raw,
+            normalized_description="Materai / Stamp Duty",
+            project_id=None,
+            project_confidence=Decimal("0.00"),
+            management_category="Materai",
+            cost_category=None,
+            expense_category=ExpenseCategory.OTHER_OPERATIONAL,
+            proposed_account_or_rule="6199 - Beban Operasional Lainnya",
+            classification_confidence=Decimal("0.85"),
+            classification_signals=signals,
+            classification_conflicts=conflicts,
+            review_required=False,
+        )
+
+    if _RE_DOC_SERVICE.search(full_text):
+        signals.append("DOCUMENT_SERVICE_KEYWORD_DETECTED")
+        return ExpenseClassificationResult(
+            raw_description=raw,
+            normalized_description="Jasa Pembuatan Dokumen / Administrasi",
+            project_id=None,
+            project_confidence=Decimal("0.00"),
+            management_category="Jasa Administrasi",
+            cost_category=None,
+            expense_category=ExpenseCategory.OFFICE_ADMIN,
+            proposed_account_or_rule="6103 - Beban Operasional Kantor dan Administrasi",
+            classification_confidence=Decimal("0.80"),
+            classification_signals=signals,
+            classification_conflicts=conflicts,
+            review_required=False,
+        )
+
+    if _RE_PERMITS.search(full_text):
+        signals.append("PERMITS_KEYWORD_DETECTED")
+        return ExpenseClassificationResult(
+            raw_description=raw,
+            normalized_description="Perizinan / Legalitas",
+            project_id=None,
+            project_confidence=Decimal("0.00"),
+            management_category="Perizinan & Legalitas",
+            cost_category=None,
+            expense_category=ExpenseCategory.PERMITS,
+            proposed_account_or_rule="6105 - Beban Legal, Perizinan, dan Sertifikasi Perusahaan",
+            classification_confidence=Decimal("0.80"),
+            classification_signals=signals,
+            classification_conflicts=conflicts,
+            review_required=False,
+        )
+
+    # Freight and installation are project services -> HPP (5101) when a project
+    # is known; without a project the reviewer must supply one (approval rejects).
+    if _RE_FREIGHT.search(full_text):
+        signals.append("FREIGHT_KEYWORD_DETECTED")
+        return ExpenseClassificationResult(
+            raw_description=raw,
+            normalized_description="Jasa Angkut / Ekspedisi",
+            project_id=matched_project_id,
+            project_confidence=Decimal("0.90") if matched_project_id else Decimal("0.60"),
+            management_category="Jasa Logistik Proyek",
+            cost_category=CostCategory.LOG,
+            expense_category=None,
+            proposed_account_or_rule="5101 - Harga Pokok Proyek (Logistik)",
+            classification_confidence=Decimal("0.85"),
+            classification_signals=signals,
+            classification_conflicts=conflicts,
+            review_required=review_required or (matched_project_id is None),
+        )
+
+    if _RE_INSTALLATION.search(full_text):
+        signals.append("INSTALLATION_KEYWORD_DETECTED")
+        return ExpenseClassificationResult(
+            raw_description=raw,
+            normalized_description="Jasa Pemasangan / Subkontraktor",
+            project_id=matched_project_id,
+            project_confidence=Decimal("0.90") if matched_project_id else Decimal("0.60"),
+            management_category="Jasa Pemasangan Proyek",
+            cost_category=CostCategory.SUB,
+            expense_category=None,
+            proposed_account_or_rule="5101 - Harga Pokok Proyek (Subkontraktor)",
+            classification_confidence=Decimal("0.85"),
+            classification_signals=signals,
+            classification_conflicts=conflicts,
+            review_required=review_required or (matched_project_id is None),
         )
 
     # 3. Default fallback classification

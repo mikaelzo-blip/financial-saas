@@ -139,8 +139,16 @@ def derive_flags(document_type: DocumentType, data: StructuredExtraction, matche
         elif field_val.validation_status == "INVALID":
             flags.append(ReviewFlag.OCR_LOW_CONFIDENCE.value)
 
-    # Consistency validation: line items sum vs total_amount / subtotal
-    if data.line_items and data.total_amount is not None:
+    # Consistency validation: line items sum vs total_amount / subtotal.
+    # Only meaningful for documents that actually carry an itemised breakdown;
+    # bank statements, transfer proofs and other evidence documents contain
+    # OCR noise in line_items that must not raise AMOUNT_MISMATCH.
+    LINE_ITEM_TYPES = {
+        DocumentType.RECEIPT,
+        DocumentType.VENDOR_INVOICE,
+        DocumentType.CUSTOMER_INVOICE,
+    }
+    if document_type in LINE_ITEM_TYPES and data.line_items and data.total_amount is not None:
         valid_line_amounts = [it.amount for it in data.line_items if it.amount is not None]
         if valid_line_amounts and len(valid_line_amounts) == len(data.line_items):
             line_sum = sum(valid_line_amounts)

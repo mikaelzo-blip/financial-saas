@@ -42,6 +42,16 @@ from src.services.transaction_retry import run_in_clean_transaction
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
+ALLOWED_CORRECTION_FIELDS = {
+    "project_id", "counterparty_id", "payment_account_id", "allocation_target_id",
+    "selected_candidate_id", "proposed_transaction_type", "cost_category",
+    "expense_category", "transaction_date", "date", "amount", "total_amount",
+    "subtotal", "tax", "vat_amount", "description", "external_reference",
+    "transfer_reference", "document_number", "invoice_number", "spk_number",
+    "bast_number", "due_date", "document_type", "origin_bank", "destination_bank",
+    "destination_account_number", "line_items",
+}
+
 
 def is_candidate_ready_for_approval(candidate: TransactionCandidate) -> bool:
     if not candidate.proposed_transaction_type or not candidate.amount or not candidate.transaction_date:
@@ -248,16 +258,7 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
     }:
         raise HTTPException(status_code=409, detail="Document is not awaiting review")
 
-    allowed = {
-        "project_id", "counterparty_id", "payment_account_id", "allocation_target_id",
-        "selected_candidate_id", "proposed_transaction_type", "cost_category",
-        "expense_category", "transaction_date", "date", "amount", "total_amount",
-        "subtotal", "tax", "vat_amount", "description", "external_reference",
-        "transfer_reference", "document_number", "invoice_number", "spk_number",
-        "bast_number", "due_date", "document_type", "origin_bank", "destination_bank",
-        "destination_account_number"
-    }
-    if not data.changes or set(data.changes) - allowed:
+    if not data.changes or set(data.changes) - ALLOWED_CORRECTION_FIELDS:
         raise HTTPException(status_code=422, detail="Correction contains unsupported fields")
 
     candidate = dict(document.candidate_transaction or {})
@@ -341,6 +342,8 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
                       "destination_account_number", "transfer_reference"):
         if ext_field in data.changes:
             extracted[ext_field] = data.changes[ext_field]
+    if "line_items" in data.changes:
+        extracted["line_items"] = data.changes["line_items"]
     if "tax" in data.changes:
         extracted["vat_amount"] = data.changes["tax"]
     if "total_amount" in data.changes:

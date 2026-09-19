@@ -39,7 +39,7 @@ memilih **Jenis Pencatatan** (kategori COA) secara eksplisit, dengan:
 |---|---|
 | D1 | Sistem **menyarankan** kategori dari teks OCR (`classify_expense` yang ada), reviewer **dapat mengubah** via picker eksplisit. |
 | D2 | Bukti transfer boleh `DIRECT_PURCHASE` **hanya jika** kategori COA terisi DAN `allocation_target_id` kosong. |
-| D3 | Pengaman anti double-count dijalankan saat approve. |
+| D3 | Pengaman anti double-count dijalankan saat approve, **berbasis nomor referensi (invoice)**, bukan nominal. |
 | D4 | Kategori proyek (5101) **wajib** memilih proyek. Kategori operasional (610x) tidak. |
 | D5 | Rekening kas/bank (asal dana) tetap wajib. |
 
@@ -78,17 +78,23 @@ karena itu D4 mewajibkan proyek untuk kategori 5101.
    - Simpan `expense_classification` di `matching_results` (sudah ada polanya di
      `candidate.py:61`).
 
-3. **Pengaman anti double-count** (baru, dipakai saat approve)
+3. **Pengaman anti double-count** (baru, dipakai saat approve) — **berbasis nomor referensi**
    - Modul baru `backend/src/services/documents/expense_duplicate_guard.py`.
-   - Input: `org_id`, `amount`, `counterparty_id`, `transaction_date`.
-   - Cari:
-     - Vendor bill **belum lunas** dengan nominal dalam ±1% & vendor sama → **tolak**,
-       arahkan ke alokasi (`"Similar unpaid bill <kode> exists; allocate the payment instead"`).
-     - Customer invoice / transaksi terposting nominal mirip → **tolak**
-       (`"Similar posted document <kode> exists; possible duplicate"`).
+   - Input: `org_id`, `reference_no` (dari `external_reference` / `invoice_number` /
+     `transfer_reference`), `amount`, `counterparty_id`.
+   - Normalisasi nomor dengan `normalize_doc_number` (`matching.py:56`, sudah ada) agar
+     `20708003319` = `2070803319` konsisten.
+   - Aturan:
+     - **Nomor referensi SAMA** (setelah normalisasi) dengan vendor bill / customer invoice /
+       transaksi yang sudah ada DAN nominal mirip (±1%) → **TOLAK**
+       (`"Reference <no> already recorded as <kode>; possible duplicate"`).
+     - **Nominal mirip tapi nomor referensi BERBEDA** → **BOLEH** (bukan duplikat;
+       transaksi berbeda dengan kebetulan nominal sama).
+     - Nomor referensi sama tapi nominal jauh berbeda → tandai `DUPLICATE_SUSPECTED`
+       untuk review, tidak menolak.
    - Dipanggil di endpoint approve **hanya** untuk jalur `DIRECT_PURCHASE` dari
      `TRANSFER_PROOF` (tidak mengganggu jalur alokasi).
-   - Menggunakan kembali heuristik `DuplicateDetectionService` bila cocok.
+   - Nominal saja **tidak cukup** untuk menolak — nomor referensi adalah penentu utama.
 
 4. **Validasi** (`is_candidate_ready_for_approval`, `documents.py:45`)
    - `DIRECT_PURCHASE`: wajib `payment_account_id` DAN (`project_id` bila kategori 5101;
@@ -114,8 +120,11 @@ karena itu D4 mewajibkan proyek untuk kategori 5101.
 7. **Backend**
    - Guard: bukti transfer + kategori + tanpa alokasi → boleh; tanpa kategori → 422;
      `VENDOR_BILL` → tetap 422.
-   - Anti double-count: bill belum lunas nominal mirip → 422; transaksi terposting mirip → 422;
-     tidak ada yang mirip → lolos.
+   - Anti double-count (berbasis nomor referensi):
+     - nomor referensi sama + nominal mirip → 422;
+     - nominal mirip tapi nomor referensi berbeda → **lolos**;
+     - nomor referensi sama tapi nominal jauh berbeda → flag `DUPLICATE_SUSPECTED`, tidak tolak.
+   - Normalisasi: `2070-8003-319` dan `20708003319` dianggap sama.
    - Jurnal: `DIRECT_PURCHASE` dari bukti transfer menghasilkan Debit 5101/610x, Kredit 1101.
    - Test lama yang meng-assert "transfer proof cannot be direct purchase" disesuaikan.
 
@@ -126,13 +135,14 @@ karena itu D4 mewajibkan proyek untuk kategori 5101.
 
 | Risiko | Mitigasi |
 |---|---|
-| Double-count beban | Pengaman anti double-count (butir 3) |
+| Double-count beban | Pengaman anti double-count berbasis nomor referensi (butir 3) |
+| Nomor referensi tidak persis sama (mis. beda digit) lolos | Normalisasi `normalize_doc_number`; selisih digit menjadi kasus review manual |
 | COA salah | Saran OCR + reviewer wajib mengonfirmasi eksplisit |
 | 5101 tanpa proyek → 6199 | D4: proyek wajib untuk kategori proyek |
 | Regresi alur alokasi | Guard hanya menambah jalur; jalur lama tidak disentuh |
 
 ## Pertanyaan Terbuka
 
-- Ambang "nominal mirip": diusulkan ±1% (bisa disesuaikan).
+- Ambang "nominal mirip" untuk kasus nomor referensi sama: diusulkan ±1%.
 - Apakah jenis pencatatan juga perlu muncul untuk `RECEIPT`? (Saat ini `RECEIPT` sudah
   otomatis `DIRECT_PURCHASE`.)

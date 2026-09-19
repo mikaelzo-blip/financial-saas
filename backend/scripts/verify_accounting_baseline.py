@@ -212,8 +212,11 @@ async def verify_accounting_baseline() -> None:
                 else str(doc.processing_status)
             )
             print(f"     Doc {doc.document_code} status: {status_val}")
-            # If document was not approved, ensure zero transactions and zero journal entries exist
-            if status_val not in ["APPROVED", "PROCESSED"]:
+            # If the document has not reached a post-approval state, ensure it is
+            # linked to zero transactions and zero journal entries. A document is
+            # allowed to own a transaction link only once it is genuinely posted
+            # (POSTED) or archived as evidence (PROCESSED).
+            if status_val not in ["POSTED", "PROCESSED"]:
                 linked_trxs = (
                     await session.execute(
                         select(func.count(TransactionDocumentLink.transaction_id)).where(

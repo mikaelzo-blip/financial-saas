@@ -528,7 +528,7 @@ async def test_scenario_07_po_spk_supporting_document_flow(wa_uat, db_session):
     await db_session.refresh(doc)
     assert doc.document_type == DocumentType.SPK
     assert doc.candidate_transaction == {}
-    assert doc.processing_status == DocumentProcessingStatus.REVIEW_REQUIRED
+    assert doc.processing_status == DocumentProcessingStatus.PROCESSED
     assert await db_session.scalar(select(func.count()).select_from(JournalEntry)) == 0
 
 
@@ -573,6 +573,9 @@ async def test_scenario_08_bast_surat_jalan_flow(wa_uat, db_session):
     await db_session.refresh(doc)
     assert doc.document_type == DocumentType.BAST
     assert doc.candidate_transaction == {}
+    # BAST is an evidence document with confident type classification (0.90 >= 0.85),
+    # so it is archived automatically and never becomes a transaction.
+    assert doc.processing_status == DocumentProcessingStatus.PROCESSED
     assert await db_session.scalar(select(func.count()).select_from(JournalEntry)) == 0
 
 

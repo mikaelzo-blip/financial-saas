@@ -5,7 +5,7 @@ import json
 import hmac
 import hashlib
 import asyncio
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 
 import pytest
@@ -175,16 +175,19 @@ async def wa_uat(client, db_session, monkeypatch, tmp_path):
         )
         assert resp.status_code == 201, resp.text
 
-    return {
-        "client": client,
-        "provider": provider,
-        "orgs": orgs,
-        "users": users,
-        "phones": phones,
-        "accounts": accounts,
-        "service": service,
-        "tmp_path": tmp_path,
-    }
+    try:
+        yield {
+            "client": client,
+            "provider": provider,
+            "orgs": orgs,
+            "users": users,
+            "phones": phones,
+            "accounts": accounts,
+            "service": service,
+            "tmp_path": tmp_path,
+        }
+    finally:
+        await service.close()
 
 
 async def post_wa_webhook(
@@ -629,8 +632,10 @@ async def test_scenario_10_duplicate_media_content(wa_uat, db_session):
     doc_count = await db_session.scalar(select(func.count()).select_from(Document))
     assert doc_count == 1
 
-    # Outbound response for duplicate indicates already received
-    assert "sebelumnya" in wa_uat["provider"].outbound[-1].body_text
+    # Outbound response for duplicate is quiet ack after session finalization
+    now = datetime.now(timezone.utc)
+    await wa_uat["service"].deliver_pending_notifications(as_of=now + timedelta(seconds=65))
+    assert wa_uat["provider"].outbound[-1].body_text == "Oke, saya catat."
 
 
 @pytest.mark.asyncio
@@ -701,7 +706,7 @@ async def test_scenario_14_oversized_media_rejection(wa_uat, db_session):
         file_name="huge.pdf",
     )
     assert resp.status_code == 200
-    assert "gagal diunduh" in wa_uat["provider"].outbound[-1].body_text
+    assert len(wa_uat["provider"].outbound) == 0
     assert await db_session.scalar(select(func.count()).select_from(Document)) == 0
 
 
@@ -720,7 +725,7 @@ async def test_scenario_15_invalid_mime_rejection(wa_uat, db_session):
         file_name="fake.jpg",
     )
     assert resp.status_code == 200
-    assert "gagal diunduh" in wa_uat["provider"].outbound[-1].body_text
+    assert len(wa_uat["provider"].outbound) == 0
     assert await db_session.scalar(select(func.count()).select_from(Document)) == 0
 
 
@@ -787,8 +792,8 @@ async def test_scenario_17_ambiguous_amount_routes_to_clarification_and_review(w
 
 
 @pytest.mark.asyncio
-async def test_scenario_18_ambiguous_project_triggers_clarification(wa_uat, db_session):
-    """Scenario 18: Ambiguous project triggers WhatsApp interactive clarification session."""
+async def test_scenario_18_ambiguous_project_stays_in_web_review_without_clarification(wa_uat, db_session):
+    """Scenario 18: ambiguous projects remain in the web SaaS Review Queue."""
     org = wa_uat["orgs"][0]
     cust = Counterparty(organization_id=org.id, name="Owner Thamrin", is_customer=True)
     db_session.add(cust); await db_session.flush()
@@ -828,14 +833,17 @@ async def test_scenario_18_ambiguous_project_triggers_clarification(wa_uat, db_s
     doc.review_flags = ["PROJECT_UNKNOWN"]
     await db_session.commit()
 
-    # Deliver notification polling -> should create clarification session
-    await wa_uat["service"].deliver_pending_notifications()
+    await wa_uat["service"].deliver_pending_notifications(
+        as_of=datetime.now(timezone.utc) + timedelta(seconds=65)
+    )
 
-    session = await db_session.scalar(select(WhatsAppClarificationSession).where(WhatsAppClarificationSession.document_id == doc.id))
-    assert session is not None
-    assert session.question_type == "SELECT_PROJECT"
-    assert session.status == "PENDING"
-    assert "Pilih jawaban klarifikasi" in wa_uat["provider"].outbound[-1].body_text
+    assert await db_session.scalar(
+        select(WhatsAppClarificationSession).where(WhatsAppClarificationSession.document_id == doc.id)
+    ) is None
+    await db_session.refresh(doc)
+    assert doc.processing_status == DocumentProcessingStatus.REVIEW_REQUIRED
+    assert doc.review_flags == ["PROJECT_UNKNOWN"]
+    assert [message.body_text for message in wa_uat["provider"].outbound] == ["Oke, saya catat."]
 
 
 @pytest.mark.asyncio
@@ -949,7 +957,16 @@ async def test_scenario_21_clarification_state_updates_candidate_without_posting
     doc.review_flags = ["PROJECT_UNKNOWN"]
     await db_session.commit()
 
-    await wa_uat["service"].deliver_pending_notifications()
+    session_response = await wa_uat["client"].post(
+        "/api/v1/hermes/whatsapp/clarifications/open",
+        headers={"Authorization": "Bearer tenant-token-0"},
+        json={
+            "phone_number": wa_uat["phones"][0],
+            "document_id": str(doc.id),
+            "question_type": "SELECT_PROJECT",
+        },
+    )
+    assert session_response.status_code == 200, session_response.text
     session = await db_session.scalar(select(WhatsAppClarificationSession).where(WhatsAppClarificationSession.document_id == doc.id))
     assert session.status == "PENDING"
 
@@ -1255,7 +1272,7 @@ async def test_scenario_29_provider_failure_handling(wa_uat, db_session, monkeyp
         mime_type="image/jpeg",
     )
     assert resp.status_code == 200
-    assert "gagal diunduh" in wa_uat["provider"].outbound[-1].body_text
+    assert len(wa_uat["provider"].outbound) == 0
 
     # Zero documents, zero transactions, zero journals
     assert await db_session.scalar(select(func.count()).select_from(Document)) == 0
@@ -1284,4 +1301,8 @@ async def test_scenario_30_safe_retry_behavior(wa_uat, db_session):
     # Exactly one Document record, exactly one download attempt
     assert await db_session.scalar(select(func.count()).select_from(Document)) == 1
     assert wa_uat["provider"].downloads == 1
+    await wa_uat["service"].deliver_pending_notifications(
+        as_of=datetime.now(timezone.utc) + timedelta(seconds=65)
+    )
     assert len(wa_uat["provider"].outbound) == 1
+    assert wa_uat["provider"].outbound[0].body_text == "Oke, saya catat."

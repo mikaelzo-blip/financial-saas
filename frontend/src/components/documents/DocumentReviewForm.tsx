@@ -412,7 +412,70 @@ export const DocumentReviewForm: React.FC<Props> = ({
         </div>
       )}
 
-
+      {/* Session Context: Dokumen terkait dalam kiriman yang sama (Section 24) */}
+      {Boolean(
+        (document.matching_results as any)?.session_matched_documents?.length > 0 ||
+        ((document.matching_results as any)?.session_context?.document_count > 1)
+      ) && (
+        <div className="rounded-lg bg-indigo-50/70 p-3 border border-indigo-200" aria-label="Dokumen terkait dalam kiriman yang sama">
+          <div className="flex items-center justify-between text-xs font-semibold text-indigo-950 mb-1.5">
+            <div className="flex items-center gap-1.5">
+              <FileText className="h-4 w-4 text-indigo-700 shrink-0" />
+              <span>Dokumen terkait dalam kiriman yang sama</span>
+            </div>
+            {(document.matching_results as any)?.session_context?.session_code && (
+              <span className="text-[10px] font-mono bg-indigo-100/80 text-indigo-800 px-1.5 py-0.5 rounded">
+                {(document.matching_results as any).session_context.session_code}
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-indigo-700 mb-2">
+            Dokumen diterima dalam satu rangkaian pengiriman WhatsApp dan dianalisis keterkaitannya:
+          </p>
+          <div className="space-y-1.5">
+            {((document.matching_results as any)?.session_matched_documents || []).map((relDoc: any, idx: number) => (
+              <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between text-xs bg-white/90 p-2 rounded border border-indigo-100 gap-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-800">
+                    {relDoc.document_type || 'Dokumen'}
+                  </span>
+                  {relDoc.document_code && (
+                    <span className="text-slate-500 font-mono text-[11px]">({relDoc.document_code})</span>
+                  )}
+                  {relDoc.nominal && (
+                    <span className="text-slate-700 font-medium">
+                      Rp {Number(relDoc.nominal).toLocaleString('id-ID')}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {relDoc.relationship && (
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800">
+                      {relDoc.relationship === '1:1_MATCH'
+                        ? 'Cocok 1:1'
+                        : relDoc.relationship === 'MULTI_INVOICE_PAYMENT'
+                        ? 'Pembayaran Multi-Invoice'
+                        : relDoc.relationship}
+                    </span>
+                  )}
+                  {relDoc.confidence && (
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                      relDoc.confidence === 'HIGH' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {relDoc.confidence === 'HIGH' ? 'Keyakinan Tinggi' : 'Perlu Review'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          {((document.matching_results as any)?.session_matched_documents?.[0]?.explanation) && (
+            <p className="text-[11px] text-indigo-900 mt-2 bg-white/60 p-1.5 rounded italic">
+              Petunjuk pencocokan: {(document.matching_results as any).session_matched_documents[0].explanation}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Confidence & Evidence Overview */}
       <div>

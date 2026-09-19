@@ -2,6 +2,7 @@
 import asyncio
 import uuid
 import time
+from datetime import datetime, timedelta, timezone
 
 from pydantic import SecretStr
 from sqlalchemy import select, func
@@ -27,6 +28,7 @@ async def test_quickstart_b_intake_and_c_replay(wa, db_session):
     assert len(docs) == 1
     assert docs[0].source_channel == "WHATSAPP"
     assert docs[0].source_metadata["caption"] == "Nota 50 sak semen Proyek Ruko Thamrin"
+    await wa["service"].deliver_pending_notifications(as_of=datetime.now(timezone.utc) + timedelta(seconds=65))
     assert len(wa["provider"].outbound) == 1
     assert wa["provider"].downloads == 1
 

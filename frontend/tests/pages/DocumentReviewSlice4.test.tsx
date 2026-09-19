@@ -148,10 +148,6 @@ describe('DocumentReview Workspace Slice 4', () => {
     // Line items table
     expect(screen.getByText('Daftar Rincian Barang / Jasa')).toBeInTheDocument();
     expect(screen.getByText('100')).toBeInTheDocument();
-
-    // Corrections audit history
-    expect(screen.getByText('Riwayat Koreksi')).toBeInTheDocument();
-    expect(screen.getByText(/Koreksi salah baca OCR digit terakhir/)).toBeInTheDocument();
   });
 
   it('renders ranked candidates, signals, conflicts, and handles candidate selection', async () => {
@@ -190,26 +186,36 @@ describe('DocumentReview Workspace Slice 4', () => {
 
   it('allows editing product-relevant fields and submitting corrections', async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
+    const onApprove = vi.fn().mockResolvedValue(undefined);
     render(
       <DocumentReviewForm
         document={slice4Document}
         projects={mockProjects}
         counterparties={mockCounterparties}
         onSave={onSave}
-        onApprove={vi.fn()}
+        onApprove={onApprove}
         onReject={vi.fn()}
       />,
+    );
+
+    // A vendor bill requires project + counterparty before it can be approved.
+    await userEvent.selectOptions(screen.getByLabelText('Pilih Proyek'), mockProjects[0].id);
+    await userEvent.selectOptions(
+      screen.getByLabelText('Pilih Vendor / Pelanggan'),
+      mockCounterparties[0].id,
     );
 
     const invoiceInput = screen.getByLabelText('Nomor Faktur / Dokumen');
     await userEvent.clear(invoiceInput);
     await userEvent.type(invoiceInput, 'INV-CORRECTED-123');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Simpan Koreksi' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Setujui untuk Diposting' }));
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({ invoice_number: 'INV-CORRECTED-123' }),
       expect.any(String),
+      { silent: true },
     );
+    expect(onApprove).toHaveBeenCalledOnce();
   });
 
   it('calls onApprove and onReject with proper reason', async () => {

@@ -41,11 +41,49 @@ def test_same_category_lines_are_merged_into_one_allocation():
         "line_items": [
             {"description": "SEMEN", "amount": "100", "cost_category": "MAT"},
             {"description": "BESI", "amount": "200", "cost_category": "MAT"},
+            {"description": "JASA ANGKUT", "amount": "50", "cost_category": "LOG"},
         ]
     }
-    allocs = build_line_allocations(extracted, _candidate(project_id=project_id))
-    assert len(allocs) == 1
-    assert allocs[0].amount == Decimal("300")
+    cand = _candidate(project_id=project_id)
+    cand.amount = Decimal("350")
+    allocs = build_line_allocations(extracted, cand)
+    assert len(allocs) == 2
+    by_cat = {a.cost_category: a.amount for a in allocs}
+    assert by_cat[CostCategory.MAT] == Decimal("300")
+    assert by_cat[CostCategory.LOG] == Decimal("50")
+
+
+def test_single_bucket_invoice_keeps_the_legacy_path():
+    # Regression: the per-line classifier fills EVERY line, so a legacy invoice
+    # (e.g. a PPN invoice whose extracted lines are the pre-VAT subtotal) would
+    # otherwise be forced through the multi-allocation sum guard and hard-fail on
+    # approve. A document whose lines all collapse to ONE bucket is not a
+    # multi-account split — return None so the legacy path posts the full total.
+    project_id = uuid.uuid4()
+    extracted = {
+        "line_items": [
+            {"description": "SEMEN", "amount": "100000", "cost_category": "MAT"},
+        ]
+    }
+    cand = _candidate(project_id=project_id)
+    cand.amount = Decimal("111000")  # line 100000 != total 111000 (PPN)
+    assert build_line_allocations(extracted, cand) is None
+
+
+def test_multi_bucket_sum_mismatch_is_rejected():
+    # A genuine multi-account split whose lines do not reconcile to the invoice
+    # total must be refused (spec D5), not posted with a missing amount.
+    project_id = uuid.uuid4()
+    extracted = {
+        "line_items": [
+            {"description": "JASA ANGKUT", "amount": "100", "cost_category": "LOG"},
+            {"description": "STAMP", "amount": "10", "expense_category": "OTHER_OPERATIONAL"},
+        ]
+    }
+    cand = _candidate(project_id=project_id)
+    cand.amount = Decimal("200")
+    with pytest.raises(InvariantViolationException):
+        build_line_allocations(extracted, cand)
 
 
 def test_returns_none_when_no_line_items():
@@ -69,7 +107,9 @@ def test_uncategorised_lines_fall_back_to_document_category():
             {"description": "NO CATEGORY", "amount": "50"},
         ]
     }
-    allocs = build_line_allocations(extracted, _candidate(project_id=project_id))
+    cand = _candidate(project_id=project_id)
+    cand.amount = Decimal("150")
+    allocs = build_line_allocations(extracted, cand)
     by_cat = {a.cost_category or a.expense_category: a.amount for a in allocs}
     assert by_cat[CostCategory.LOG] == Decimal("100")
     assert by_cat[CostCategory.MAT] == Decimal("50")

@@ -65,10 +65,13 @@ def build_line_allocations(
 ) -> Optional[List[TransactionAllocationInput]]:
     """Group invoice line items into one allocation per (project, cost, expense) bucket.
 
-    Returns None when there are no line items, or when neither the lines nor the
-    document carry any category — so the caller keeps the existing single-category
-    behaviour. Uncategorised lines inherit the document-level category so their
-    amount is never dropped.
+    Returns None unless the invoice GENUINELY spans more than one allocation
+    bucket — a single-bucket document is not a multi-account split, so the caller
+    keeps the existing single-category behaviour. This matters because the
+    per-line classifier fills EVERY line (MAT when a project is present, else
+    OTHER_OPERATIONAL): a legacy invoice never reviewed per line must not be
+    forced through the multi-allocation sum guard. Uncategorised lines inherit
+    the document-level category so their amount is never dropped.
     """
     items = (extracted_data or {}).get("line_items") or []
     if not items:
@@ -112,6 +115,24 @@ def build_line_allocations(
     if all(key[1] is None and key[2] is None for key in groups):
         return None
 
+    # A project-cost category (MAT/SUB/TRN/EQP/LOG) without a project would fall
+    # through to 6199 in posting_rules; refuse rather than book to the wrong
+    # account. Checked before the single-bucket gate so it holds for one-line
+    # documents too.
+    for project_raw, cost_raw, _expense_raw in groups:
+        if cost_raw in PROJECT_REQUIRED_COST_CATEGORIES and not project_raw:
+            raise InvariantViolationException(
+                f"Project is required for project cost category {cost_raw}.",
+                details={"failure_reason": "ALLOCATION_INVALID"},
+            )
+
+    # Only a genuine multi-bucket invoice is split across allocations. A document
+    # whose lines all collapse to one (project, cost, expense) bucket posts via the
+    # legacy single-category path instead — this avoids hard-failing legacy
+    # invoices whose extracted lines (e.g. pre-PPN amounts) do not sum to the total.
+    if len(groups) < 2:
+        return None
+
     allocations = [
         TransactionAllocationInput(
             project_id=uuid.UUID(key[0]) if key[0] else None,
@@ -122,18 +143,14 @@ def build_line_allocations(
         for key, amount in groups.items()
     ]
 
-    # A project-cost category (MAT/SUB/TRN/EQP/LOG) without a project would fall
-    # through to 6199 in posting_rules; refuse rather than book to the wrong account.
-    for alloc in allocations:
-        if (
-            alloc.cost_category is not None
-            and alloc.cost_category.value in PROJECT_REQUIRED_COST_CATEGORIES
-            and not alloc.project_id
-        ):
-            raise InvariantViolationException(
-                f"Project is required for project cost category {alloc.cost_category.value}.",
-                details={"failure_reason": "ALLOCATION_INVALID"},
-            )
+    # Spec D5: a genuine multi-account split must reconcile to the invoice total,
+    # or an amount would be silently dropped. Refuse rather than post a partial.
+    allocation_sum = sum(a.amount for a in allocations)
+    if allocation_sum != candidate.amount:
+        raise InvariantViolationException(
+            f"Sum of line allocations ({allocation_sum}) does not match invoice total ({candidate.amount}).",
+            details={"failure_reason": "ALLOCATION_INVALID"},
+        )
 
     return allocations
 
@@ -503,14 +520,11 @@ class DocumentPostingService:
                 )
 
         # 8. Create Transaction via canonical TransactionService
+        # build_line_allocations returns None for documents that do not genuinely
+        # span multiple accounts (and raises on a non-reconciling split), so the
+        # legacy single-category path is used for everything else.
         line_allocations = build_line_allocations(document.extracted_data or {}, candidate)
         if line_allocations is not None:
-            allocation_sum = sum(a.amount for a in line_allocations)
-            if allocation_sum != candidate.amount:
-                raise InvariantViolationException(
-                    f"Sum of line allocations ({allocation_sum}) does not match invoice total ({candidate.amount}).",
-                    details={"failure_reason": "ALLOCATION_INVALID"},
-                )
             trx_input = TransactionCreate(
                 transaction_type=candidate.proposed_transaction_type,
                 transaction_date=candidate.transaction_date,

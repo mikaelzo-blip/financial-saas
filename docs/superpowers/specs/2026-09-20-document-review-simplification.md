@@ -65,6 +65,13 @@ menentukan arsip benar/tidak adalah klasifikasi jenis (bukan nominal/tanggal).
 `can_review=false`). Dokumen `EVIDENCE` yang **ragu** berada di `REVIEW_REQUIRED` dan di sanalah
 tombol "Simpan Dokumen" tersedia untuk membetulkan jenis atau menolak.
 
+**D4a — Konfirmasi manusia mengalahkan ambang OCR.** Menyimpan dokumen bukti (tombol "Simpan
+Dokumen") adalah sinyal manusia yang otoritatif atas **jenis** dokumen. Karena itu koreksi pada
+dokumen `EVIDENCE` mengarsipkannya (`PROCESSED`) **meski** `document_type_confidence` di bawah
+ambang — asalkan tidak ada review flag yang tersisa. Tanpa ini, dokumen bukti ber-keyakinan rendah
+(mis. DOC-2026-000015, 0,75) tetap buntu di antrean review selamanya. Flag yang belum terselesaikan
+tetap menahan dokumen di `REVIEW_REQUIRED`.
+
 **D5 — Flag yang bisa diselesaikan lewat koreksi.**
 - `AMOUNT_MISMATCH` dibersihkan bila reviewer mengoreksi `amount`/`total_amount`.
 - `DATE_MISMATCH` dibersihkan bila reviewer mengoreksi `date`/`transaction_date`.
@@ -85,7 +92,8 @@ dirender untuk `FINANCIAL` ber-rincian (nota/faktur), tidak untuk dokumen bukti.
 - Kotak info "Dokumen pendukung saja" dipertahankan (informatif).
 
 **D9 — Tombol aksi per keranjang dokumen.**
-- `EVIDENCE` → satu tombol **"Simpan Dokumen"** (menyimpan koreksi jenis/field; bila ragu).
+- `EVIDENCE` → satu tombol **"Simpan Dokumen"** (menyimpan koreksi jenis/field; mengarsipkan
+  dokumen bila tidak ada flag tersisa — lihat D4a).
 - `FINANCIAL` → **"Setujui untuk Diposting"** + **"Tolak Kandidat"**. "Setujui" menyimpan koreksi
   yang belum tersimpan terlebih dahulu (menutup dead-end bila ada flag yang bisa diselesaikan),
   lalu menyetujui. Tombol tidak lagi dinonaktifkan semata oleh adanya flag; validasi form dan

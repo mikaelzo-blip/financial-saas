@@ -14,6 +14,7 @@ from src.services.documents.status import (
 
 CONFIDENT = {"document_type_confidence": "0.95"}
 BORDERLINE = {"document_type_confidence": "0.85"}
+UNCERTAIN = {"document_type_confidence": "0.75"}
 WEAK = {"document_type_confidence": "0.30"}
 MISSING = {}
 
@@ -123,3 +124,16 @@ def test_pipeline_reexports_document_status_for():
     from src.services.documents.pipeline import document_status_for as pipeline_status_for
     assert pipeline_status_for(_candidate(DocumentType.VENDOR_INVOICE, "VENDOR_BILL"), []) == \
         DocumentProcessingStatus.READY_FOR_APPROVAL
+
+
+def test_human_type_confirmation_archives_uncertain_evidence():
+    # OCR type confidence is below threshold, but a reviewer confirmed the type.
+    assert resolve_document_status(
+        DocumentType.BANK_STATEMENT, None, [], UNCERTAIN, type_confirmed=True
+    ) == DocumentProcessingStatus.PROCESSED
+
+
+def test_human_type_confirmation_still_blocked_by_remaining_flag():
+    assert resolve_document_status(
+        DocumentType.BANK_STATEMENT, None, ["AMOUNT_MISMATCH"], UNCERTAIN, type_confirmed=True
+    ) == DocumentProcessingStatus.REVIEW_REQUIRED

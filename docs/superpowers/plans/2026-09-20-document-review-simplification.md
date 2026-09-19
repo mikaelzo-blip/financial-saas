@@ -778,6 +778,18 @@ from src.services.documents.status import is_evidence_document, resolve_document
         )
 ```
 
+(d) **Konfirmasi manusia mengarsipkan dokumen bukti (D4a).** Di `backend/src/services/documents/status.py`,
+tambahkan parameter keyword `type_confirmed: bool = False` ke `resolve_document_status`; gerbang keyakinan
+menjadi `if flags or not (type_confirmed or document_type_is_confident(confidence_scores)):`. Lalu di
+`correct_document`, cabang `EVIDENCE` memanggil resolver dengan `type_confirmed=True`, sehingga menyimpan
+dokumen bukti mengarsipkannya (`PROCESSED`) walau `document_type_confidence` di bawah ambang — asalkan
+tidak ada flag tersisa. Ini menutup dead-end dokumen bukti ber-keyakinan rendah (mis. DOC-2026-000015, 0,75).
+
+Test tambahan (di `tests/integration/test_evidence_document_review.py`):
+`test_confirming_uncertain_evidence_document_archives_it` — confidence 0,75, tanpa flag, koreksi
+`document_type` → `PROCESSED`. Dan di `tests/unit/test_document_status.py`:
+`test_human_type_confirmation_archives_uncertain_evidence` + `test_human_type_confirmation_still_blocked_by_remaining_flag`.
+
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && ./.venv/Scripts/python.exe -m pytest tests/integration/test_evidence_document_review.py -v`
@@ -1226,4 +1238,4 @@ git commit -m "test(documents): pin end-to-end flag resolution and update policy
 ## Catatan Eksekusi
 
 - Restart backend setelah perubahan: `uvicorn` dijalankan **tanpa** `--reload` di mesin ini, jadi kode lama tetap melayani sampai di-restart (ini akar insiden "peringatan merah" sebelumnya). Restart backend + worker sebelum verifikasi manual.
-- Verifikasi manual: buka `http://127.0.0.1:5173/documents` → dokumen `DOC-2026-000015` (BANK_STATEMENT) harus hilang dari antrean "Perlu Diperiksa" (terarsip) setelah diproses ulang; `DOC-2026-000016` (VENDOR_INVOICE) harus bisa disetujui setelah nominal dikoreksi.
+- Verifikasi manual: buka `http://127.0.0.1:5173/documents` → dokumen `DOC-2026-000015` (BANK_STATEMENT) harus hilang dari antrean "Perlu Diperiksa" (terarsip `PROCESSED`) setelah reviewer menekan "Simpan Dokumen"; `DOC-2026-000016` (VENDOR_INVOICE) harus bisa disetujui setelah nominal/vendor/proyek dikoreksi.

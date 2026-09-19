@@ -102,8 +102,16 @@ def resolve_document_status(
     candidate,
     flags: Iterable[str],
     confidence_scores: Any = None,
+    *,
+    type_confirmed: bool = False,
 ) -> DocumentProcessingStatus:
-    """Canonical status resolver used by the pipeline and the corrections endpoint."""
+    """Canonical status resolver used by the pipeline and the corrections endpoint.
+
+    ``type_confirmed`` marks an authoritative human confirmation of the document
+    type (a reviewer explicitly saving/correcting the type). It substitutes for
+    the OCR type-confidence gate, so an uncertain evidence document can still be
+    archived once a person has vouched for its type.
+    """
     flags = list(flags)
     dt = _coerce(document_type)
 
@@ -111,7 +119,7 @@ def resolve_document_status(
         return document_status_for(candidate, flags)
 
     if dt is not None and dt in EVIDENCE_DOCUMENT_TYPES:
-        if flags or not document_type_is_confident(confidence_scores):
+        if flags or not (type_confirmed or document_type_is_confident(confidence_scores)):
             return DocumentProcessingStatus.REVIEW_REQUIRED
         return DocumentProcessingStatus.PROCESSED
 

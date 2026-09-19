@@ -418,11 +418,18 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
     if is_evidence_document(document.document_type):
         # Evidence documents carry no transaction candidate; skip candidate
         # validation (an empty {} would raise) and re-resolve the status.
+        # Saving the document is an authoritative human confirmation of its
+        # type, so a below-threshold OCR type confidence no longer blocks
+        # archiving (type_confirmed=True); any remaining flag still does.
         document.extracted_data = extracted
         document.matching_results = matching_results
         document.review_flags = [f for f in document.review_flags if f not in cleared]
         document.processing_status = resolve_document_status(
-            document.document_type, None, document.review_flags, document.confidence_scores
+            document.document_type,
+            None,
+            document.review_flags,
+            document.confidence_scores,
+            type_confirmed=True,
         )
         for key, value in data.changes.items():
             db.add(DocumentCorrection(

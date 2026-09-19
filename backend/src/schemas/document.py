@@ -26,6 +26,8 @@ class LineItem(BaseModel):
     tax: Optional[Decimal] = None
     amount: Optional[Decimal] = None
     line_total: Optional[Decimal] = None
+    cost_category: Optional[CostCategory] = None
+    expense_category: Optional[ExpenseCategory] = None
 
     @model_validator(mode="after")
     def sync_amount_and_line_total(self) -> "LineItem":

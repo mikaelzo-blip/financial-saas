@@ -76,6 +76,10 @@ class DocumentPipeline:
             required = ("ocr_confidence", "amount_confidence")
             flags = derive_flags(effective_type, data, matches, below_threshold(result.confidence, required))
             candidate = build_candidate(document.id, effective_type, data, matches, flags)
+            # build_candidate fills a suggested category on each in-memory line item;
+            # re-serialise so those per-line suggestions reach the persisted JSON
+            # (corrections endpoint and posting path read extracted_data["line_items"]).
+            document.extracted_data = data.model_dump(mode="json")
 
             if candidate and candidate.transaction_date and candidate.amount:
                 duplicate = await DuplicateDetectionService(self.session).check_duplicate_candidate(

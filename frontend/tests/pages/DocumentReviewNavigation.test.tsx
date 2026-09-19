@@ -187,12 +187,15 @@ describe('DocumentReviewNavigation', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Simpan Koreksi' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Setujui untuk Diposting' })).toBeInTheDocument();
     });
 
-    // Click Simpan Koreksi
-    const saveButton = screen.getByRole('button', { name: 'Simpan Koreksi' });
-    await userEvent.click(saveButton);
+    // Editing a field records a correction; approving persists it then approves.
+    const invoiceInput = screen.getByLabelText('Nomor Faktur / Dokumen');
+    await userEvent.clear(invoiceInput);
+    await userEvent.type(invoiceInput, 'INV-EDITED');
+    const approveButton = screen.getByRole('button', { name: 'Setujui untuk Diposting' });
+    await userEvent.click(approveButton);
 
     await waitFor(() => {
       expect(documentsApi.correct).toHaveBeenCalled();

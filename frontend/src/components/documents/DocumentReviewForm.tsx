@@ -16,14 +16,16 @@ import {
   AlertTriangle,
   UserCheck,
   Layers,
-  History,
   CheckCircle,
   MessageSquare,
 } from 'lucide-react';
 import {
+  isEvidenceDocument,
   isPaymentAccountRequired,
   validateDocumentReviewForm,
 } from '../../utils/documentReview';
+
+const AUTO_CORRECTION_REASON = 'Verifikasi dokumen sumber';
 
 interface Props {
   document: DocumentResponse;
@@ -133,7 +135,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
         '',
     ),
   );
-  const [reason, setReason] = useState('Verifikasi dokumen sumber');
+  const reason = AUTO_CORRECTION_REASON;
   const [busy, setBusy] = useState(false);
   const [formValidationError, setFormValidationError] = useState<string | undefined>(undefined);
 
@@ -338,9 +340,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
     }
   };
 
-  const isEvidenceOnly =
-    ['SPK', 'CONTRACT', 'BAST', 'SURAT_JALAN', 'PROGRESS_REPORT', 'TAX_INVOICE'].includes(document.document_type) &&
-    !candidate.proposed_transaction_type;
+  const isEvidenceOnly = isEvidenceDocument(document.document_type);
   const candidateStatus = String(candidate.status ?? 'PROPOSED');
   const approvalStatus =
     candidateStatus === 'CONVERTED'
@@ -355,7 +355,6 @@ export const DocumentReviewForm: React.FC<Props> = ({
   const postingStatus = candidate.converted_transaction_id ? 'Terposting' : 'Belum diposting';
 
   const lineItems = Array.isArray(extracted.line_items) ? (extracted.line_items as Record<string, unknown>[]) : [];
-  const corrections = document.corrections || [];
 
   return (
     <section className="space-y-4" aria-label="Form koreksi hasil ekstraksi">
@@ -681,7 +680,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
       </div>
 
       {/* Line Items Table (Slice 2 extracted items, hidden for TRANSFER_PROOF) */}
-      {lineItems.length > 0 && document.document_type !== 'TRANSFER_PROOF' && (
+      {lineItems.length > 0 && !isEvidenceOnly && document.document_type !== 'TRANSFER_PROOF' && (
         <div className="rounded-lg border border-slate-200 overflow-hidden text-xs">
           <div className="bg-slate-100 px-3 py-1.5 font-semibold text-slate-700 flex items-center gap-1.5">
             <Layers className="h-3.5 w-3.5 text-slate-600" />
@@ -1058,77 +1057,29 @@ export const DocumentReviewForm: React.FC<Props> = ({
             ))}
           </Select>
         </div>
-
-        <label className="block text-sm">
-          Mengapa data ini diubah?
-          <input
-            className="mt-1 w-full rounded border p-2 text-xs"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
-          <span className="mt-1 block text-xs text-slate-500">
-            Tuliskan alasan singkat agar perubahan dapat ditelusuri kembali.
-          </span>
-        </label>
       </div>
-
-      {/* Corrections Audit History */}
-      {corrections.length > 0 && (
-        <div className="rounded-lg border border-slate-200 overflow-hidden text-xs">
-          <div className="bg-slate-100 px-3 py-1.5 font-semibold text-slate-700 flex items-center gap-1.5">
-            <History className="h-3.5 w-3.5 text-slate-600" />
-            <span>Riwayat Koreksi</span>
-          </div>
-          <div className="p-3 divide-y divide-slate-100 bg-white">
-            {corrections.map((corr) => (
-              <div key={corr.id} className="py-2 first:pt-0 last:pb-0">
-                <div className="flex justify-between items-center text-slate-700">
-                  <strong className="font-semibold text-slate-900">{corr.field_path}</strong>
-                  <span className="text-[11px] text-slate-500">{formatDate(corr.corrected_at)}</span>
-                </div>
-                <div className="text-[11px] text-slate-600 mt-0.5">
-                  <span className="line-through text-slate-400">{String(corr.old_value ?? 'kosong')}</span> →{' '}
-                  <span className="font-medium text-slate-900">{String(corr.new_value ?? 'kosong')}</span>
-                </div>
-                <div className="text-[11px] text-slate-500 italic mt-0.5">Alasan: {corr.reason}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* JSON Viewer */}
-      <details className="rounded border border-slate-200 p-3 text-xs">
-        <summary className="cursor-pointer font-semibold text-slate-700">Detail Teknis</summary>
-        <p className="mt-2 text-slate-500">
-          Bagian ini hanya untuk pemeriksaan lanjutan. “null” berarti data tidak ditemukan pada dokumen.
-        </p>
-        <pre className="mt-2 max-h-56 overflow-auto rounded bg-slate-950 p-3 text-xs text-slate-100 font-mono">
-          {JSON.stringify(document.extracted_data, null, 2)}
-        </pre>
-      </details>
 
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-2">
-        <Button onClick={save} isLoading={busy}>
-          Simpan Koreksi
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={handleApprove}
-          isLoading={busy}
-          disabled={
-            document.review_flags.length > 0 ||
-            isEvidenceOnly ||
-            approvalLookupLoading ||
-            !!approvalLookupError
-          }
-        >
-          Setujui untuk Diposting
-        </Button>
-        <Button variant="danger" onClick={() => onReject(reason)}>
-          Tolak Kandidat
-        </Button>
+        {isEvidenceOnly ? (
+          <Button onClick={save} isLoading={busy}>
+            Simpan Dokumen
+          </Button>
+        ) : (
+          <>
+            <Button
+              variant="secondary"
+              onClick={handleApprove}
+              isLoading={busy}
+              disabled={approvalLookupLoading || !!approvalLookupError}
+            >
+              Setujui untuk Diposting
+            </Button>
+            <Button variant="danger" onClick={() => onReject(reason)}>
+              Tolak Kandidat
+            </Button>
+          </>
+        )}
       </div>
     </section>
   );

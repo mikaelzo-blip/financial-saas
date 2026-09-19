@@ -94,12 +94,13 @@ test('shows plain-language choices and records their internal IDs', async () => 
   expect(screen.queryByRole('option', { name: 'PT Pelanggan Saja' })).not.toBeInTheDocument();
   await userEvent.selectOptions(screen.getByLabelText('Pilih Proyek'), projects[0].id);
   await userEvent.selectOptions(screen.getByLabelText('Pilih Vendor / Pelanggan'), counterparties[0].id);
-  await userEvent.click(screen.getByRole('button', { name: 'Simpan Koreksi' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Setujui untuk Diposting' }));
   expect(onSave).toHaveBeenCalledWith(
     expect.objectContaining({ project_id: projects[0].id, counterparty_id: counterparties[0].id }),
     'Verifikasi dokumen sumber',
+    { silent: true },
   );
-  expect(screen.getByRole('button', { name: 'Setujui untuk Diposting' })).toBeDisabled();
+  expect(onApprove).toHaveBeenCalledOnce();
   await userEvent.click(screen.getByRole('button', { name: 'Tolak Kandidat' }));
   expect(onReject).toHaveBeenCalledWith('Verifikasi dokumen sumber');
 });
@@ -118,7 +119,7 @@ test('explains evidence-only documents without technical jargon', () => {
   expect(screen.getByText('Dokumen pendukung saja')).toBeInTheDocument();
   expect(screen.getByText(/disimpan sebagai bukti dan tidak langsung mengubah saldo/i)).toBeInTheDocument();
   expect(screen.queryByText(/Evidence-Only/i)).not.toBeInTheDocument();
-  expect(screen.getByText('Detail Teknis')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Simpan Dokumen' })).toBeInTheDocument();
 });
 
 test('requires only vendor lookup for a vendor advance and project lookup for a vendor bill', () => {

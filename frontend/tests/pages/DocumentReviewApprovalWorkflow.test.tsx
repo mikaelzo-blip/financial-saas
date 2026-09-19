@@ -367,7 +367,7 @@ describe('Document Review Approval Workflow & Invariants', () => {
       expect(onApprove).toHaveBeenCalledOnce();
     });
 
-    it('Simpan Koreksi button saves form values without calling onApprove', async () => {
+    it('approve button saves edited values then approves', async () => {
       const onSave = vi.fn().mockResolvedValue(undefined);
       const onApprove = vi.fn().mockResolvedValue(undefined);
 
@@ -386,14 +386,15 @@ describe('Document Review Approval Workflow & Invariants', () => {
       const paymentSelect = screen.getByLabelText('Pilih Asal Dana (Rekening Kas / Bank)');
       await userEvent.selectOptions(paymentSelect, 'pa-bank-bca');
 
-      const saveButton = screen.getByRole('button', { name: 'Simpan Koreksi' });
-      await userEvent.click(saveButton);
+      const approveButton = screen.getByRole('button', { name: 'Setujui untuk Diposting' });
+      await userEvent.click(approveButton);
 
       expect(onSave).toHaveBeenCalledWith(
         expect.objectContaining({ payment_account_id: 'pa-bank-bca' }),
         'Verifikasi dokumen sumber',
+        { silent: true },
       );
-      expect(onApprove).not.toHaveBeenCalled();
+      expect(onApprove).toHaveBeenCalledOnce();
     });
 
     it('hides line items table for TRANSFER_PROOF documents', () => {

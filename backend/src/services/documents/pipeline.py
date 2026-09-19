@@ -17,12 +17,7 @@ from src.services.document_service import DocumentService
 from src.services.duplicate_service import DuplicateDetectionService
 from src.services.audit_service import AuditService
 from src.models.enums import ReviewFlag
-
-
-def document_status_for(candidate, flags: list[str]) -> DocumentProcessingStatus:
-    if flags or not candidate or not candidate.proposed_transaction_type or candidate.status == CandidateStatus.REVIEW_REQUIRED:
-        return DocumentProcessingStatus.REVIEW_REQUIRED
-    return DocumentProcessingStatus.READY_FOR_APPROVAL
+from src.services.documents.status import document_status_for, resolve_document_status  # noqa: F401
 
 
 class DocumentPipeline:
@@ -94,7 +89,9 @@ class DocumentPipeline:
 
             document.review_flags = flags
             document.candidate_transaction = candidate.model_dump(mode="json") if candidate else {}
-            document.processing_status = document_status_for(candidate, flags)
+            document.processing_status = resolve_document_status(
+                effective_type, candidate, flags, document.confidence_scores
+            )
 
             # Session document matching (multi-document correlation within candidate session)
             sess_id_str = (document.source_metadata or {}).get("session_id")

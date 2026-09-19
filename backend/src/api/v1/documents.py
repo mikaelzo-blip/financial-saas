@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 from typing import List, Optional
 from fastapi import APIRouter, Depends, UploadFile, File, Form, Query, status, HTTPException
 from fastapi.responses import FileResponse
@@ -18,6 +19,7 @@ from src.models.counterparty import Counterparty
 from src.models.receivable import CustomerInvoice
 from src.models.payable import VendorBill
 from src.models.coa import PaymentAccount
+from src.models.transaction import Transaction
 from src.models.user import User
 from src.models.enums import UserRole
 from src.schemas.document import (DocumentResponse, DocumentCorrectionRequest,
@@ -25,6 +27,10 @@ from src.schemas.document import (DocumentResponse, DocumentCorrectionRequest,
                                   StructuredExtraction, DocumentPostingResponse)
 from src.services.document_posting_service import DocumentPostingService
 from src.services.documents.matching import match_entities
+from src.services.documents.expense_duplicate_guard import (
+    collect_reference_numbers,
+    evaluate_reference_duplicate,
+)
 from src.schemas.transaction import TransactionCreate, TransactionResponse
 from src.services.document_service import DocumentService
 from src.services.documents.inbound_adapter import InboundDocumentAdapter, InboundDocumentInput
@@ -510,6 +516,38 @@ async def approve_document_candidate(
                     status_code=422,
                     detail="Transfer proof direct expense cannot also carry an allocation target",
                 )
+
+    if (
+        document.document_type == DocumentType.TRANSFER_PROOF
+        and candidate.proposed_transaction_type == TransactionType.DIRECT_PURCHASE
+    ):
+        references = collect_reference_numbers(
+            document.candidate_transaction or {},
+            document.extracted_data or {},
+        )
+        if references:
+            existing: List[tuple] = []
+            bills = (await db.scalars(
+                select(VendorBill).where(VendorBill.organization_id == org_id)
+            )).all()
+            existing.extend((b.bill_code, b.total_amount) for b in bills)
+            invoices = (await db.scalars(
+                select(CustomerInvoice).where(CustomerInvoice.organization_id == org_id)
+            )).all()
+            existing.extend((i.invoice_code, i.total_amount) for i in invoices)
+            trxs = (await db.scalars(
+                select(Transaction).where(
+                    Transaction.organization_id == org_id,
+                    Transaction.reference_no.isnot(None),
+                )
+            )).all()
+            existing.extend((t.reference_no, t.amount) for t in trxs)
+
+            verdict = evaluate_reference_duplicate(references, candidate.amount, existing)
+            if verdict.duplicate:
+                raise HTTPException(status_code=422, detail=verdict.reason)
+            if verdict.flagged and ReviewFlag.DUPLICATE_SUSPECTED.value not in (document.review_flags or []):
+                document.review_flags = [*(document.review_flags or []), ReviewFlag.DUPLICATE_SUSPECTED.value]
 
     if candidate.proposed_transaction_type == TransactionType.CUSTOMER_PAYMENT and not candidate.allocation_target_id:
         raise HTTPException(status_code=409, detail="Customer payment requires an invoice allocation")

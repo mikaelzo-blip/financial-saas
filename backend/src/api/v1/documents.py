@@ -500,6 +500,16 @@ async def approve_document_candidate(
                     status_code=422,
                     detail="Transfer proof as direct expense requires a recording category",
                 )
+            if candidate.cost_category in PROJECT_COST_CATEGORIES and not candidate.project_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Project is required for project cost categories (5101)",
+                )
+            if candidate.allocation_target_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Transfer proof direct expense cannot also carry an allocation target",
+                )
 
     if candidate.proposed_transaction_type == TransactionType.CUSTOMER_PAYMENT and not candidate.allocation_target_id:
         raise HTTPException(status_code=409, detail="Customer payment requires an invoice allocation")

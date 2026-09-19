@@ -117,3 +117,37 @@ async def test_transfer_proof_as_vendor_bill_still_rejected(client: AsyncClient,
     headers = {"X-Organization-ID": str(org.id), "X-User-ID": str(manager.id)}
     resp = await client.post(f"/api/v1/documents/{doc.id}/approve", headers=headers)
     assert resp.status_code == 422
+
+
+async def test_transfer_proof_project_category_without_project_is_rejected(client: AsyncClient, db_session):
+    org, manager, account = await _org_user_account(db_session)
+    doc = await _transfer_proof_doc(
+        db_session, org, manager,
+        {
+            "proposed_transaction_type": "DIRECT_PURCHASE",
+            "cost_category": CostCategory.MAT.value,
+            "payment_account_id": str(account.id),
+            "project_id": None,
+        },
+    )
+    headers = {"X-Organization-ID": str(org.id), "X-User-ID": str(manager.id)}
+    resp = await client.post(f"/api/v1/documents/{doc.id}/approve", headers=headers)
+    assert resp.status_code == 422
+    assert "project" in resp.json()["detail"].lower()
+
+
+async def test_transfer_proof_direct_purchase_with_allocation_target_is_rejected(client: AsyncClient, db_session):
+    org, manager, account = await _org_user_account(db_session)
+    doc = await _transfer_proof_doc(
+        db_session, org, manager,
+        {
+            "proposed_transaction_type": "DIRECT_PURCHASE",
+            "expense_category": "OFFICE_ADMIN",
+            "payment_account_id": str(account.id),
+            "allocation_target_id": str(account.id),
+        },
+    )
+    headers = {"X-Organization-ID": str(org.id), "X-User-ID": str(manager.id)}
+    resp = await client.post(f"/api/v1/documents/{doc.id}/approve", headers=headers)
+    assert resp.status_code == 422
+    assert "allocation" in resp.json()["detail"].lower()

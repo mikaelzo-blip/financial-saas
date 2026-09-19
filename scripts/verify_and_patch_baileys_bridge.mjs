@@ -17,6 +17,20 @@ function replaceRequired(content, before, after, label) {
   return content.replace(before, after);
 }
 
+// The current Hermes bridge resolves LID -> canonical phone JID natively via
+// senderAltId / resolvedSenderId (key.participantAlt / key.remoteJidAlt) and
+// forwards that canonical identity as senderId, so the backend already receives
+// a resolvable phone JID. Recognise this shape so the legacy senderPhone patch
+// passes it through unchanged instead of failing closed on an unknown version.
+export function isNativeLidBridge(source) {
+  return (
+    typeof source === 'string'
+    && source.includes('resolvedSenderId')
+    && /const senderNumber = resolvedSenderId\.replace\(/.test(source)
+    && /senderId:\s*resolvedSenderId/.test(source)
+  );
+}
+
 export function resolveBridgeScriptPath() {
   const custom = process.env.WHATSAPP_BRIDGE_SCRIPT;
   if (custom && fs.existsSync(custom)) return custom;
@@ -32,6 +46,10 @@ export function resolveBridgeScriptPath() {
 }
 
 export function patchBridgeScriptContent(source) {
+  // Native LID-resolving bridge: canonical phone identity is already forwarded,
+  // nothing to patch. Return unchanged so the legacy patch never fails closed.
+  if (isNativeLidBridge(source)) return source;
+
   let content = source;
 
   content = replaceRequired(
@@ -156,6 +174,11 @@ export function patchBridgeHelpersContent(source) {
 }
 
 export function verifyBridgeContents(bridgeContent, helpersContent) {
+  // Native LID-resolving bridge already forwards the canonical phone identity
+  // the backend consumes, so the legacy senderPhone checks do not apply.
+  if (isNativeLidBridge(bridgeContent)) {
+    return { ok: true };
+  }
   const checks = [
     bridgeContent.includes('mReverse'),
     bridgeContent.includes('function resolveSenderPhone'),
@@ -191,6 +214,13 @@ export function reapplyBridgePatch(scriptPath) {
 
   const originalBridge = fs.readFileSync(scriptPath, 'utf8');
   const originalHelpers = fs.readFileSync(helpersPath, 'utf8');
+
+  // Native LID-resolving bridge: canonical phone identity is already forwarded
+  // end to end, so neither the bridge nor its helpers need patching.
+  if (isNativeLidBridge(originalBridge)) {
+    return { ok: true, changed: false };
+  }
+
   const patchedBridge = patchBridgeScriptContent(originalBridge);
   const patchedHelpers = patchBridgeHelpersContent(originalHelpers);
   const status = verifyBridgeContents(patchedBridge, patchedHelpers);

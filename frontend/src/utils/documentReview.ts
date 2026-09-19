@@ -103,7 +103,7 @@ export const validateDocumentReviewForm = (
 
   let errorMessage = 'Dokumen belum dapat disetujui karena data wajib belum lengkap.';
   if (missingFields.includes('payment_account_id')) {
-    errorMessage = 'Pilih rekening pembayaran terlebih dahulu.';
+    errorMessage = 'Pilih asal dana (rekening kas/bank) terlebih dahulu.';
   } else if (missingFields.includes('project_id')) {
     errorMessage = 'Proyek wajib dipilih sebelum dokumen dapat disetujui.';
   } else if (missingFields.includes('counterparty_id')) {
@@ -137,7 +137,7 @@ export const formatDocumentActionError = (err: unknown): string => {
       return 'Pembayaran vendor memerlukan alokasi tagihan vendor.';
     }
     if (detail.includes('Payment account is not available') || detail.includes('PaymentAccount is not available')) {
-      return 'Pilih rekening pembayaran terlebih dahulu.';
+      return 'Pilih asal dana (rekening kas/bank) terlebih dahulu.';
     }
     if (detail.includes('Project is not available or not active') || detail.includes('Project is no longer available')) {
       return 'Proyek yang dipilih tidak aktif atau tidak tersedia di organisasi ini.';

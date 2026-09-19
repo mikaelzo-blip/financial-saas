@@ -920,15 +920,15 @@ export const DocumentReviewForm: React.FC<Props> = ({
         {requiresPaymentAccount && (
           <div className="space-y-2">
             <label htmlFor="payment-account-select" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
-              Rekening Kas / Bank <span className="text-rose-500">*</span>
+              Asal Dana (Rekening Kas / Bank) <span className="text-rose-500">*</span>
             </label>
             <Select
               id="payment-account-select"
-              aria-label="Pilih Rekening Kas / Bank"
+              aria-label="Pilih Asal Dana (Rekening Kas / Bank)"
               disabled={paymentAccountLookupLoading || !!paymentAccountLookupError}
               value={paymentAccountId}
               onChange={(e) => setPaymentAccountId(e.target.value)}
-              helperText="Pilih rekening kas atau bank yang digunakan untuk transaksi ini."
+              helperText="Pilih rekening kas/bank milik Anda yang menjadi asal dana transaksi ini."
             >
               <option value="">Pilih rekening kas / bank</option>
               {availablePaymentAccounts.map((account) => (

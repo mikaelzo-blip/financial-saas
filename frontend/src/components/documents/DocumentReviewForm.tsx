@@ -8,8 +8,8 @@ import {
   PaymentAccountResponse,
   ProjectResponse,
   TransactionType,
-  RECORDING_CATEGORIES,
 } from '../../types/api';
+import { RECORDING_CATEGORIES } from '../../utils/recordingCategories';
 import { formatIDR, formatDate } from '../../utils/formatters';
 import {
   FileText,

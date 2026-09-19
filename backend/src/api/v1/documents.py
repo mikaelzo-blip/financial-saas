@@ -10,7 +10,7 @@ from src.api.deps import get_current_org_id
 from src.api.auth import require_application_user, require_roles
 from src.models.enums import (
     DocumentType, DocumentProcessingStatus, CandidateStatus, ProjectStatus,
-    ReviewFlag, TransactionType, CostCategory,
+    ReviewFlag, TransactionType,
 )
 from src.models.document import DocumentCorrection
 from src.models.project import Project
@@ -25,6 +25,7 @@ from src.schemas.document import (DocumentResponse, DocumentCorrectionRequest,
                                   DocumentRejectionRequest, TransactionCandidate,
                                   StructuredExtraction, DocumentPostingResponse)
 from src.services.document_posting_service import DocumentPostingService
+from src.services.recording_categories import PROJECT_REQUIRED_COST_CATEGORIES
 from src.services.documents.matching import match_entities
 from src.services.documents.expense_duplicate_guard import (
     DuplicateScanner,
@@ -41,14 +42,6 @@ from src.services.transaction_retry import run_in_clean_transaction
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
 
-PROJECT_COST_CATEGORIES = {
-    CostCategory.MAT,
-    CostCategory.SUB,
-    CostCategory.TRN,
-    CostCategory.EQP,
-}
-
-
 def is_candidate_ready_for_approval(candidate: TransactionCandidate) -> bool:
     if not candidate.proposed_transaction_type or not candidate.amount or not candidate.transaction_date:
         return False
@@ -58,7 +51,7 @@ def is_candidate_ready_for_approval(candidate: TransactionCandidate) -> bool:
     if t_type == TransactionType.DIRECT_PURCHASE:
         if not candidate.payment_account_id:
             return False
-        if candidate.cost_category in PROJECT_COST_CATEGORIES:
+        if candidate.cost_category in PROJECT_REQUIRED_COST_CATEGORIES:
             return bool(candidate.project_id)
         return bool(candidate.project_id or candidate.expense_category)
     if t_type in {TransactionType.VENDOR_BILL, TransactionType.CUSTOMER_INVOICE}:
@@ -559,7 +552,7 @@ async def approve_document_candidate(
                     status_code=422,
                     detail="Transfer proof as direct expense requires a recording category",
                 )
-            if candidate.cost_category in PROJECT_COST_CATEGORIES and not candidate.project_id:
+            if candidate.cost_category in PROJECT_REQUIRED_COST_CATEGORIES and not candidate.project_id:
                 raise HTTPException(
                     status_code=422,
                     detail="Project is required for project cost categories (5101)",

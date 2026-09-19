@@ -95,16 +95,6 @@ export interface RecordingCategoryOption {
   requiresProject: boolean;
 }
 
-export const RECORDING_CATEGORIES: RecordingCategoryOption[] = [
-  { value: 'MAT', label: 'Beli Barang / Material', costCategory: 'MAT', requiresProject: true },
-  { value: 'SUB', label: 'Jasa / Subkontraktor', costCategory: 'SUB', requiresProject: true },
-  { value: 'TRN', label: 'Bensin & Transport (proyek)', costCategory: 'TRN', requiresProject: true },
-  { value: 'EQP', label: 'Peralatan / Sewa Alat', costCategory: 'EQP', requiresProject: true },
-  { value: 'TRAVEL_OFFICE', label: 'Bensin / Kendaraan (kantor)', expenseCategory: 'TRAVEL_OFFICE', requiresProject: false },
-  { value: 'OFFICE_ADMIN', label: 'ATK / Operasional Kantor', expenseCategory: 'OFFICE_ADMIN', requiresProject: false },
-  { value: 'OTHER_OPERATIONAL', label: 'Lain-lain', expenseCategory: 'OTHER_OPERATIONAL', requiresProject: false },
-];
-
 export const DOCUMENT_TYPES = [
   'PO_CUSTOMER',
   'SPK',

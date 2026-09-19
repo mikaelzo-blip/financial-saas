@@ -1,4 +1,5 @@
 import { TRANSACTION_TYPES, DocumentResponse, TransactionType } from '../types/api';
+import { PROJECT_REQUIRED_COST_CATEGORIES } from './recordingCategories';
 
 const CUSTOMER_TRANSACTION_TYPES = new Set<TransactionType>([
   'CUSTOMER_INVOICE',
@@ -83,10 +84,9 @@ export const validateDocumentReviewForm = (
     if (!hasProject && !hasCategory) {
       missingFields.push('project_id');
     }
-    const PROJECT_COST_CATEGORIES = ['MAT', 'SUB', 'TRN', 'EQP'];
     if (
       values.costCategory &&
-      PROJECT_COST_CATEGORIES.includes(values.costCategory) &&
+      PROJECT_REQUIRED_COST_CATEGORIES.includes(values.costCategory) &&
       !values.projectId?.trim()
     ) {
       missingFields.push('project_id_for_category');

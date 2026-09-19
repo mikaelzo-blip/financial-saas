@@ -10,7 +10,7 @@ from src.api.deps import get_current_org_id
 from src.api.auth import require_application_user, require_roles
 from src.models.enums import (
     DocumentType, DocumentProcessingStatus, CandidateStatus, ProjectStatus,
-    ReviewFlag, TransactionType,
+    ReviewFlag, TransactionType, CostCategory,
 )
 from src.models.document import DocumentCorrection
 from src.models.project import Project
@@ -36,6 +36,14 @@ from src.services.transaction_retry import run_in_clean_transaction
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
 
+PROJECT_COST_CATEGORIES = {
+    CostCategory.MAT,
+    CostCategory.SUB,
+    CostCategory.TRN,
+    CostCategory.EQP,
+}
+
+
 def is_candidate_ready_for_approval(candidate: TransactionCandidate) -> bool:
     if not candidate.proposed_transaction_type or not candidate.amount or not candidate.transaction_date:
         return False
@@ -43,7 +51,11 @@ def is_candidate_ready_for_approval(candidate: TransactionCandidate) -> bool:
     if t_type in {TransactionType.CUSTOMER_PAYMENT, TransactionType.PAY_VENDOR_BILL}:
         return bool(candidate.counterparty_id and candidate.payment_account_id and candidate.allocation_target_id)
     if t_type == TransactionType.DIRECT_PURCHASE:
-        return bool(candidate.payment_account_id and (candidate.project_id or candidate.cost_category or candidate.expense_category))
+        if not candidate.payment_account_id:
+            return False
+        if candidate.cost_category in PROJECT_COST_CATEGORIES:
+            return bool(candidate.project_id)
+        return bool(candidate.project_id or candidate.expense_category)
     if t_type in {TransactionType.VENDOR_BILL, TransactionType.CUSTOMER_INVOICE}:
         return bool(candidate.counterparty_id and candidate.project_id)
     return True
@@ -474,14 +486,20 @@ async def approve_document_candidate(
 
     if document.document_type == DocumentType.TRANSFER_PROOF:
         if candidate.proposed_transaction_type in {
-            TransactionType.DIRECT_PURCHASE,
             TransactionType.VENDOR_BILL,
             TransactionType.CUSTOMER_INVOICE,
         }:
             raise HTTPException(
                 status_code=422,
-                detail="Transfer proof cannot be approved as direct purchase, bill, or invoice; it must be an allocation payment"
+                detail="Transfer proof cannot be approved as bill or invoice; it must be an allocation payment or an explicit direct expense",
             )
+        if candidate.proposed_transaction_type == TransactionType.DIRECT_PURCHASE:
+            has_category = bool(candidate.cost_category or candidate.expense_category)
+            if not has_category:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Transfer proof as direct expense requires a recording category",
+                )
 
     if candidate.proposed_transaction_type == TransactionType.CUSTOMER_PAYMENT and not candidate.allocation_target_id:
         raise HTTPException(status_code=409, detail="Customer payment requires an invoice allocation")

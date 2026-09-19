@@ -40,6 +40,8 @@ memilih **Jenis Pencatatan** (kategori COA) secara eksplisit, dengan:
 | D1 | Sistem **menyarankan** kategori dari teks OCR (`classify_expense` yang ada), reviewer **dapat mengubah** via picker eksplisit. |
 | D2 | Bukti transfer boleh `DIRECT_PURCHASE` **hanya jika** kategori COA terisi DAN `allocation_target_id` kosong. |
 | D3 | Pengaman anti double-count dijalankan saat approve, **berbasis nomor referensi (invoice)**, bukan nominal. |
+| D3a | Bandingkan **semua** nomor di dokumen (`transfer_reference`, `invoice_number`, `external_reference`) terhadap bill/invoice/transaksi. |
+| D3b | Nomor referensi **tidak ketemu** di sistem → **tetap boleh**; pembeda keunikan berkas memakai `file_hash` (SHA-256) + `created_at` (berdetik), bukan jam transfer (sistem belum menyimpannya). |
 | D4 | Kategori proyek (5101) **wajib** memilih proyek. Kategori operasional (610x) tidak. |
 | D5 | Rekening kas/bank (asal dana) tetap wajib. |
 
@@ -80,21 +82,27 @@ karena itu D4 mewajibkan proyek untuk kategori 5101.
 
 3. **Pengaman anti double-count** (baru, dipakai saat approve) — **berbasis nomor referensi**
    - Modul baru `backend/src/services/documents/expense_duplicate_guard.py`.
-   - Input: `org_id`, `reference_no` (dari `external_reference` / `invoice_number` /
-     `transfer_reference`), `amount`, `counterparty_id`.
-   - Normalisasi nomor dengan `normalize_doc_number` (`matching.py:56`, sudah ada) agar
-     `20708003319` = `2070803319` konsisten.
+   - Kumpulkan **semua** nomor dari dokumen: `transfer_reference`, `invoice_number`,
+     `external_reference` (bila berbeda). Normalisasi tiap nomor dengan `normalize_doc_number`
+     (`matching.py:56`, sudah ada) agar `2070-8003-319` = `20708003319`.
+   - Bandingkan terhadap `VendorBill.bill_code`, `CustomerInvoice.invoice_code`, dan
+     `Transaction.reference_no`.
    - Aturan:
-     - **Nomor referensi SAMA** (setelah normalisasi) dengan vendor bill / customer invoice /
-       transaksi yang sudah ada DAN nominal mirip (±1%) → **TOLAK**
+     - **Ada nomor yang cocok** (setelah normalisasi) DAN nominal mirip (±1%) → **TOLAK**
        (`"Reference <no> already recorded as <kode>; possible duplicate"`).
-     - **Nominal mirip tapi nomor referensi BERBEDA** → **BOLEH** (bukan duplikat;
-       transaksi berbeda dengan kebetulan nominal sama).
-     - Nomor referensi sama tapi nominal jauh berbeda → tandai `DUPLICATE_SUSPECTED`
+     - **Ada nomor yang cocok** tapi nominal jauh berbeda → tandai `DUPLICATE_SUSPECTED`
        untuk review, tidak menolak.
+     - **Nominal mirip tapi TIDAK ada nomor yang cocok** → **BOLEH** (transaksi berbeda,
+       kebetulan nominal sama).
+     - **Tidak ada nomor yang cocok sama sekali** → **BOLEH**. Keunikan berkas dijamin
+       `file_hash` (SHA-256) + `created_at`; dua bukti transfer berbeda selalu punya
+       `file_hash`/`created_at` berbeda.
    - Dipanggil di endpoint approve **hanya** untuk jalur `DIRECT_PURCHASE` dari
      `TRANSFER_PROOF` (tidak mengganggu jalur alokasi).
-   - Nominal saja **tidak cukup** untuk menolak — nomor referensi adalah penentu utama.
+   - **Catatan penting:** nomor `20708003319` pada bukti transfer adalah **nomor referensi
+     transfer bank**, bukan nomor invoice vendor. OCR saat ini menaruh nomor yang sama ke
+     `invoice_number`. Karena itu pencocokan memakai gabungan semua nomor, dan
+     ketidakcocokan nomor transfer **tidak** boleh memblokir (sesuai D3b).
 
 4. **Validasi** (`is_candidate_ready_for_approval`, `documents.py:45`)
    - `DIRECT_PURCHASE`: wajib `payment_account_id` DAN (`project_id` bila kategori 5101;
@@ -121,9 +129,11 @@ karena itu D4 mewajibkan proyek untuk kategori 5101.
    - Guard: bukti transfer + kategori + tanpa alokasi → boleh; tanpa kategori → 422;
      `VENDOR_BILL` → tetap 422.
    - Anti double-count (berbasis nomor referensi):
-     - nomor referensi sama + nominal mirip → 422;
-     - nominal mirip tapi nomor referensi berbeda → **lolos**;
-     - nomor referensi sama tapi nominal jauh berbeda → flag `DUPLICATE_SUSPECTED`, tidak tolak.
+     - nomor cocok + nominal mirip → 422;
+     - nomor cocok + nominal jauh beda → flag `DUPLICATE_SUSPECTED`, tidak tolak;
+     - nominal mirip tapi tidak ada nomor cocok → **lolos**;
+     - tidak ada nomor cocok sama sekali → **lolos** (uji juga dua bukti transfer berbeda
+       dengan `file_hash` berbeda).
    - Normalisasi: `2070-8003-319` dan `20708003319` dianggap sama.
    - Jurnal: `DIRECT_PURCHASE` dari bukti transfer menghasilkan Debit 5101/610x, Kredit 1101.
    - Test lama yang meng-assert "transfer proof cannot be direct purchase" disesuaikan.
@@ -143,6 +153,8 @@ karena itu D4 mewajibkan proyek untuk kategori 5101.
 
 ## Pertanyaan Terbuka
 
-- Ambang "nominal mirip" untuk kasus nomor referensi sama: diusulkan ±1%.
+- Ambang "nominal mirip" untuk kasus nomor cocok: diusulkan ±1%.
 - Apakah jenis pencatatan juga perlu muncul untuk `RECEIPT`? (Saat ini `RECEIPT` sudah
   otomatis `DIRECT_PURCHASE`.)
+- Ekstraksi jam/menit transfer dari OCR: **ditunda** (lihat D3b). Bila nanti diperlukan
+  pembeda waktu presisi, tambahkan `transfer_time` ke `StructuredExtraction`.

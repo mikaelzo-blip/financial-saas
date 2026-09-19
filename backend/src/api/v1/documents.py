@@ -27,6 +27,7 @@ from src.schemas.document import (DocumentResponse, DocumentCorrectionRequest,
 from src.services.document_posting_service import DocumentPostingService
 from src.services.recording_categories import PROJECT_REQUIRED_COST_CATEGORIES
 from src.services.documents.matching import match_entities
+from src.services.documents.status import is_evidence_document, resolve_document_status
 from src.services.documents.expense_duplicate_guard import (
     DuplicateScanner,
     collect_reference_numbers,
@@ -414,6 +415,32 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
         if key in resolved and value:
             cleared.update(resolved[key])
 
+    if is_evidence_document(document.document_type):
+        # Evidence documents carry no transaction candidate; skip candidate
+        # validation (an empty {} would raise) and re-resolve the status.
+        document.extracted_data = extracted
+        document.matching_results = matching_results
+        document.review_flags = [f for f in document.review_flags if f not in cleared]
+        document.processing_status = resolve_document_status(
+            document.document_type, None, document.review_flags, document.confidence_scores
+        )
+        for key, value in data.changes.items():
+            db.add(DocumentCorrection(
+                organization_id=org_id,
+                document_id=document.id,
+                field_path=key,
+                old_value=old.get(key),
+                new_value=value,
+                reason=data.reason,
+                corrected_by=user_id,
+            ))
+        await AuditService(db).log_event(
+            org_id, "Document", document.id, "CORRECT_EXTRACTION", user_id,
+            old_values=old, new_values=data.changes, reason=data.reason
+        )
+        await db.flush()
+        return document
+
     validated = TransactionCandidate.model_validate(candidate)
     if validated.proposed_transaction_type is not None:
         PostingRuleRegistry.validate_generic_ingestion(validated.proposed_transaction_type)
@@ -529,6 +556,12 @@ async def approve_document_candidate(
         raise HTTPException(
             status_code=409,
             detail="Document has ambiguous matching results requiring an explicit candidate selection",
+        )
+
+    if is_evidence_document(document.document_type):
+        raise HTTPException(
+            status_code=409,
+            detail="Dokumen pendukung tidak perlu disetujui; dokumen ini diarsipkan otomatis.",
         )
 
     if not document.candidate_transaction:

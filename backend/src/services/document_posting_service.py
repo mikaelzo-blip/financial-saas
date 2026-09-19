@@ -4,7 +4,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,13 +33,14 @@ from src.models.project import Project
 from src.models.receivable import CustomerInvoice, CustomerPaymentAllocation
 from src.models.transaction import Transaction
 from src.schemas.document import TransactionCandidate
-from src.schemas.transaction import TransactionCreate
+from src.schemas.transaction import TransactionAllocationInput, TransactionCreate
 from src.services.accounting_engine import AccountingEngine
 from src.services.audit_service import AuditService
 from src.services.job_queue_service import JobQueueService
 from src.services.payable_service import VendorAPService
 from src.services.posting_rules import PostingRuleRegistry
 from src.services.processing_policy_service import ProcessingPolicyService
+from src.services.recording_categories import PROJECT_REQUIRED_COST_CATEGORIES
 from src.services.receivable_service import CustomerARService
 from src.services.transaction_service import TransactionService
 
@@ -56,6 +57,85 @@ class DocumentPostingResult:
     posting_outcome: str
     journal_entry_id: Optional[uuid.UUID] = None
     entry_number: Optional[str] = None
+
+
+def build_line_allocations(
+    extracted_data: dict,
+    candidate,
+) -> Optional[List[TransactionAllocationInput]]:
+    """Group invoice line items into one allocation per (project, cost, expense) bucket.
+
+    Returns None when there are no line items, or when neither the lines nor the
+    document carry any category — so the caller keeps the existing single-category
+    behaviour. Uncategorised lines inherit the document-level category so their
+    amount is never dropped.
+    """
+    items = (extracted_data or {}).get("line_items") or []
+    if not items:
+        return None
+
+    groups: Dict[Tuple[Optional[str], Optional[str], Optional[str]], Decimal] = {}
+    for item in items:
+        raw_amount = item.get("amount")
+        if raw_amount is None:
+            raw_amount = item.get("line_total")
+        if raw_amount is None:
+            continue
+
+        cost_raw = item.get("cost_category") or (
+            candidate.cost_category.value if candidate.cost_category else None
+        )
+        expense_raw = item.get("expense_category") or (
+            candidate.expense_category.value if candidate.expense_category else None
+        )
+        # A line may not carry both; prefer the explicit cost category.
+        if item.get("cost_category"):
+            expense_raw = None
+        elif item.get("expense_category"):
+            cost_raw = None
+
+        # posting_rules routes by PROJECT PRESENCE: a project-cost line (cost
+        # category) debits 5101, an operational line (expense category) debits
+        # its 610x/6199 account. So only a project-cost line may carry the
+        # project; an operational line must NOT inherit it — otherwise it would
+        # book to 5101 (HPP). Mirrors candidate.py's resolved_proj_id rule.
+        if cost_raw:
+            project_raw = str(candidate.project_id) if candidate.project_id else None
+        else:
+            project_raw = None
+        key = (project_raw, cost_raw, expense_raw)
+        groups[key] = groups.get(key, Decimal("0.00")) + Decimal(str(raw_amount))
+
+    if not groups:
+        return None
+    # No category anywhere (neither line nor document): keep the legacy path.
+    if all(key[1] is None and key[2] is None for key in groups):
+        return None
+
+    allocations = [
+        TransactionAllocationInput(
+            project_id=uuid.UUID(key[0]) if key[0] else None,
+            cost_category=CostCategory(key[1]) if key[1] else None,
+            expense_category=ExpenseCategory(key[2]) if key[2] else None,
+            amount=amount,
+        )
+        for key, amount in groups.items()
+    ]
+
+    # A project-cost category (MAT/SUB/TRN/EQP/LOG) without a project would fall
+    # through to 6199 in posting_rules; refuse rather than book to the wrong account.
+    for alloc in allocations:
+        if (
+            alloc.cost_category is not None
+            and alloc.cost_category.value in PROJECT_REQUIRED_COST_CATEGORIES
+            and not alloc.project_id
+        ):
+            raise InvariantViolationException(
+                f"Project is required for project cost category {alloc.cost_category.value}.",
+                details={"failure_reason": "ALLOCATION_INVALID"},
+            )
+
+    return allocations
 
 
 class DocumentPostingService:
@@ -423,21 +503,43 @@ class DocumentPostingService:
                 )
 
         # 8. Create Transaction via canonical TransactionService
-        trx_input = TransactionCreate(
-            transaction_type=candidate.proposed_transaction_type,
-            transaction_date=candidate.transaction_date,
-            amount=candidate.amount,
-            currency=candidate.currency_code or "IDR",
-            counterparty_id=candidate.counterparty_id,
-            payment_account_id=candidate.payment_account_id,
-            project_id=candidate.project_id,
-            cost_category=candidate.cost_category,
-            expense_category=candidate.expense_category,
-            reference_no=candidate.external_reference,
-            description=candidate.description or f"Converted from {document.document_code}",
-            document_ids=[document.id],
-            source_channel=document.source_channel,
-        )
+        line_allocations = build_line_allocations(document.extracted_data or {}, candidate)
+        if line_allocations is not None:
+            allocation_sum = sum(a.amount for a in line_allocations)
+            if allocation_sum != candidate.amount:
+                raise InvariantViolationException(
+                    f"Sum of line allocations ({allocation_sum}) does not match invoice total ({candidate.amount}).",
+                    details={"failure_reason": "ALLOCATION_INVALID"},
+                )
+            trx_input = TransactionCreate(
+                transaction_type=candidate.proposed_transaction_type,
+                transaction_date=candidate.transaction_date,
+                amount=candidate.amount,
+                currency=candidate.currency_code or "IDR",
+                counterparty_id=candidate.counterparty_id,
+                payment_account_id=candidate.payment_account_id,
+                reference_no=candidate.external_reference,
+                description=candidate.description or f"Converted from {document.document_code}",
+                document_ids=[document.id],
+                source_channel=document.source_channel,
+                allocations=line_allocations,
+            )
+        else:
+            trx_input = TransactionCreate(
+                transaction_type=candidate.proposed_transaction_type,
+                transaction_date=candidate.transaction_date,
+                amount=candidate.amount,
+                currency=candidate.currency_code or "IDR",
+                counterparty_id=candidate.counterparty_id,
+                payment_account_id=candidate.payment_account_id,
+                project_id=candidate.project_id,
+                cost_category=candidate.cost_category,
+                expense_category=candidate.expense_category,
+                reference_no=candidate.external_reference,
+                description=candidate.description or f"Converted from {document.document_code}",
+                document_ids=[document.id],
+                source_channel=document.source_channel,
+            )
 
         transaction = await self.transaction_service.create_transaction(
             organization_id=organization_id,

@@ -151,3 +151,25 @@ async def test_transfer_proof_direct_purchase_with_allocation_target_is_rejected
     resp = await client.post(f"/api/v1/documents/{doc.id}/approve", headers=headers)
     assert resp.status_code == 422
     assert "allocation" in resp.json()["detail"].lower()
+
+
+async def test_transfer_proof_direct_expense_generates_correct_journal(db_session):
+    from src.models.transaction import Transaction
+    from src.models.enums import TransactionType
+    from src.services.posting_rules import PostingRuleRegistry
+
+    trx = Transaction(
+        organization_id=uuid.uuid4(),
+        transaction_code="TRX-TP-1",
+        transaction_type=TransactionType.DIRECT_PURCHASE,
+        transaction_date=date(2026, 8, 13),
+        amount=Decimal("48930988.86"),
+        currency="IDR",
+        description="Bensin operasional",
+        source_channel="WEB",
+    )
+    trx.allocations = []
+    legs = PostingRuleRegistry.generate_journal_legs(trx)
+    codes = {(leg.account_code, leg.debit_amount, leg.credit_amount) for leg in legs}
+    assert ("5101", Decimal("48930988.86"), Decimal("0.00")) in codes
+    assert ("1101", Decimal("0.00"), Decimal("48930988.86")) in codes

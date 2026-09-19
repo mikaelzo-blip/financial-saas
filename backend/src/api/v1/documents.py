@@ -1,5 +1,4 @@
 import uuid
-from decimal import Decimal
 from typing import List, Optional
 from fastapi import APIRouter, Depends, UploadFile, File, Form, Query, status, HTTPException
 from fastapi.responses import FileResponse
@@ -28,8 +27,8 @@ from src.schemas.document import (DocumentResponse, DocumentCorrectionRequest,
 from src.services.document_posting_service import DocumentPostingService
 from src.services.documents.matching import match_entities
 from src.services.documents.expense_duplicate_guard import (
+    DuplicateScanner,
     collect_reference_numbers,
-    evaluate_reference_duplicate,
 )
 from src.schemas.transaction import TransactionCreate, TransactionResponse
 from src.services.document_service import DocumentService
@@ -65,6 +64,49 @@ def is_candidate_ready_for_approval(candidate: TransactionCandidate) -> bool:
     if t_type in {TransactionType.VENDOR_BILL, TransactionType.CUSTOMER_INVOICE}:
         return bool(candidate.counterparty_id and candidate.project_id)
     return True
+
+
+# Bounded batch size for the duplicate scan: keeps memory flat regardless of how
+# many transactions the tenant has accumulated.
+_DUPLICATE_SCAN_BATCH = 500
+
+
+async def _scan_existing_references(
+    db: AsyncSession, org_id: uuid.UUID, scanner: "DuplicateScanner"
+) -> bool:
+    """Feed already-recorded reference numbers into the duplicate scanner.
+
+    Reads VendorBill / CustomerInvoice / Transaction in bounded batches (keyset
+    pagination on `id`) so the full history is never materialised in memory.
+    Returns True as soon as the scanner reports a real duplicate (caller can
+    stop), mirroring `evaluate_reference_duplicate`'s semantics exactly.
+    """
+    sources = (
+        (VendorBill, VendorBill.bill_code, VendorBill.total_amount),
+        (CustomerInvoice, CustomerInvoice.invoice_code, CustomerInvoice.total_amount),
+        (Transaction, Transaction.reference_no, Transaction.amount),
+    )
+    for model, code_col, amount_col in sources:
+        last_id = None
+        while True:
+            stmt = (
+                select(model.id, code_col, amount_col)
+                .where(model.organization_id == org_id, code_col.isnot(None))
+                .order_by(model.id)
+                .limit(_DUPLICATE_SCAN_BATCH)
+            )
+            if last_id is not None:
+                stmt = stmt.where(model.id > last_id)
+            rows = (await db.execute(stmt)).all()
+            if not rows:
+                break
+            for row_id, code, amount in rows:
+                if scanner.feed(code, amount):
+                    return True
+            last_id = rows[-1][0]
+            if len(rows) < _DUPLICATE_SCAN_BATCH:
+                break
+    return False
 
 
 async def validate_allocation_target(
@@ -302,7 +344,7 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
 
     for ext_field in ("invoice_number", "document_number", "spk_number", "bast_number",
                       "due_date", "subtotal", "vat_amount", "origin_bank", "destination_bank",
-                      "destination_account_number"):
+                      "destination_account_number", "transfer_reference"):
         if ext_field in data.changes:
             extracted[ext_field] = data.changes[ext_field]
     if "tax" in data.changes:
@@ -416,6 +458,15 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
     if data.changes.get("allocation_target_id") or data.changes.get("selected_candidate_id"):
         cleared.add(ReviewFlag.ACCOUNT_REVIEW.value)
         cleared.add(ReviewFlag.AMBIGUOUS_MATCH.value)
+    # A reference- or amount-related correction is the reviewer's resolution of a
+    # suspected duplicate; clear the warning so the document can be re-approved
+    # (the duplicate guard re-runs on approve against the corrected data).
+    if any(
+        key in data.changes
+        for key in ("amount", "total_amount", "external_reference", "invoice_number",
+                    "transfer_reference", "document_number")
+    ):
+        cleared.add(ReviewFlag.DUPLICATE_SUSPECTED.value)
     document.review_flags = [flag for flag in document.review_flags if flag not in cleared]
     if matching_results.get("ambiguous"):
         if ReviewFlag.AMBIGUOUS_MATCH.value not in document.review_flags:
@@ -490,6 +541,8 @@ async def approve_document_candidate(
     if not candidate.proposed_transaction_type or not candidate.transaction_date or not candidate.amount:
         raise HTTPException(status_code=422, detail="Candidate is incomplete")
 
+    duplicate_flagged = False
+
     if document.document_type == DocumentType.TRANSFER_PROOF:
         if candidate.proposed_transaction_type in {
             TransactionType.VENDOR_BILL,
@@ -526,28 +579,15 @@ async def approve_document_candidate(
             document.extracted_data or {},
         )
         if references:
-            existing: List[tuple] = []
-            bills = (await db.scalars(
-                select(VendorBill).where(VendorBill.organization_id == org_id)
-            )).all()
-            existing.extend((b.bill_code, b.total_amount) for b in bills)
-            invoices = (await db.scalars(
-                select(CustomerInvoice).where(CustomerInvoice.organization_id == org_id)
-            )).all()
-            existing.extend((i.invoice_code, i.total_amount) for i in invoices)
-            trxs = (await db.scalars(
-                select(Transaction).where(
-                    Transaction.organization_id == org_id,
-                    Transaction.reference_no.isnot(None),
-                )
-            )).all()
-            existing.extend((t.reference_no, t.amount) for t in trxs)
-
-            verdict = evaluate_reference_duplicate(references, candidate.amount, existing)
+            scanner = DuplicateScanner(references, candidate.amount)
+            await _scan_existing_references(db, org_id, scanner)
+            verdict = scanner.result()
             if verdict.duplicate:
                 raise HTTPException(status_code=422, detail=verdict.reason)
-            if verdict.flagged and ReviewFlag.DUPLICATE_SUSPECTED.value not in (document.review_flags or []):
-                document.review_flags = [*(document.review_flags or []), ReviewFlag.DUPLICATE_SUSPECTED.value]
+            if verdict.flagged:
+                duplicate_flagged = True
+                if ReviewFlag.DUPLICATE_SUSPECTED.value not in (document.review_flags or []):
+                    document.review_flags = [*(document.review_flags or []), ReviewFlag.DUPLICATE_SUSPECTED.value]
 
     if candidate.proposed_transaction_type == TransactionType.CUSTOMER_PAYMENT and not candidate.allocation_target_id:
         raise HTTPException(status_code=409, detail="Customer payment requires an invoice allocation")
@@ -589,9 +629,18 @@ async def approve_document_candidate(
     await validate_allocation_target(db, org_id, candidate)
 
     previous_status = document.processing_status.value
-    candidate.status = CandidateStatus.READY_TO_POST
-    document.candidate_transaction = candidate.model_dump(mode="json")
-    document.processing_status = DocumentProcessingStatus.READY_TO_POST
+    if duplicate_flagged:
+        # Spec D3: a reference match with a differing amount is a warning, not a
+        # rejection -- but it must NOT advance to READY_TO_POST, or the document
+        # dead-ends (auto-post and manual post both refuse while a review flag is
+        # present). Keep it reviewable so the flag can be resolved, then approved.
+        candidate.status = CandidateStatus.REVIEW_REQUIRED
+        document.candidate_transaction = candidate.model_dump(mode="json")
+        document.processing_status = DocumentProcessingStatus.REVIEW_REQUIRED
+    else:
+        candidate.status = CandidateStatus.READY_TO_POST
+        document.candidate_transaction = candidate.model_dump(mode="json")
+        document.processing_status = DocumentProcessingStatus.READY_TO_POST
 
     await AuditService(db).log_event(
         org_id,
@@ -601,12 +650,13 @@ async def approve_document_candidate(
         user_id,
         old_values={"processing_status": previous_status},
         new_values={
-            "processing_status": DocumentProcessingStatus.READY_TO_POST.value,
-            "candidate_status": CandidateStatus.READY_TO_POST.value
+            "processing_status": document.processing_status.value,
+            "candidate_status": candidate.status.value,
         }
     )
-    posting_svc = DocumentPostingService(db)
-    await posting_svc.enqueue_auto_post_if_eligible(org_id, document, candidate)
+    if not duplicate_flagged:
+        posting_svc = DocumentPostingService(db)
+        await posting_svc.enqueue_auto_post_if_eligible(org_id, document, candidate)
 
     await db.flush()
     return document

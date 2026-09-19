@@ -67,3 +67,26 @@ def test_separator_variants_are_treated_as_equal():
         {"20708003319"}, Decimal("48930988.86"), [("2070-8003-319", Decimal("48930988.86"))]
     )
     assert verdict.duplicate is True
+
+
+def test_scans_all_references_and_finds_later_exact_duplicate():
+    # I1: references {111, 222}; 111 matches with a FAR amount, 222 is an EXACT
+    # duplicate. Spec D3a says compare ALL numbers, so this must be a duplicate.
+    verdict = evaluate_reference_duplicate(
+        {"111", "222"},
+        Decimal("500.00"),
+        [("111", Decimal("1000.00")), ("222", Decimal("500.00"))],
+    )
+    assert verdict.duplicate is True
+    assert verdict.matched_code == "222"
+
+
+def test_flags_only_after_scanning_all_references():
+    # No exact duplicate anywhere -> flagged, and the flag is reported.
+    verdict = evaluate_reference_duplicate(
+        {"111", "222"},
+        Decimal("500.00"),
+        [("111", Decimal("1000.00")), ("222", Decimal("9000.00"))],
+    )
+    assert verdict.duplicate is False
+    assert verdict.flagged is True

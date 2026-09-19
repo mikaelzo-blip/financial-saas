@@ -153,8 +153,8 @@ async def test_transfer_proof_direct_purchase_with_allocation_target_is_rejected
     assert "allocation" in resp.json()["detail"].lower()
 
 
-async def test_transfer_proof_direct_expense_generates_correct_journal(db_session):
-    from src.models.transaction import Transaction
+def _journal_codes(allocations):
+    from src.models.transaction import Transaction, TransactionAllocation
     from src.models.enums import TransactionType
     from src.services.posting_rules import PostingRuleRegistry
 
@@ -165,11 +165,91 @@ async def test_transfer_proof_direct_expense_generates_correct_journal(db_sessio
         transaction_date=date(2026, 8, 13),
         amount=Decimal("48930988.86"),
         currency="IDR",
-        description="Bensin operasional",
+        description="Biaya dari bukti transfer",
         source_channel="WEB",
     )
-    trx.allocations = []
+    trx.allocations = [
+        TransactionAllocation(
+            transaction_id=trx.id,
+            project_id=alloc.get("project_id"),
+            cost_category=alloc.get("cost_category"),
+            expense_category=alloc.get("expense_category"),
+            amount=Decimal("48930988.86"),
+        )
+        for alloc in allocations
+    ]
     legs = PostingRuleRegistry.generate_journal_legs(trx)
-    codes = {(leg.account_code, leg.debit_amount, leg.credit_amount) for leg in legs}
+    return {(leg.account_code, leg.debit_amount, leg.credit_amount) for leg in legs}
+
+
+async def test_transfer_proof_direct_expense_project_cost_posts_5101(db_session):
+    codes = _journal_codes([{"project_id": uuid.uuid4(), "cost_category": "MAT"}])
     assert ("5101", Decimal("48930988.86"), Decimal("0.00")) in codes
     assert ("1101", Decimal("0.00"), Decimal("48930988.86")) in codes
+
+
+async def test_transfer_proof_direct_expense_operational_posts_6103(db_session):
+    codes = _journal_codes([{"expense_category": "OFFICE_ADMIN"}])
+    assert ("6103", Decimal("48930988.86"), Decimal("0.00")) in codes
+    assert ("1101", Decimal("0.00"), Decimal("48930988.86")) in codes
+
+
+async def test_transfer_proof_direct_expense_travel_posts_6104(db_session):
+    codes = _journal_codes([{"expense_category": "TRAVEL_OFFICE"}])
+    assert ("6104", Decimal("48930988.86"), Decimal("0.00")) in codes
+
+
+async def test_transfer_proof_direct_expense_other_operational_posts_6199(db_session):
+    codes = _journal_codes([{"expense_category": "OTHER_OPERATIONAL"}])
+    assert ("6199", Decimal("48930988.86"), Decimal("0.00")) in codes
+
+
+async def test_receipt_project_category_without_project_is_rejected(client: AsyncClient, db_session):
+    # I3: the stricter 5101 rule also applies to the pre-existing RECEIPT path
+    # (RECEIPT auto-maps to DIRECT_PURCHASE and defaults to cost_category=MAT).
+    # Pin it explicitly: MAT without a project must be rejected, not silently
+    # posted to 6199.
+    org, manager, account = await _org_user_account(db_session)
+    doc = await DocumentService(db_session).ingest_document(
+        org.id, io.BytesIO(b"%PDF-1.4 receipt"), "kuitansi.pdf", "application/pdf",
+        DocumentType.RECEIPT, created_by=manager.id,
+    )
+    doc.candidate_transaction = {
+        "id": str(doc.id),
+        "proposed_transaction_type": "DIRECT_PURCHASE",
+        "cost_category": CostCategory.MAT.value,
+        "payment_account_id": str(account.id),
+        "amount": "150000.00",
+        "transaction_date": "2026-08-13",
+        "status": "READY_FOR_APPROVAL",
+    }
+    doc.review_flags = []
+    doc.processing_status = DocumentProcessingStatus.READY_FOR_APPROVAL
+    await db_session.commit()
+    headers = {"X-Organization-ID": str(org.id), "X-User-ID": str(manager.id)}
+    resp = await client.post(f"/api/v1/documents/{doc.id}/approve", headers=headers)
+    assert resp.status_code == 422
+
+
+async def test_receipt_operational_category_without_project_is_approved(client: AsyncClient, db_session):
+    # The operational branch (610x) stays approvable without a project for RECEIPT.
+    org, manager, account = await _org_user_account(db_session)
+    doc = await DocumentService(db_session).ingest_document(
+        org.id, io.BytesIO(b"%PDF-1.4 receipt2"), "kuitansi2.pdf", "application/pdf",
+        DocumentType.RECEIPT, created_by=manager.id,
+    )
+    doc.candidate_transaction = {
+        "id": str(doc.id),
+        "proposed_transaction_type": "DIRECT_PURCHASE",
+        "expense_category": "OFFICE_ADMIN",
+        "payment_account_id": str(account.id),
+        "amount": "150000.00",
+        "transaction_date": "2026-08-13",
+        "status": "READY_FOR_APPROVAL",
+    }
+    doc.review_flags = []
+    doc.processing_status = DocumentProcessingStatus.READY_FOR_APPROVAL
+    await db_session.commit()
+    headers = {"X-Organization-ID": str(org.id), "X-User-ID": str(manager.id)}
+    resp = await client.post(f"/api/v1/documents/{doc.id}/approve", headers=headers)
+    assert resp.status_code in (200, 201), resp.text

@@ -93,8 +93,42 @@ async def test_matching_reference_but_far_amount_is_flagged_not_rejected(client:
     doc = await _doc(db_session, org, manager, account, "20708003319", amount="1000000.00")
     headers = {"X-Organization-ID": str(org.id), "X-User-ID": str(manager.id)}
     resp = await client.post(f"/api/v1/documents/{doc.id}/approve", headers=headers)
+    # Not rejected (no 422), but NOT auto-approved: it must stay reviewable so the
+    # flag can be resolved. Landing in READY_TO_POST would dead-end (auto-post and
+    # manual post both refuse while a review flag is present).
     assert resp.status_code in (200, 201), resp.text
-    assert "DUPLICATE_SUSPECTED" in resp.json()["review_flags"]
+    body = resp.json()
+    assert "DUPLICATE_SUSPECTED" in body["review_flags"]
+    assert body["processing_status"] == "REVIEW_REQUIRED"
+
+
+async def test_flagged_duplicate_can_be_resolved_then_approved(client: AsyncClient, db_session):
+    org, manager, account = await _setup(db_session, bill_code="20708003319")
+    doc = await _doc(db_session, org, manager, account, "20708003319", amount="1000000.00")
+    headers = {"X-Organization-ID": str(org.id), "X-User-ID": str(manager.id)}
+
+    flagged = await client.post(f"/api/v1/documents/{doc.id}/approve", headers=headers)
+    assert flagged.status_code in (200, 201), flagged.text
+    assert "DUPLICATE_SUSPECTED" in flagged.json()["review_flags"]
+
+    # Reviewer resolves the suspected duplicate by correcting the (mis-read)
+    # reference. The document carried the same value in transfer_reference and
+    # invoice_number (mirroring real OCR), so both are corrected here.
+    corrected = await client.post(
+        f"/api/v1/documents/{doc.id}/corrections",
+        headers=headers,
+        json={
+            "changes": {"transfer_reference": "88877766655", "invoice_number": "88877766655"},
+            "reason": "Nomor referensi dikoreksi (bukan duplikat)",
+        },
+    )
+    assert corrected.status_code in (200, 201), corrected.text
+    assert "DUPLICATE_SUSPECTED" not in corrected.json()["review_flags"]
+
+    # Now approval can succeed and the document reaches READY_TO_POST.
+    approved = await client.post(f"/api/v1/documents/{doc.id}/approve", headers=headers)
+    assert approved.status_code in (200, 201), approved.text
+    assert approved.json()["candidate_transaction"]["status"] == "READY_TO_POST"
 
 
 async def test_different_reference_with_similar_amount_is_allowed(client: AsyncClient, db_session):
@@ -111,3 +145,35 @@ async def test_normalized_reference_variants_are_detected(client: AsyncClient, d
     headers = {"X-Organization-ID": str(org.id), "X-User-ID": str(manager.id)}
     resp = await client.post(f"/api/v1/documents/{doc.id}/approve", headers=headers)
     assert resp.status_code == 422
+
+
+async def test_duplicate_found_beyond_scan_batch_boundary(client: AsyncClient, db_session):
+    # I2: the scan reads in bounded batches; a duplicate sitting past the first
+    # batch must still be found (proves keyset pagination crosses the boundary).
+    org, manager, account = await _setup(db_session, bill_code="FILLER-000")
+    vendor = (await db_session.scalars(
+        select(VendorBill).where(VendorBill.organization_id == org.id)
+    )).first().vendor_id
+    for i in range(600):
+        db_session.add(VendorBill(
+            organization_id=org.id,
+            bill_code=f"FILLER-{i:04d}",
+            vendor_id=vendor,
+            bill_date=date(2026, 8, 1),
+            due_date=date(2026, 9, 1),
+            total_amount=Decimal("1.00"),
+        ))
+    await db_session.flush()
+    # The real duplicate lands after the batch boundary.
+    db_session.add(VendorBill(
+        organization_id=org.id, bill_code="20708003319", vendor_id=vendor,
+        bill_date=date(2026, 8, 1), due_date=date(2026, 9, 1),
+        total_amount=Decimal("48930988.86"),
+    ))
+    await db_session.commit()
+
+    doc = await _doc(db_session, org, manager, account, "20708003319")
+    headers = {"X-Organization-ID": str(org.id), "X-User-ID": str(manager.id)}
+    resp = await client.post(f"/api/v1/documents/{doc.id}/approve", headers=headers)
+    assert resp.status_code == 422, resp.text
+    assert "duplicate" in resp.json()["detail"].lower()

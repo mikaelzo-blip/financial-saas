@@ -78,28 +78,65 @@ def evaluate_reference_duplicate(
     amount: Decimal,
     existing: Sequence[tuple[str, Decimal]],
 ) -> DuplicateVerdict:
-    """Compare document references against already-recorded (code, amount) pairs."""
-    if not references:
-        return DuplicateVerdict(duplicate=False, flagged=False)
+    """Compare document references against already-recorded (code, amount) pairs.
 
+    Scans EVERY pair (spec D3a: compare all reference numbers). Returns a
+    duplicate as soon as any reference matches with a similar amount; only
+    returns `flagged` after the whole list has been scanned, so a later exact
+    duplicate is never masked by an earlier far-amount match.
+    """
+    scanner = DuplicateScanner(references, amount)
     for code, recorded_amount in existing:
+        if scanner.feed(code, recorded_amount):
+            break
+    return scanner.result()
+
+
+class DuplicateScanner:
+    """Incremental, streaming-friendly version of the duplicate comparison.
+
+    Lets callers feed (code, amount) pairs one row at a time (e.g. from a
+    streamed SQL cursor) so the full transaction history is never materialised
+    in memory. `feed` returns True as soon as a real duplicate is found, so the
+    caller can stop reading; `result` yields the flagged verdict (if any) after
+    every row has been scanned. Correctness is identical to
+    `evaluate_reference_duplicate`.
+    """
+
+    def __init__(self, references: set[str], amount: Decimal):
+        self._references = references
+        self._amount = Decimal(str(amount))
+        self._first_flag: Optional[DuplicateVerdict] = None
+        self._duplicate: Optional[DuplicateVerdict] = None
+
+    def feed(self, code: object, recorded_amount: object) -> bool:
+        if self._duplicate is not None or not self._references:
+            return self._duplicate is not None
         code_norm = canonical_reference(code) if code else ""
-        if not code_norm or code_norm not in references:
-            continue
-        if _amounts_similar(Decimal(str(amount)), Decimal(str(recorded_amount))):
-            return DuplicateVerdict(
+        if not code_norm or code_norm not in self._references:
+            return False
+        if _amounts_similar(self._amount, Decimal(str(recorded_amount))):
+            self._duplicate = DuplicateVerdict(
                 duplicate=True,
                 flagged=False,
                 reason=f"Reference {code_norm} already recorded as {code}; possible duplicate",
                 matched_reference=code_norm,
                 matched_code=code,
             )
-        return DuplicateVerdict(
-            duplicate=False,
-            flagged=True,
-            reason=f"Reference {code_norm} matches {code} but amount differs; review required",
-            matched_reference=code_norm,
-            matched_code=code,
-        )
+            return True
+        if self._first_flag is None:
+            self._first_flag = DuplicateVerdict(
+                duplicate=False,
+                flagged=True,
+                reason=f"Reference {code_norm} matches {code} but amount differs; review required",
+                matched_reference=code_norm,
+                matched_code=code,
+            )
+        return False
 
-    return DuplicateVerdict(duplicate=False, flagged=False)
+    def result(self) -> DuplicateVerdict:
+        if self._duplicate is not None:
+            return self._duplicate
+        if self._first_flag is not None:
+            return self._first_flag
+        return DuplicateVerdict(duplicate=False, flagged=False)

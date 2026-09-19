@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  isNativeLidBridge,
   patchBridgeHelpersContent,
   patchBridgeScriptContent,
   verifyBridgeContents,
@@ -93,4 +94,38 @@ test('patch is idempotent', () => {
 test('fails closed when upstream bridge shape is unknown', () => {
   assert.throws(() => patchBridgeScriptContent('console.log("new upstream");'), /unsupported Hermes bridge version/);
   assert.throws(() => patchBridgeHelpersContent('export const changed = true;'), /unsupported Hermes bridge version/);
+});
+
+// The current Hermes bridge resolves LID -> canonical phone JID natively
+// (senderAltId / resolvedSenderId from key.participantAlt / remoteJidAlt), so it
+// already forwards the canonical identity the backend consumes. The legacy
+// senderPhone patch must recognise this shape and pass it through unchanged.
+const nativeLidBridgeSource = String.raw`
+      const senderId = msg.key.participant || chatId;
+      const senderAltId = normalizeWhatsAppId(msg.key.participantAlt || msg.key.remoteJidAlt || '');
+      const resolvedSenderId = senderAltId.endsWith('@s.whatsapp.net') ? senderAltId : senderId;
+      const isGroup = chatId.endsWith('@g.us');
+      const senderNumber = resolvedSenderId.replace(/@.*/, '');
+      const event = await extractBridgeEvent({
+        msg,
+        chatId,
+        senderId: resolvedSenderId,
+        senderNumber,
+        botIds,
+        isGroup,
+      });
+`;
+
+test('recognises the native LID-resolving Hermes bridge', () => {
+  assert.equal(isNativeLidBridge(nativeLidBridgeSource), true);
+  assert.equal(isNativeLidBridge(bridgeSource), false);
+});
+
+test('passes the native LID bridge through unchanged instead of throwing', () => {
+  const bridge = patchBridgeScriptContent(nativeLidBridgeSource);
+  assert.equal(bridge, nativeLidBridgeSource);
+});
+
+test('native LID bridge is accepted end to end', () => {
+  assert.equal(verifyBridgeContents(nativeLidBridgeSource, helpersSource).ok, true);
 });

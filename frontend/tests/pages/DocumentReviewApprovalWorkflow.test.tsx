@@ -142,7 +142,7 @@ describe('Document Review Approval Workflow & Invariants', () => {
           },
         },
       };
-      expect(formatDocumentActionError(axiosErr)).toBe('Pilih rekening pembayaran terlebih dahulu.');
+      expect(formatDocumentActionError(axiosErr)).toBe('Pilih asal dana (rekening kas/bank) terlebih dahulu.');
     });
 
     it('translates raw status code 422 Error instance without technical jargon', () => {
@@ -173,7 +173,7 @@ describe('Document Review Approval Workflow & Invariants', () => {
       });
       expect(invalid.isValid).toBe(false);
       expect(invalid.missingFields).toContain('payment_account_id');
-      expect(invalid.errorMessage).toBe('Pilih rekening pembayaran terlebih dahulu.');
+      expect(invalid.errorMessage).toBe('Pilih asal dana (rekening kas/bank) terlebih dahulu.');
 
       const valid = validateDocumentReviewForm('DIRECT_PURCHASE', 'RECEIPT', {
         amount: '500000',
@@ -222,7 +222,7 @@ describe('Document Review Approval Workflow & Invariants', () => {
         />,
       );
 
-      const paymentSelect = screen.getByLabelText('Pilih Rekening Kas / Bank');
+      const paymentSelect = screen.getByLabelText('Pilih Asal Dana (Rekening Kas / Bank)');
       expect(paymentSelect).toBeInTheDocument();
       expect(screen.getByText(/BCA Operasional/)).toBeInTheDocument();
       expect(screen.queryByText(/Mandiri Lama/)).not.toBeInTheDocument();
@@ -250,7 +250,7 @@ describe('Document Review Approval Workflow & Invariants', () => {
         />,
       );
 
-      expect(screen.queryByLabelText('Pilih Rekening Kas / Bank')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Pilih Asal Dana (Rekening Kas / Bank)')).not.toBeInTheDocument();
     });
 
     it('blocks approval and displays friendly error when payment account is missing on DIRECT_PURCHASE', async () => {
@@ -272,7 +272,7 @@ describe('Document Review Approval Workflow & Invariants', () => {
       const approveButton = screen.getByRole('button', { name: 'Setujui untuk Diposting' });
       await userEvent.click(approveButton);
 
-      expect(screen.getByText('Pilih rekening pembayaran terlebih dahulu.')).toBeInTheDocument();
+      expect(screen.getByText('Pilih asal dana (rekening kas/bank) terlebih dahulu.')).toBeInTheDocument();
       expect(onSave).not.toHaveBeenCalled();
       expect(onApprove).not.toHaveBeenCalled();
     });
@@ -294,7 +294,7 @@ describe('Document Review Approval Workflow & Invariants', () => {
       );
 
       // Select payment account to satisfy required fields and make form dirty
-      const paymentSelect = screen.getByLabelText('Pilih Rekening Kas / Bank');
+      const paymentSelect = screen.getByLabelText('Pilih Asal Dana (Rekening Kas / Bank)');
       await userEvent.selectOptions(paymentSelect, 'pa-bank-bca');
 
       const approveButton = screen.getByRole('button', { name: 'Setujui untuk Diposting' });
@@ -326,7 +326,7 @@ describe('Document Review Approval Workflow & Invariants', () => {
         />,
       );
 
-      const paymentSelect = screen.getByLabelText('Pilih Rekening Kas / Bank');
+      const paymentSelect = screen.getByLabelText('Pilih Asal Dana (Rekening Kas / Bank)');
       await userEvent.selectOptions(paymentSelect, 'pa-bank-bca');
 
       const approveButton = screen.getByRole('button', { name: 'Setujui untuk Diposting' });
@@ -383,7 +383,7 @@ describe('Document Review Approval Workflow & Invariants', () => {
         />,
       );
 
-      const paymentSelect = screen.getByLabelText('Pilih Rekening Kas / Bank');
+      const paymentSelect = screen.getByLabelText('Pilih Asal Dana (Rekening Kas / Bank)');
       await userEvent.selectOptions(paymentSelect, 'pa-bank-bca');
 
       const saveButton = screen.getByRole('button', { name: 'Simpan Koreksi' });

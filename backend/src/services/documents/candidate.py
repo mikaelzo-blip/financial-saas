@@ -39,6 +39,30 @@ def build_candidate(document_id: uuid.UUID, document_type: DocumentType,
             proposed = TransactionType.CUSTOMER_PAYMENT
         else:
             proposed = None
+        if proposed is None:
+            # Suggestion only: OCR proposes a recording category when no allocation
+            # target exists. proposed_transaction_type stays None until the reviewer
+            # explicitly confirms DIRECT_PURCHASE in the review form.
+            matched_pid = matches.get("project_id")
+            if matched_pid and isinstance(matched_pid, str):
+                try:
+                    matched_pid = uuid.UUID(matched_pid)
+                except Exception:
+                    pass
+            raw_desc = data.description or data.raw_text or ""
+            exp_res = classify_expense(
+                raw_description=raw_desc,
+                caption=(matches.get("source_metadata") or {}).get("caption"),
+                matched_project_id=matched_pid,
+                vendor_name=data.issuer_name or data.recipient_name,
+                document_text=data.raw_text,
+                document_project_hint=data.project_reference,
+            )
+            matches["expense_classification"] = exp_res.to_dict()
+            if exp_res.cost_category:
+                matches["suggested_cost_category"] = exp_res.cost_category.value
+            elif exp_res.expense_category:
+                matches["suggested_expense_category"] = exp_res.expense_category.value
     elif document_type in {DocumentType.RECEIPT, DocumentType.VENDOR_INVOICE}:
         caption = matches.get("caption") or (matches.get("source_metadata") or {}).get("caption")
         proj_hint = data.project_reference

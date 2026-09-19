@@ -9,6 +9,7 @@ import {
   ProjectResponse,
   TransactionType,
 } from '../../types/api';
+import { RECORDING_CATEGORIES } from '../../utils/recordingCategories';
 import { formatIDR, formatDate } from '../../utils/formatters';
 import {
   FileText,
@@ -123,6 +124,15 @@ export const DocumentReviewForm: React.FC<Props> = ({
 
   const [projectSearch, setProjectSearch] = useState('');
   const [counterpartySearch, setCounterpartySearch] = useState('');
+  const [recordingCategory, setRecordingCategory] = useState<string>(
+    String(
+      candidate.cost_category ??
+        candidate.expense_category ??
+        (document.matching_results?.suggested_cost_category as string | undefined) ??
+        (document.matching_results?.suggested_expense_category as string | undefined) ??
+        '',
+    ),
+  );
   const [reason, setReason] = useState('Verifikasi dokumen sumber');
   const [busy, setBusy] = useState(false);
   const [formValidationError, setFormValidationError] = useState<string | undefined>(undefined);
@@ -138,9 +148,13 @@ export const DocumentReviewForm: React.FC<Props> = ({
   const initialDueDate = String(extracted.due_date ?? '');
   const initialCandidateId = String(candidate.allocation_target_id ?? '');
 
+  const selectedRecording = RECORDING_CATEGORIES.find((c) => c.value === recordingCategory);
+
   const transactionType = String(
     candidate.proposed_transaction_type ??
-      (document.document_type === 'VENDOR_INVOICE'
+      (selectedRecording
+        ? 'DIRECT_PURCHASE'
+        : document.document_type === 'VENDOR_INVOICE'
         ? 'VENDOR_BILL'
         : document.document_type === 'CUSTOMER_INVOICE'
         ? 'CUSTOMER_INVOICE'
@@ -221,6 +235,23 @@ export const DocumentReviewForm: React.FC<Props> = ({
       isDirty = true;
     }
 
+    if (document.document_type === 'TRANSFER_PROOF') {
+      const selected = RECORDING_CATEGORIES.find((c) => c.value === recordingCategory);
+      if (selected) {
+        const nextCost = selected.costCategory ?? null;
+        const nextExpense = selected.expenseCategory ?? null;
+        if (
+          nextCost !== (candidate.cost_category ?? null) ||
+          nextExpense !== (candidate.expense_category ?? null)
+        ) {
+          changes.cost_category = nextCost;
+          changes.expense_category = nextExpense;
+          changes.proposed_transaction_type = 'DIRECT_PURCHASE';
+          isDirty = true;
+        }
+      }
+    }
+
     return { changes, isDirty };
   };
 
@@ -262,8 +293,8 @@ export const DocumentReviewForm: React.FC<Props> = ({
         counterpartyId,
         paymentAccountId,
         allocationTargetId: selectedCandidateId,
-        costCategory: String(candidate.cost_category ?? ''),
-        expenseCategory: String(candidate.expense_category ?? ''),
+        costCategory: selectedRecording?.costCategory ?? String(candidate.cost_category ?? ''),
+        expenseCategory: selectedRecording?.expenseCategory ?? String(candidate.expense_category ?? ''),
       },
     );
 
@@ -917,18 +948,43 @@ export const DocumentReviewForm: React.FC<Props> = ({
           />
         </div>
 
+        {document.document_type === 'TRANSFER_PROOF' && (
+          <div className="space-y-2">
+            <label
+              htmlFor="recording-category"
+              className="block text-xs font-semibold text-slate-700 uppercase tracking-wider"
+            >
+              Jenis Pencatatan {selectedRecording?.requiresProject ? <span className="text-rose-500">*</span> : null}
+            </label>
+            <Select
+              id="recording-category"
+              aria-label="Jenis Pencatatan"
+              value={recordingCategory}
+              onChange={(e) => setRecordingCategory(e.target.value)}
+              helperText="Pilih kategori COA laba rugi untuk biaya ini."
+            >
+              <option value="">— Pilih jenis pencatatan —</option>
+              {RECORDING_CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
+
         {requiresPaymentAccount && (
           <div className="space-y-2">
             <label htmlFor="payment-account-select" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
-              Rekening Kas / Bank <span className="text-rose-500">*</span>
+              Asal Dana (Rekening Kas / Bank) <span className="text-rose-500">*</span>
             </label>
             <Select
               id="payment-account-select"
-              aria-label="Pilih Rekening Kas / Bank"
+              aria-label="Pilih Asal Dana (Rekening Kas / Bank)"
               disabled={paymentAccountLookupLoading || !!paymentAccountLookupError}
               value={paymentAccountId}
               onChange={(e) => setPaymentAccountId(e.target.value)}
-              helperText="Pilih rekening kas atau bank yang digunakan untuk transaksi ini."
+              helperText="Pilih rekening kas/bank milik Anda yang menjadi asal dana transaksi ini."
             >
               <option value="">Pilih rekening kas / bank</option>
               {availablePaymentAccounts.map((account) => (

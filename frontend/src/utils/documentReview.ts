@@ -1,4 +1,5 @@
 import { TRANSACTION_TYPES, DocumentResponse, TransactionType } from '../types/api';
+import { PROJECT_REQUIRED_COST_CATEGORIES } from './recordingCategories';
 
 const CUSTOMER_TRANSACTION_TYPES = new Set<TransactionType>([
   'CUSTOMER_INVOICE',
@@ -83,6 +84,13 @@ export const validateDocumentReviewForm = (
     if (!hasProject && !hasCategory) {
       missingFields.push('project_id');
     }
+    if (
+      values.costCategory &&
+      PROJECT_REQUIRED_COST_CATEGORIES.includes(values.costCategory) &&
+      !values.projectId?.trim()
+    ) {
+      missingFields.push('project_id_for_category');
+    }
   } else if (transactionType === 'CUSTOMER_PAYMENT') {
     if (!values.counterpartyId?.trim()) missingFields.push('counterparty_id');
     if (!values.paymentAccountId?.trim() && !missingFields.includes('payment_account_id')) {
@@ -103,9 +111,11 @@ export const validateDocumentReviewForm = (
 
   let errorMessage = 'Dokumen belum dapat disetujui karena data wajib belum lengkap.';
   if (missingFields.includes('payment_account_id')) {
-    errorMessage = 'Pilih rekening pembayaran terlebih dahulu.';
+    errorMessage = 'Pilih asal dana (rekening kas/bank) terlebih dahulu.';
   } else if (missingFields.includes('project_id')) {
     errorMessage = 'Proyek wajib dipilih sebelum dokumen dapat disetujui.';
+  } else if (missingFields.includes('project_id_for_category')) {
+    errorMessage = 'Proyek wajib dipilih untuk kategori biaya proyek (5101).';
   } else if (missingFields.includes('counterparty_id')) {
     const isCustomer = transactionType ? CUSTOMER_TRANSACTION_TYPES.has(transactionType) : false;
     errorMessage = isCustomer
@@ -137,7 +147,7 @@ export const formatDocumentActionError = (err: unknown): string => {
       return 'Pembayaran vendor memerlukan alokasi tagihan vendor.';
     }
     if (detail.includes('Payment account is not available') || detail.includes('PaymentAccount is not available')) {
-      return 'Pilih rekening pembayaran terlebih dahulu.';
+      return 'Pilih asal dana (rekening kas/bank) terlebih dahulu.';
     }
     if (detail.includes('Project is not available or not active') || detail.includes('Project is no longer available')) {
       return 'Proyek yang dipilih tidak aktif atau tidak tersedia di organisasi ini.';

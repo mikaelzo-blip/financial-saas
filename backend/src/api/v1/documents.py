@@ -18,13 +18,19 @@ from src.models.counterparty import Counterparty
 from src.models.receivable import CustomerInvoice
 from src.models.payable import VendorBill
 from src.models.coa import PaymentAccount
+from src.models.transaction import Transaction
 from src.models.user import User
 from src.models.enums import UserRole
 from src.schemas.document import (DocumentResponse, DocumentCorrectionRequest,
                                   DocumentRejectionRequest, TransactionCandidate,
                                   StructuredExtraction, DocumentPostingResponse)
 from src.services.document_posting_service import DocumentPostingService
+from src.services.recording_categories import PROJECT_REQUIRED_COST_CATEGORIES
 from src.services.documents.matching import match_entities
+from src.services.documents.expense_duplicate_guard import (
+    DuplicateScanner,
+    collect_reference_numbers,
+)
 from src.schemas.transaction import TransactionCreate, TransactionResponse
 from src.services.document_service import DocumentService
 from src.services.documents.inbound_adapter import InboundDocumentAdapter, InboundDocumentInput
@@ -43,10 +49,57 @@ def is_candidate_ready_for_approval(candidate: TransactionCandidate) -> bool:
     if t_type in {TransactionType.CUSTOMER_PAYMENT, TransactionType.PAY_VENDOR_BILL}:
         return bool(candidate.counterparty_id and candidate.payment_account_id and candidate.allocation_target_id)
     if t_type == TransactionType.DIRECT_PURCHASE:
-        return bool(candidate.payment_account_id and (candidate.project_id or candidate.cost_category or candidate.expense_category))
+        if not candidate.payment_account_id:
+            return False
+        if candidate.cost_category in PROJECT_REQUIRED_COST_CATEGORIES:
+            return bool(candidate.project_id)
+        return bool(candidate.project_id or candidate.expense_category)
     if t_type in {TransactionType.VENDOR_BILL, TransactionType.CUSTOMER_INVOICE}:
         return bool(candidate.counterparty_id and candidate.project_id)
     return True
+
+
+# Bounded batch size for the duplicate scan: keeps memory flat regardless of how
+# many transactions the tenant has accumulated.
+_DUPLICATE_SCAN_BATCH = 500
+
+
+async def _scan_existing_references(
+    db: AsyncSession, org_id: uuid.UUID, scanner: "DuplicateScanner"
+) -> bool:
+    """Feed already-recorded reference numbers into the duplicate scanner.
+
+    Reads VendorBill / CustomerInvoice / Transaction in bounded batches (keyset
+    pagination on `id`) so the full history is never materialised in memory.
+    Returns True as soon as the scanner reports a real duplicate (caller can
+    stop), mirroring `evaluate_reference_duplicate`'s semantics exactly.
+    """
+    sources = (
+        (VendorBill, VendorBill.bill_code, VendorBill.total_amount),
+        (CustomerInvoice, CustomerInvoice.invoice_code, CustomerInvoice.total_amount),
+        (Transaction, Transaction.reference_no, Transaction.amount),
+    )
+    for model, code_col, amount_col in sources:
+        last_id = None
+        while True:
+            stmt = (
+                select(model.id, code_col, amount_col)
+                .where(model.organization_id == org_id, code_col.isnot(None))
+                .order_by(model.id)
+                .limit(_DUPLICATE_SCAN_BATCH)
+            )
+            if last_id is not None:
+                stmt = stmt.where(model.id > last_id)
+            rows = (await db.execute(stmt)).all()
+            if not rows:
+                break
+            for row_id, code, amount in rows:
+                if scanner.feed(code, amount):
+                    return True
+            last_id = rows[-1][0]
+            if len(rows) < _DUPLICATE_SCAN_BATCH:
+                break
+    return False
 
 
 async def validate_allocation_target(
@@ -284,7 +337,7 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
 
     for ext_field in ("invoice_number", "document_number", "spk_number", "bast_number",
                       "due_date", "subtotal", "vat_amount", "origin_bank", "destination_bank",
-                      "destination_account_number"):
+                      "destination_account_number", "transfer_reference"):
         if ext_field in data.changes:
             extracted[ext_field] = data.changes[ext_field]
     if "tax" in data.changes:
@@ -398,6 +451,15 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
     if data.changes.get("allocation_target_id") or data.changes.get("selected_candidate_id"):
         cleared.add(ReviewFlag.ACCOUNT_REVIEW.value)
         cleared.add(ReviewFlag.AMBIGUOUS_MATCH.value)
+    # A reference- or amount-related correction is the reviewer's resolution of a
+    # suspected duplicate; clear the warning so the document can be re-approved
+    # (the duplicate guard re-runs on approve against the corrected data).
+    if any(
+        key in data.changes
+        for key in ("amount", "total_amount", "external_reference", "invoice_number",
+                    "transfer_reference", "document_number")
+    ):
+        cleared.add(ReviewFlag.DUPLICATE_SUSPECTED.value)
     document.review_flags = [flag for flag in document.review_flags if flag not in cleared]
     if matching_results.get("ambiguous"):
         if ReviewFlag.AMBIGUOUS_MATCH.value not in document.review_flags:
@@ -472,16 +534,53 @@ async def approve_document_candidate(
     if not candidate.proposed_transaction_type or not candidate.transaction_date or not candidate.amount:
         raise HTTPException(status_code=422, detail="Candidate is incomplete")
 
+    duplicate_flagged = False
+
     if document.document_type == DocumentType.TRANSFER_PROOF:
         if candidate.proposed_transaction_type in {
-            TransactionType.DIRECT_PURCHASE,
             TransactionType.VENDOR_BILL,
             TransactionType.CUSTOMER_INVOICE,
         }:
             raise HTTPException(
                 status_code=422,
-                detail="Transfer proof cannot be approved as direct purchase, bill, or invoice; it must be an allocation payment"
+                detail="Transfer proof cannot be approved as bill or invoice; it must be an allocation payment or an explicit direct expense",
             )
+        if candidate.proposed_transaction_type == TransactionType.DIRECT_PURCHASE:
+            has_category = bool(candidate.cost_category or candidate.expense_category)
+            if not has_category:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Transfer proof as direct expense requires a recording category",
+                )
+            if candidate.cost_category in PROJECT_REQUIRED_COST_CATEGORIES and not candidate.project_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Project is required for project cost categories (5101)",
+                )
+            if candidate.allocation_target_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Transfer proof direct expense cannot also carry an allocation target",
+                )
+
+    if (
+        document.document_type == DocumentType.TRANSFER_PROOF
+        and candidate.proposed_transaction_type == TransactionType.DIRECT_PURCHASE
+    ):
+        references = collect_reference_numbers(
+            document.candidate_transaction or {},
+            document.extracted_data or {},
+        )
+        if references:
+            scanner = DuplicateScanner(references, candidate.amount)
+            await _scan_existing_references(db, org_id, scanner)
+            verdict = scanner.result()
+            if verdict.duplicate:
+                raise HTTPException(status_code=422, detail=verdict.reason)
+            if verdict.flagged:
+                duplicate_flagged = True
+                if ReviewFlag.DUPLICATE_SUSPECTED.value not in (document.review_flags or []):
+                    document.review_flags = [*(document.review_flags or []), ReviewFlag.DUPLICATE_SUSPECTED.value]
 
     if candidate.proposed_transaction_type == TransactionType.CUSTOMER_PAYMENT and not candidate.allocation_target_id:
         raise HTTPException(status_code=409, detail="Customer payment requires an invoice allocation")
@@ -523,9 +622,18 @@ async def approve_document_candidate(
     await validate_allocation_target(db, org_id, candidate)
 
     previous_status = document.processing_status.value
-    candidate.status = CandidateStatus.READY_TO_POST
-    document.candidate_transaction = candidate.model_dump(mode="json")
-    document.processing_status = DocumentProcessingStatus.READY_TO_POST
+    if duplicate_flagged:
+        # Spec D3: a reference match with a differing amount is a warning, not a
+        # rejection -- but it must NOT advance to READY_TO_POST, or the document
+        # dead-ends (auto-post and manual post both refuse while a review flag is
+        # present). Keep it reviewable so the flag can be resolved, then approved.
+        candidate.status = CandidateStatus.REVIEW_REQUIRED
+        document.candidate_transaction = candidate.model_dump(mode="json")
+        document.processing_status = DocumentProcessingStatus.REVIEW_REQUIRED
+    else:
+        candidate.status = CandidateStatus.READY_TO_POST
+        document.candidate_transaction = candidate.model_dump(mode="json")
+        document.processing_status = DocumentProcessingStatus.READY_TO_POST
 
     await AuditService(db).log_event(
         org_id,
@@ -535,12 +643,13 @@ async def approve_document_candidate(
         user_id,
         old_values={"processing_status": previous_status},
         new_values={
-            "processing_status": DocumentProcessingStatus.READY_TO_POST.value,
-            "candidate_status": CandidateStatus.READY_TO_POST.value
+            "processing_status": document.processing_status.value,
+            "candidate_status": candidate.status.value,
         }
     )
-    posting_svc = DocumentPostingService(db)
-    await posting_svc.enqueue_auto_post_if_eligible(org_id, document, candidate)
+    if not duplicate_flagged:
+        posting_svc = DocumentPostingService(db)
+        await posting_svc.enqueue_auto_post_if_eligible(org_id, document, candidate)
 
     await db.flush()
     return document

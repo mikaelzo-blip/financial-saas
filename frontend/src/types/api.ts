@@ -87,6 +87,14 @@ export type ExpenseCategory =
   | 'DEPRECIATION'
   | 'OTHER_OPERATIONAL';
 
+export interface RecordingCategoryOption {
+  value: string;
+  label: string;
+  costCategory?: CostCategory;
+  expenseCategory?: ExpenseCategory;
+  requiresProject: boolean;
+}
+
 export const DOCUMENT_TYPES = [
   'PO_CUSTOMER',
   'SPK',

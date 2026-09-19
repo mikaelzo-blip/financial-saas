@@ -23,6 +23,7 @@ import {
   isEvidenceDocument,
   isPaymentAccountRequired,
   validateDocumentReviewForm,
+  validateLineItemCategories,
 } from '../../utils/documentReview';
 
 const AUTO_CORRECTION_REASON = 'Verifikasi dokumen sumber';
@@ -133,6 +134,13 @@ export const DocumentReviewForm: React.FC<Props> = ({
         (document.matching_results?.suggested_cost_category as string | undefined) ??
         (document.matching_results?.suggested_expense_category as string | undefined) ??
         '',
+    ),
+  );
+  const [lineItemCategories, setLineItemCategories] = useState<Record<number, string>>(() =>
+    Object.fromEntries(
+      (Array.isArray(extracted.line_items) ? (extracted.line_items as Record<string, unknown>[]) : []).map(
+        (item, idx) => [idx, String(item.cost_category ?? item.expense_category ?? '')],
+      ),
     ),
   );
   const reason = AUTO_CORRECTION_REASON;
@@ -254,6 +262,22 @@ export const DocumentReviewForm: React.FC<Props> = ({
       }
     }
 
+    const items = Array.isArray(extracted.line_items)
+      ? (extracted.line_items as Record<string, unknown>[])
+      : [];
+    if (items.length > 0) {
+      const corrected = items.map((item, idx) => {
+        const selected = RECORDING_CATEGORIES.find((c) => c.value === lineItemCategories[idx]);
+        return {
+          ...item,
+          cost_category: selected?.costCategory ?? null,
+          expense_category: selected?.expenseCategory ?? null,
+        };
+      });
+      changes.line_items = corrected;
+      isDirty = true;
+    }
+
     return { changes, isDirty };
   };
 
@@ -306,6 +330,18 @@ export const DocumentReviewForm: React.FC<Props> = ({
     }
 
     const { changes, isDirty } = buildCurrentChanges();
+
+    if (Array.isArray(changes.line_items)) {
+      const lineErr = validateLineItemCategories(
+        changes.line_items as Array<Record<string, unknown>>,
+        projectId,
+      );
+      if (lineErr) {
+        setFormValidationError(lineErr);
+        return;
+      }
+    }
+
     setBusy(true);
     try {
       if (isDirty) {
@@ -692,6 +728,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
                 <tr>
                   <th className="px-3 py-1.5 w-8">#</th>
                   <th className="px-3 py-1.5">Deskripsi</th>
+                  <th className="px-3 py-1.5">Jenis Pencatatan</th>
                   <th className="px-3 py-1.5 text-right">Kuantitas</th>
                   <th className="px-3 py-1.5 text-right">Harga Satuan</th>
                   <th className="px-3 py-1.5 text-right">Total</th>
@@ -699,10 +736,27 @@ export const DocumentReviewForm: React.FC<Props> = ({
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {lineItems.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50 align-top">
+                  <tr key={idx} data-testid="line-item-row" className="hover:bg-slate-50 align-top">
                     <td className="px-3 py-1.5 text-slate-400 font-mono text-[11px]">{idx + 1}.</td>
                     <td className="px-3 py-1.5 text-slate-900 whitespace-pre-line font-medium leading-relaxed">
                       {String(item.description ?? '-')}
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <select
+                        aria-label="Jenis Pencatatan"
+                        className="rounded border border-slate-300 text-[11px] px-1 py-0.5"
+                        value={lineItemCategories[idx] ?? ''}
+                        onChange={(e) =>
+                          setLineItemCategories((prev) => ({ ...prev, [idx]: e.target.value }))
+                        }
+                      >
+                        <option value="">— pilih —</option>
+                        {RECORDING_CATEGORIES.map((c) => (
+                          <option key={c.value} value={c.value}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td className="px-3 py-1.5 text-right text-slate-700">
                       {item.quantity != null

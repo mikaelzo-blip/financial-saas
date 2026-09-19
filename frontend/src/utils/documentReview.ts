@@ -74,6 +74,19 @@ export interface FormValidationResult {
   errorMessage?: string;
 }
 
+export function validateLineItemCategories(
+  lineItems: Array<Record<string, unknown>>,
+  projectId: string | null | undefined,
+): string | null {
+  const needsProject = lineItems.some((item) =>
+    PROJECT_REQUIRED_COST_CATEGORIES.includes(String(item.cost_category ?? '')),
+  );
+  if (needsProject && !projectId) {
+    return 'Setiap baris HPP (barang/jasa proyek) memerlukan proyek.';
+  }
+  return null;
+}
+
 export const validateDocumentReviewForm = (
   transactionType: TransactionType | undefined,
   documentType: string | undefined,

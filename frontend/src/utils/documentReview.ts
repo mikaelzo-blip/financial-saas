@@ -83,6 +83,14 @@ export const validateDocumentReviewForm = (
     if (!hasProject && !hasCategory) {
       missingFields.push('project_id');
     }
+    const PROJECT_COST_CATEGORIES = ['MAT', 'SUB', 'TRN', 'EQP'];
+    if (
+      values.costCategory &&
+      PROJECT_COST_CATEGORIES.includes(values.costCategory) &&
+      !values.projectId?.trim()
+    ) {
+      missingFields.push('project_id_for_category');
+    }
   } else if (transactionType === 'CUSTOMER_PAYMENT') {
     if (!values.counterpartyId?.trim()) missingFields.push('counterparty_id');
     if (!values.paymentAccountId?.trim() && !missingFields.includes('payment_account_id')) {
@@ -106,6 +114,8 @@ export const validateDocumentReviewForm = (
     errorMessage = 'Pilih asal dana (rekening kas/bank) terlebih dahulu.';
   } else if (missingFields.includes('project_id')) {
     errorMessage = 'Proyek wajib dipilih sebelum dokumen dapat disetujui.';
+  } else if (missingFields.includes('project_id_for_category')) {
+    errorMessage = 'Proyek wajib dipilih untuk kategori biaya proyek (5101).';
   } else if (missingFields.includes('counterparty_id')) {
     const isCustomer = transactionType ? CUSTOMER_TRANSACTION_TYPES.has(transactionType) : false;
     errorMessage = isCustomer

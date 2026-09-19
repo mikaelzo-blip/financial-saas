@@ -535,11 +535,12 @@ git commit -m "feat(documents): suggest recording category per line item"
 
 **Files:**
 - Modify: `backend/src/services/documents/candidate.py` (`build_candidate`, lines 66-100)
+- Modify: `backend/src/services/documents/pipeline.py` (re-serialise `extracted_data` after `build_candidate`, line ~78)
 - Test: `backend/tests/unit/test_candidate_line_item_categories.py` (create)
 
 **Interfaces:**
 - Consumes: `classify_line_items` (Task 4).
-- Produces: after `build_candidate`, `data.line_items` (the `StructuredExtraction` the caller persists) each carry a suggested category. The document-level `cost_category`/`expense_category` summary stays as today.
+- Produces: after `build_candidate`, `data.line_items` each carry a suggested category, AND the caller persists them: `pipeline.py` re-serialises `document.extracted_data` from `data` after calling `build_candidate`, so `extracted_data["line_items"]` (what Task 6/7 read) carries the suggestions. The document-level `cost_category`/`expense_category` summary stays as today.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -601,16 +602,26 @@ In the `elif document_type in {DocumentType.RECEIPT, DocumentType.VENDOR_INVOICE
             )
 ```
 
+- [ ] **Step 3b: Persist the classified extraction in the pipeline**
+
+`document.extracted_data` is serialised in `pipeline.py` (line ~49) BEFORE `build_candidate` runs (line ~78), so without this step the per-line suggestions live only in the in-memory `data` and never reach the persisted JSON that Task 6/7 read. Immediately after the `candidate = build_candidate(...)` line (~78) in `backend/src/services/documents/pipeline.py`, re-serialise:
+
+```python
+            document.extracted_data = data.model_dump(mode="json")
+```
+
+Add a regression test `backend/tests/integration/test_pipeline_line_item_categories.py` that drives `DocumentPipeline` with a scripted provider (copy the `ScriptedExtractionProvider` pattern from `tests/integration/test_uat13_real_document_extraction.py`) returning a 2-line VENDOR_INVOICE (`JASA ANGKUT...` + `STAMP`), runs `.process(...)`, and asserts the persisted `document.extracted_data["line_items"][0]["cost_category"] == "LOG"` and `["line_items"][1]["expense_category"] == "OTHER_OPERATIONAL"`. This test fails without Step 3b.
+
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd backend && .venv/Scripts/python.exe -m pytest tests/unit/test_candidate_line_item_categories.py -v -p no:cacheprovider`
-Expected: PASS (1).
+Run: `cd backend && .venv/Scripts/python.exe -m pytest tests/unit/test_candidate_line_item_categories.py tests/integration/test_pipeline_line_item_categories.py -v -p no:cacheprovider`
+Expected: PASS (2).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/src/services/documents/candidate.py backend/tests/unit/test_candidate_line_item_categories.py
-git commit -m "feat(documents): attach per-line category suggestions to the candidate"
+git add backend/src/services/documents/candidate.py backend/src/services/documents/pipeline.py backend/tests/unit/test_candidate_line_item_categories.py backend/tests/integration/test_pipeline_line_item_categories.py
+git commit -m "feat(documents): attach and persist per-line category suggestions"
 ```
 
 ---

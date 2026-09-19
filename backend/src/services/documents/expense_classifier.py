@@ -251,10 +251,13 @@ def classify_expense(
             review_required=review_required,
         )
 
-    # 2b. Service / stamp-duty classification (line-item aware)
+    # 2b. Service / stamp-duty classification (LINE-SCOPED: search `raw`, the
+    # item's own text, never the whole document). A document-level keyword like
+    # "materai" must not reclassify an unrelated "JASA ANGKUT" line, and must not
+    # hijack the document-level candidate's category/project.
     # Stamp duty and document preparation are administrative overhead, never HPP,
     # even when the document carries a project.
-    if _RE_STAMP_DUTY.search(full_text):
+    if _RE_STAMP_DUTY.search(raw):
         signals.append("STAMP_DUTY_KEYWORD_DETECTED")
         return ExpenseClassificationResult(
             raw_description=raw,
@@ -268,10 +271,10 @@ def classify_expense(
             classification_confidence=Decimal("0.85"),
             classification_signals=signals,
             classification_conflicts=conflicts,
-            review_required=False,
+            review_required=review_required,
         )
 
-    if _RE_DOC_SERVICE.search(full_text):
+    if _RE_DOC_SERVICE.search(raw):
         signals.append("DOCUMENT_SERVICE_KEYWORD_DETECTED")
         return ExpenseClassificationResult(
             raw_description=raw,
@@ -285,10 +288,10 @@ def classify_expense(
             classification_confidence=Decimal("0.80"),
             classification_signals=signals,
             classification_conflicts=conflicts,
-            review_required=False,
+            review_required=review_required,
         )
 
-    if _RE_PERMITS.search(full_text):
+    if _RE_PERMITS.search(raw):
         signals.append("PERMITS_KEYWORD_DETECTED")
         return ExpenseClassificationResult(
             raw_description=raw,
@@ -302,12 +305,12 @@ def classify_expense(
             classification_confidence=Decimal("0.80"),
             classification_signals=signals,
             classification_conflicts=conflicts,
-            review_required=False,
+            review_required=review_required,
         )
 
     # Freight and installation are project services -> HPP (5101) when a project
     # is known; without a project the reviewer must supply one (approval rejects).
-    if _RE_FREIGHT.search(full_text):
+    if _RE_FREIGHT.search(raw):
         signals.append("FREIGHT_KEYWORD_DETECTED")
         return ExpenseClassificationResult(
             raw_description=raw,
@@ -324,7 +327,7 @@ def classify_expense(
             review_required=review_required or (matched_project_id is None),
         )
 
-    if _RE_INSTALLATION.search(full_text):
+    if _RE_INSTALLATION.search(raw):
         signals.append("INSTALLATION_KEYWORD_DETECTED")
         return ExpenseClassificationResult(
             raw_description=raw,

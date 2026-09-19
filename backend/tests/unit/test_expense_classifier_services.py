@@ -45,3 +45,15 @@ def test_permit_and_licensing_is_permits_expense():
     res = classify_expense(raw_description="BIAYA PERIJINAN SBU")
     assert res.cost_category is None
     assert res.expense_category is ExpenseCategory.PERMITS
+
+
+def test_document_text_does_not_reclassify_an_unrelated_line():
+    # Regression: the service rules must read the line's own text, never the
+    # whole document, or a document-level "materai" keyword would hijack the
+    # freight line (and the document-level candidate's category).
+    res = classify_expense(
+        raw_description="JASA ANGKUT GERMAN TO JAKARTA",
+        document_text="INVOICE\nJASA ANGKUT GERMAN TO JAKARTA\nMETERAI TEMPEL 10.000",
+    )
+    assert res.cost_category is CostCategory.LOG
+    assert res.expense_category is None

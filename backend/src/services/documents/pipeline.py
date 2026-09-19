@@ -12,6 +12,7 @@ from src.services.documents.candidate import build_candidate, derive_flags
 from src.services.documents.confidence import below_threshold
 from src.services.documents.extraction import ExtractionProvider, get_extraction_provider
 from src.services.documents.matching import match_entities
+from src.services.documents.session_matching import SessionMatchingService
 from src.services.document_service import DocumentService
 from src.services.duplicate_service import DuplicateDetectionService
 from src.services.audit_service import AuditService
@@ -40,6 +41,15 @@ class DocumentPipeline:
             document.provider_name, document.provider_version = result.provider_name, result.provider_version
             effective_type = (document.document_type if result.document_type.value == "UNKNOWN"
                               and document.document_type.value != "UNKNOWN" else result.document_type)
+            # Supporting hint: if OCR document_type is UNKNOWN, consult caption hint without overriding OCR
+            if effective_type.value == "UNKNOWN":
+                hints = (document.source_metadata or {}).get("hints") or {}
+                type_hint = hints.get("document_type_hint")
+                if type_hint:
+                    try:
+                        effective_type = DocumentType(type_hint)
+                    except (ValueError, KeyError):
+                        pass
             document.document_type = effective_type
             document.extracted_data = data.model_dump(mode="json")
             document.confidence_scores = result.confidence.model_dump(mode="json")
@@ -47,7 +57,13 @@ class DocumentPipeline:
             document.processing_status = DocumentProcessingStatus.MATCHING
 
             try:
-                matches = await match_entities(self.session, document.organization_id, data, document_type=effective_type)
+                matches = await match_entities(
+                    self.session,
+                    document.organization_id,
+                    data,
+                    document_type=effective_type,
+                    source_metadata=document.source_metadata,
+                )
             except Exception as match_err:
                 matches = {
                     "counterparty_id": None,
@@ -79,6 +95,16 @@ class DocumentPipeline:
             document.review_flags = flags
             document.candidate_transaction = candidate.model_dump(mode="json") if candidate else {}
             document.processing_status = document_status_for(candidate, flags)
+
+            # Session document matching (multi-document correlation within candidate session)
+            sess_id_str = (document.source_metadata or {}).get("session_id")
+            if sess_id_str:
+                try:
+                    await SessionMatchingService.match_session_documents(
+                        self.session, document.organization_id, uuid.UUID(sess_id_str)
+                    )
+                except Exception:
+                    pass
 
             audit = AuditService(self.session)
             await audit.log_event(

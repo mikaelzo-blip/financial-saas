@@ -40,8 +40,11 @@ class InboundDocumentAdapter:
         metadata = dict(payload.source_metadata or {})
         if payload.source_message_id:
             metadata["source_message_id"] = payload.source_message_id
-        if payload.caption:
-            metadata["caption"] = payload.caption
+        caption_val = payload.caption or metadata.get("caption")
+        if caption_val:
+            metadata["caption"] = caption_val
+            from src.services.documents.caption_hints import extract_caption_hints
+            metadata["hints"] = extract_caption_hints(caption_val)
 
         document = await self.doc_service.ingest_document(
             organization_id=payload.organization_id,

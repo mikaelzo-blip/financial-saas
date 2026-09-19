@@ -1,7 +1,13 @@
 """API-only orchestration: provider -> Hermes -> authenticated SaaS intake."""
+import asyncio
 import uuid
 import hashlib
+import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from typing import Optional, List
+
+logger = logging.getLogger(__name__)
 
 from src.schemas.hermes import HermesSubmissionRequest
 from src.services.hermes.retry import HermesApiError
@@ -23,6 +29,7 @@ class WhatsAppWebhookService:
         self.organization_ids = organization_ids or []
         self.clarifications = WhatsAppClarificationService()
         self.commands = WhatsAppCommandService()
+        self._tasks = set()
         self.limiter = SlidingWindowRateLimiter()
         self.org_limit = org_limit
 
@@ -38,21 +45,96 @@ class WhatsAppWebhookService:
                 finish["delivery_status"] = "FAILED"
         await client.channel_request("messages/finish", finish)
 
-    async def deliver_pending_notifications(self):
+    async def deliver_pending_notifications(self, as_of: Optional[datetime] = None):
         for org in self.organization_ids:
             client = self.tenant_client(org)
+            if as_of:
+                try:
+                    await client.channel_request("sessions/finalize", {"as_of": as_of.isoformat()})
+                except Exception:
+                    pass
             await self.clarifications.expire(client)
             result = await client.channel_request("notifications", {})
             for notice in result["notices"]:
                 claim = await client.channel_request("notifications/claim", {k: notice[k] for k in ("key", "phone_number", "document_id", "body")})
-                if not claim["claimed"]:
+                if not claim.get("claimed"):
                     continue
                 delivered = True
+                outbound_wamid = None
+                error_message = None
                 try:
-                    await self.outbound.text(notice["phone_number"], notice["body"], notice["buttons"])
-                except ProviderError:
+                    outbound_wamid = await self.outbound.text(notice["phone_number"], notice["body"], notice.get("buttons") or [])
+                except ProviderError as pe:
                     delivered = False
-                await client.channel_request("notifications/finish", {"key": notice["key"], "delivered": delivered})
+                    error_message = str(pe)
+                except Exception as exc:
+                    delivered = False
+                    error_message = str(type(exc).__name__)
+                await client.channel_request("notifications/finish", {
+                    "key": notice["key"],
+                    "delivered": delivered,
+                    "outbound_wamid": outbound_wamid,
+                    "error_message": error_message,
+                })
+
+    def _on_task_done(self, task: asyncio.Task) -> None:
+        self._tasks.discard(task)
+        if not task.cancelled():
+            try:
+                exc = task.exception()
+                if exc is not None:
+                    logger.warning("WhatsApp task ended with unexpected exception: %s", exc)
+            except (asyncio.CancelledError, asyncio.InvalidStateError):
+                pass
+
+    def _schedule_quiet_finalization(self, delay_seconds: float = 60.0):
+        async def _delayed_deliver():
+            try:
+                await asyncio.sleep(delay_seconds)
+                await self.deliver_pending_notifications()
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                logger.warning("Scheduled WhatsApp finalization failed: %s", exc)
+        try:
+            task = asyncio.create_task(_delayed_deliver())
+            self._tasks.add(task)
+            task.add_done_callback(self._on_task_done)
+        except RuntimeError:
+            pass
+
+    async def close(self):
+        tasks = list(self._tasks)
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for res in results:
+                if isinstance(res, Exception) and not isinstance(res, asyncio.CancelledError):
+                    logger.warning("WhatsApp task ended with unexpected exception: %s", res)
+        self._tasks.clear()
+
+    @asynccontextmanager
+    async def batch_scope(self, senders: List[str]):
+        """Coordinate backlog batch boundary across configured organizations."""
+        from src.services.documents.whatsapp_session_service import WhatsAppSessionService
+        for org in self.organization_ids:
+            try:
+                org_uuid = uuid.UUID(org) if isinstance(org, str) else org
+                WhatsAppSessionService.begin_batch(org_uuid, senders)
+            except Exception:
+                pass
+        try:
+            yield
+        finally:
+            for org in self.organization_ids:
+                try:
+                    org_uuid = uuid.UUID(org) if isinstance(org, str) else org
+                    WhatsAppSessionService.end_batch(org_uuid, senders)
+                except Exception:
+                    pass
+            await self.deliver_pending_notifications()
 
     async def handle(self, event):
         age = (datetime.now(timezone.utc) - event.timestamp).total_seconds()
@@ -94,21 +176,50 @@ class WhatsAppWebhookService:
             return
         try:
             if event.message_type in {"IMAGE", "DOCUMENT"}:
+                # Silent download and submission into session pipeline (Section 10)
+                # No immediate ACK per file: one ACK delivered when session finalizes.
                 media = await self.media.download(event)
-                outcome = await client.submit_document(HermesSubmissionRequest(idempotency_key="wa-msg-" + hashlib.sha256(event.wamid.encode()).hexdigest()),
-                    file_name=media.file_name, mime_type=media.mime_type, content=media.content,
-                    source_metadata={"wamid": event.wamid, "sender_phone": event.sender_phone, "caption": event.text,
-                        "timestamp": event.timestamp.isoformat(), "media_id": event.media_id})
-                body = self.outbound.receipt(outcome)
-                finish.update(document_id=str(outcome.document_id), hermes_submission_id=str(outcome.correlation_id) if outcome.correlation_id else None, media_size_bytes=len(media.content))
+                outcome = await client.submit_document(
+                    HermesSubmissionRequest(
+                        idempotency_key="wa-msg-" + hashlib.sha256(event.wamid.encode()).hexdigest()
+                    ),
+                    file_name=media.file_name,
+                    mime_type=media.mime_type,
+                    content=media.content,
+                    source_metadata={
+                        "wamid": event.wamid,
+                        "sender_phone": event.sender_phone,
+                        "caption": event.text,
+                        "timestamp": event.timestamp.isoformat(),
+                        "media_id": event.media_id,
+                    },
+                )
+                finish.update(
+                    document_id=str(outcome.document_id),
+                    hermes_submission_id=str(outcome.correlation_id) if outcome.correlation_id else None,
+                    media_size_bytes=len(media.content),
+                )
+                await client.channel_request("messages/finish", finish)
+                self._schedule_quiet_finalization(60.0)
+                return
             else:
                 body = await self.clarifications.reply(event, client)
                 if body is None:
                     body = await self.commands.reply(event.text, sender, client)
-        except ProviderError:
+                if body is not None:
+                    await self._send_and_finish(event, client, finish, body)
+                else:
+                    # Informational / caption text recorded into session silently
+                    await client.channel_request("messages/finish", finish)
+                    self._schedule_quiet_finalization(60.0)
+                return
+        except ProviderError as pe:
             finish["delivery_status"] = "DOWNLOAD_FAILED"
-            body = "Dokumen gagal diunduh. Silakan kirim ulang dokumen."
-        except HermesApiError:
+            finish["error_message"] = str(pe.args[0]) if pe.args else "DOWNLOAD_FAILED"
+            await client.channel_request("messages/finish", finish)
+            return
+        except HermesApiError as hae:
             finish["delivery_status"] = "FAILED"
-            body = "Layanan sedang tidak tersedia. Silakan kirim ulang dokumen nanti. Tidak ada persetujuan atau posting dari WhatsApp."
-        await self._send_and_finish(event, client, finish, body)
+            finish["error_message"] = str(getattr(hae, "code", hae))
+            await client.channel_request("messages/finish", finish)
+            return

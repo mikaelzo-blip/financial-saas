@@ -46,12 +46,22 @@ class BaileysBridgePoller:
         while self._running:
             try:
                 messages = await self.poll_once()
+                if not isinstance(self.service.provider, BaileysBridgeWhatsAppProvider):
+                    continue
+                all_events = []
                 for raw_msg in messages:
-                    if not isinstance(self.service.provider, BaileysBridgeWhatsAppProvider):
-                        continue
-                    events = self.service.provider.parse(raw_msg)
-                    for event in events:
-                        await self.service.handle(event)
+                    all_events.extend(self.service.provider.parse(raw_msg))
+                # Chronological ordering per sender for backlog reconstruction (Section 5)
+                all_events.sort(key=lambda e: (e.sender_phone, e.timestamp))
+                if all_events:
+                    senders = list({e.sender_phone for e in all_events})
+                    if hasattr(self.service, "batch_scope"):
+                        async with self.service.batch_scope(senders):
+                            for event in all_events:
+                                await self.service.handle(event)
+                    else:
+                        for event in all_events:
+                            await self.service.handle(event)
             except asyncio.CancelledError:
                 break
             except Exception as exc:

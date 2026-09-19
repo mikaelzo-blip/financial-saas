@@ -11,6 +11,7 @@ import pytest
 
 async def review_document(wa, db_session):
     await send(wa)
+    await wa["service"].deliver_pending_notifications(as_of=datetime.now(timezone.utc) + timedelta(seconds=65))
     doc = await db_session.scalar(select(Document))
     customer = Counterparty(organization_id=doc.organization_id, name="Customer", is_customer=True, is_vendor=False)
     db_session.add(customer)
@@ -21,7 +22,16 @@ async def review_document(wa, db_session):
     doc.review_flags = ["PROJECT_UNKNOWN", "OCR_LOW_CONFIDENCE"]
     doc.processing_status = DocumentProcessingStatus.REVIEW_REQUIRED
     await db_session.commit()
-    await wa["service"].deliver_pending_notifications()
+    response = await wa["client"].post(
+        "/api/v1/hermes/whatsapp/clarifications/open",
+        headers={"Authorization": "Bearer test-tenant-0"},
+        json={
+            "phone_number": wa["phones"][0],
+            "document_id": str(doc.id),
+            "question_type": "SELECT_PROJECT",
+        },
+    )
+    assert response.status_code == 200, response.text
     return doc, project
 
 
@@ -29,7 +39,7 @@ async def test_clarification_never_approves_or_posts(wa, db_session):
     doc, project = await review_document(wa, db_session)
     session = await db_session.scalar(select(WhatsAppClarificationSession))
     assert session.status == "PENDING"
-    assert "Ruko Thamrin" in wa["provider"].outbound[-1].body_text
+    assert [message.body_text for message in wa["provider"].outbound] == ["Oke, saya catat."]
     await send(wa, wamid="wamid.invalid-choice", text="debit cash credit sales")
     assert session.status == "PENDING"
     assert "pilihan" in wa["provider"].outbound[-1].body_text

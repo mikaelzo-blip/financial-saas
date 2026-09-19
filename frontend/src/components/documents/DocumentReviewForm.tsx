@@ -1,22 +1,44 @@
 import React, { useState } from 'react';
 import { Button } from '../ui/Button';
 import { Select } from '../ui/Select';
-import { CounterpartyResponse, DocumentResponse, MatchCandidateResponse, ProjectResponse } from '../../types/api';
+import {
+  CounterpartyResponse,
+  DocumentResponse,
+  MatchCandidateResponse,
+  PaymentAccountResponse,
+  ProjectResponse,
+  TransactionType,
+} from '../../types/api';
 import { formatIDR, formatDate } from '../../utils/formatters';
-import { ShieldCheck, FileText, CheckCircle, AlertTriangle, UserCheck, Layers, History } from 'lucide-react';
+import {
+  FileText,
+  AlertTriangle,
+  UserCheck,
+  Layers,
+  History,
+  CheckCircle,
+  MessageSquare,
+} from 'lucide-react';
+import {
+  isPaymentAccountRequired,
+  validateDocumentReviewForm,
+} from '../../utils/documentReview';
 
 interface Props {
   document: DocumentResponse;
   projects: ProjectResponse[];
   counterparties: CounterpartyResponse[];
+  paymentAccounts?: PaymentAccountResponse[];
   projectLookupLoading?: boolean;
   counterpartyLookupLoading?: boolean;
+  paymentAccountLookupLoading?: boolean;
   projectLookupError?: string;
   counterpartyLookupError?: string;
+  paymentAccountLookupError?: string;
   approvalLookupLoading?: boolean;
   approvalLookupError?: string;
   actionError?: string;
-  onSave: (changes: Record<string, unknown>, reason: string) => Promise<void>;
+  onSave: (changes: Record<string, unknown>, reason: string, options?: { silent?: boolean }) => Promise<void>;
   onApprove: () => Promise<void>;
   onReject: (reason: string) => Promise<void>;
 }
@@ -61,10 +83,13 @@ export const DocumentReviewForm: React.FC<Props> = ({
   document,
   projects,
   counterparties,
+  paymentAccounts = [],
   projectLookupLoading = false,
   counterpartyLookupLoading = false,
+  paymentAccountLookupLoading = false,
   projectLookupError,
   counterpartyLookupError,
+  paymentAccountLookupError,
   approvalLookupLoading = false,
   approvalLookupError,
   actionError,
@@ -81,6 +106,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
 
   const [projectId, setProjectId] = useState(String(candidate.project_id ?? ''));
   const [counterpartyId, setCounterpartyId] = useState(String(candidate.counterparty_id ?? ''));
+  const [paymentAccountId, setPaymentAccountId] = useState(String(candidate.payment_account_id ?? ''));
   const [invoiceNumber, setInvoiceNumber] = useState(
     String(extracted.invoice_number ?? extracted.document_number ?? candidate.external_reference ?? ''),
   );
@@ -99,6 +125,18 @@ export const DocumentReviewForm: React.FC<Props> = ({
   const [counterpartySearch, setCounterpartySearch] = useState('');
   const [reason, setReason] = useState('Verifikasi dokumen sumber');
   const [busy, setBusy] = useState(false);
+  const [formValidationError, setFormValidationError] = useState<string | undefined>(undefined);
+
+  const initialProjectId = String(candidate.project_id ?? '');
+  const initialCounterpartyId = String(candidate.counterparty_id ?? '');
+  const initialPaymentAccountId = String(candidate.payment_account_id ?? '');
+  const initialInvoiceNumber = String(
+    extracted.invoice_number ?? extracted.document_number ?? candidate.external_reference ?? '',
+  );
+  const initialAmount = String(candidate.amount ?? extracted.total_amount ?? '');
+  const initialTransactionDate = String(candidate.transaction_date ?? extracted.transaction_date ?? '');
+  const initialDueDate = String(extracted.due_date ?? '');
+  const initialCandidateId = String(candidate.allocation_target_id ?? '');
 
   const transactionType = String(
     candidate.proposed_transaction_type ??
@@ -106,7 +144,14 @@ export const DocumentReviewForm: React.FC<Props> = ({
         ? 'VENDOR_BILL'
         : document.document_type === 'CUSTOMER_INVOICE'
         ? 'CUSTOMER_INVOICE'
+        : document.document_type === 'RECEIPT'
+        ? 'DIRECT_PURCHASE'
         : ''),
+  );
+
+  const requiresPaymentAccount = isPaymentAccountRequired(
+    (transactionType as TransactionType) || undefined,
+    document.document_type,
   );
 
   const customerTypes = new Set(['CUSTOMER_INVOICE', 'CUSTOMER_PAYMENT', 'CUSTOMER_ADVANCE', 'CUSTOMER_REFUND']);
@@ -136,21 +181,106 @@ export const DocumentReviewForm: React.FC<Props> = ({
       (counterparty.id === counterpartyId || counterparty.name.toLowerCase().includes(counterpartySearch.toLowerCase())),
   );
 
+  const availablePaymentAccounts = paymentAccounts.filter((account) => account.is_active);
+
+  const buildCurrentChanges = (): { changes: Record<string, unknown>; isDirty: boolean } => {
+    const changes: Record<string, unknown> = {};
+    let isDirty = false;
+
+    if (projectId !== initialProjectId) {
+      changes.project_id = projectId || null;
+      isDirty = true;
+    }
+    if (counterpartyId !== initialCounterpartyId) {
+      changes.counterparty_id = counterpartyId || null;
+      isDirty = true;
+    }
+    if (paymentAccountId !== initialPaymentAccountId) {
+      changes.payment_account_id = paymentAccountId || null;
+      isDirty = true;
+    }
+    if (invoiceNumber !== initialInvoiceNumber) {
+      changes.invoice_number = invoiceNumber || null;
+      isDirty = true;
+    }
+    if (totalAmount !== initialAmount) {
+      changes.amount = totalAmount || null;
+      isDirty = true;
+    }
+    if (transactionDate !== initialTransactionDate) {
+      changes.transaction_date = transactionDate || null;
+      isDirty = true;
+    }
+    if (dueDate !== initialDueDate) {
+      changes.due_date = dueDate || null;
+      isDirty = true;
+    }
+    if (selectedCandidateId !== initialCandidateId) {
+      changes.selected_candidate_id = selectedCandidateId || null;
+      changes.allocation_target_id = selectedCandidateId || null;
+      isDirty = true;
+    }
+
+    return { changes, isDirty };
+  };
+
   const save = async () => {
+    setFormValidationError(undefined);
     setBusy(true);
     try {
-      const changes: Record<string, unknown> = {
+      const { changes } = buildCurrentChanges();
+      const payload: Record<string, unknown> = {
         project_id: projectId || null,
         counterparty_id: counterpartyId || null,
         invoice_number: invoiceNumber || null,
         amount: totalAmount || null,
         transaction_date: transactionDate || null,
         due_date: dueDate || null,
+        ...changes,
       };
-      if (selectedCandidateId) {
-        changes.selected_candidate_id = selectedCandidateId;
+      if (paymentAccountId) {
+        payload.payment_account_id = paymentAccountId;
       }
-      await onSave(changes, reason);
+      if (selectedCandidateId) {
+        payload.selected_candidate_id = selectedCandidateId;
+      }
+      await onSave(payload, reason);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    setFormValidationError(undefined);
+    const validation = validateDocumentReviewForm(
+      (transactionType as TransactionType) || undefined,
+      document.document_type,
+      {
+        amount: totalAmount,
+        transactionDate,
+        projectId,
+        counterpartyId,
+        paymentAccountId,
+        allocationTargetId: selectedCandidateId,
+        costCategory: String(candidate.cost_category ?? ''),
+        expenseCategory: String(candidate.expense_category ?? ''),
+      },
+    );
+
+    if (!validation.isValid) {
+      setFormValidationError(validation.errorMessage);
+      return;
+    }
+
+    const { changes, isDirty } = buildCurrentChanges();
+    setBusy(true);
+    try {
+      if (isDirty) {
+        await onSave(changes, reason, { silent: true });
+      }
+      await onApprove();
+    } catch {
+      // Error is caught and surfaced via actionError from parent mutation
     } finally {
       setBusy(false);
     }
@@ -167,7 +297,9 @@ export const DocumentReviewForm: React.FC<Props> = ({
         amount: totalAmount || null,
         transaction_date: transactionDate || null,
         due_date: dueDate || null,
+        payment_account_id: paymentAccountId || null,
         selected_candidate_id: cand.entity_id,
+        allocation_target_id: cand.entity_id,
       };
       await onSave(changes, reason || 'Memilih kandidat pencocokan');
     } finally {
@@ -264,6 +396,87 @@ export const DocumentReviewForm: React.FC<Props> = ({
         </div>
       )}
 
+      {/* Keterangan dari Pengirim (WhatsApp caption / notes) */}
+      {Boolean(document.source_metadata && (document.source_metadata as any).caption) && (
+        <div className="rounded-lg bg-sky-50 p-3 border border-sky-200" aria-label="Keterangan dari Pengirim">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-sky-950 mb-1">
+            <MessageSquare className="h-4 w-4 text-sky-700 shrink-0" />
+            <span>Keterangan dari Pengirim</span>
+          </div>
+          <p className="text-xs text-sky-900 bg-white/90 p-2.5 rounded border border-sky-100 font-medium whitespace-pre-wrap">
+            {(document.source_metadata as any).caption}
+          </p>
+          <p className="text-[11px] text-sky-700 mt-1.5">
+            * Keterangan pesan pengirim dicatat terpisah sebagai petunjuk pencocokan dan tidak menggantikan teks hasil ekstraksi OCR dokumen.
+          </p>
+        </div>
+      )}
+
+      {/* Session Context: Dokumen terkait dalam kiriman yang sama (Section 24) */}
+      {Boolean(
+        (document.matching_results as any)?.session_matched_documents?.length > 0 ||
+        ((document.matching_results as any)?.session_context?.document_count > 1)
+      ) && (
+        <div className="rounded-lg bg-indigo-50/70 p-3 border border-indigo-200" aria-label="Dokumen terkait dalam kiriman yang sama">
+          <div className="flex items-center justify-between text-xs font-semibold text-indigo-950 mb-1.5">
+            <div className="flex items-center gap-1.5">
+              <FileText className="h-4 w-4 text-indigo-700 shrink-0" />
+              <span>Dokumen terkait dalam kiriman yang sama</span>
+            </div>
+            {(document.matching_results as any)?.session_context?.session_code && (
+              <span className="text-[10px] font-mono bg-indigo-100/80 text-indigo-800 px-1.5 py-0.5 rounded">
+                {(document.matching_results as any).session_context.session_code}
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-indigo-700 mb-2">
+            Dokumen diterima dalam satu rangkaian pengiriman WhatsApp dan dianalisis keterkaitannya:
+          </p>
+          <div className="space-y-1.5">
+            {((document.matching_results as any)?.session_matched_documents || []).map((relDoc: any, idx: number) => (
+              <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between text-xs bg-white/90 p-2 rounded border border-indigo-100 gap-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-800">
+                    {relDoc.document_type || 'Dokumen'}
+                  </span>
+                  {relDoc.document_code && (
+                    <span className="text-slate-500 font-mono text-[11px]">({relDoc.document_code})</span>
+                  )}
+                  {relDoc.nominal && (
+                    <span className="text-slate-700 font-medium">
+                      Rp {Number(relDoc.nominal).toLocaleString('id-ID')}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {relDoc.relationship && (
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800">
+                      {relDoc.relationship === '1:1_MATCH'
+                        ? 'Cocok 1:1'
+                        : relDoc.relationship === 'MULTI_INVOICE_PAYMENT'
+                        ? 'Pembayaran Multi-Invoice'
+                        : relDoc.relationship}
+                    </span>
+                  )}
+                  {relDoc.confidence && (
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                      relDoc.confidence === 'HIGH' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {relDoc.confidence === 'HIGH' ? 'Keyakinan Tinggi' : 'Perlu Review'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          {((document.matching_results as any)?.session_matched_documents?.[0]?.explanation) && (
+            <p className="text-[11px] text-indigo-900 mt-2 bg-white/60 p-1.5 rounded italic">
+              Petunjuk pencocokan: {(document.matching_results as any).session_matched_documents[0].explanation}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Confidence & Evidence Overview */}
       <div>
         <p className="mb-1 text-xs text-slate-500">Tingkat keyakinan sistem saat membaca dokumen:</p>
@@ -301,56 +514,143 @@ export const DocumentReviewForm: React.FC<Props> = ({
           <span>Data yang dibaca dari dokumen</span>
           <span>Hasil pembacaan</span>
         </div>
-        <div className="p-3 space-y-2 bg-white">
-          {extracted.invoice_number || extracted.document_number ? (
+
+        {document.document_type === 'TRANSFER_PROOF' ? (
+          <div className="p-3 space-y-2 bg-white">
             <div className="flex justify-between items-center">
-              <span className="text-slate-500">Nomor Faktur / Dokumen:</span>
+              <span className="text-slate-500">Nomor Referensi Transfer:</span>
               <span className="font-semibold text-slate-900">
-                {String(extracted.invoice_number ?? extracted.document_number)}
+                {String(
+                  extracted.transfer_reference ??
+                    extracted.reference_number ??
+                    extracted.invoice_number ??
+                    extracted.document_number ??
+                    candidate.external_reference ??
+                    '-',
+                )}
               </span>
             </div>
-          ) : null}
-          {extracted.issuer_name ? (
             <div className="flex justify-between items-center">
-              <span className="text-slate-500">Penerbit:</span>
-              <span className="text-slate-900 font-medium">{String(extracted.issuer_name)}</span>
+              <span className="text-slate-500">Nominal Transfer:</span>
+              <span className="font-semibold text-slate-900">
+                {extracted.total_amount ? (
+                  formatIDR(Number(extracted.total_amount))
+                ) : candidate.amount ? (
+                  formatIDR(Number(candidate.amount))
+                ) : (
+                  <span className="text-slate-400 italic">Tidak terdeteksi</span>
+                )}
+              </span>
             </div>
-          ) : null}
-          <div className="flex justify-between items-center">
-            <span className="text-slate-500">Nominal Total:</span>
-            <span className="font-semibold text-slate-900">
-              {extracted.total_amount ? formatIDR(Number(extracted.total_amount)) : <span className="text-slate-400 italic">Tidak terdeteksi</span>}
-            </span>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">Tanggal Transfer:</span>
+              <span className="text-slate-900 font-medium">
+                {extracted.transaction_date ? (
+                  formatDate(String(extracted.transaction_date))
+                ) : candidate.transaction_date ? (
+                  formatDate(String(candidate.transaction_date))
+                ) : (
+                  <span className="text-slate-400 italic">Tidak terdeteksi</span>
+                )}
+              </span>
+            </div>
+            {Boolean(extracted.source_bank || extracted.origin_bank || extracted.sender_bank) && (
+              <div className="flex justify-between items-center text-[11px]">
+                <span className="text-slate-500">Bank Asal:</span>
+                <span className="text-slate-700 font-medium">
+                  {String(extracted.source_bank || extracted.origin_bank || extracted.sender_bank)}
+                </span>
+              </div>
+            )}
+            {Boolean(extracted.destination_bank || extracted.recipient_bank) && (
+              <div className="flex justify-between items-center text-[11px]">
+                <span className="text-slate-500">Bank Tujuan:</span>
+                <span className="text-slate-700 font-medium">
+                  {String(extracted.destination_bank || extracted.recipient_bank)}
+                </span>
+              </div>
+            )}
+            {Boolean(
+              extracted.destination_account ||
+                extracted.destination_account_number ||
+                extracted.recipient_account,
+            ) && (
+              <div className="flex justify-between items-center text-[11px]">
+                <span className="text-slate-500">Rekening Tujuan:</span>
+                <span className="text-slate-700 font-medium">
+                  {String(
+                    extracted.destination_account ||
+                      extracted.destination_account_number ||
+                      extracted.recipient_account,
+                  )}
+                </span>
+              </div>
+            )}
+            {Boolean(extracted.sender_name || extracted.recipient_name || extracted.issuer_name) && (
+              <div className="flex justify-between items-center text-[11px]">
+                <span className="text-slate-500">Pihak Terkait:</span>
+                <span className="text-slate-700 font-medium">
+                  {String(extracted.sender_name || extracted.recipient_name || extracted.issuer_name)}
+                </span>
+              </div>
+            )}
           </div>
-          {extracted.subtotal ? (
-            <div className="flex justify-between items-center text-[11px]">
-              <span className="text-slate-500">Subtotal:</span>
-              <span className="text-slate-700">{formatIDR(Number(extracted.subtotal))}</span>
+        ) : (
+          <div className="p-3 space-y-2 bg-white">
+            {extracted.invoice_number || extracted.document_number ? (
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Nomor Faktur / Dokumen:</span>
+                <span className="font-semibold text-slate-900">
+                  {String(extracted.invoice_number ?? extracted.document_number)}
+                </span>
+              </div>
+            ) : null}
+            {extracted.issuer_name ? (
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">Penerbit:</span>
+                <span className="text-slate-900 font-medium">{String(extracted.issuer_name)}</span>
+              </div>
+            ) : null}
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">Nominal Total:</span>
+              <span className="font-semibold text-slate-900">
+                {extracted.total_amount || candidate?.amount ? (
+                  formatIDR(Number(extracted.total_amount ?? candidate?.amount))
+                ) : (
+                  <span className="text-slate-400 italic">Tidak terdeteksi</span>
+                )}
+              </span>
             </div>
-          ) : null}
-          {extracted.vat_amount ? (
-            <div className="flex justify-between items-center text-[11px]">
-              <span className="text-slate-500">PPN / Pajak:</span>
-              <span className="text-slate-700">{formatIDR(Number(extracted.vat_amount))}</span>
+            {extracted.subtotal ? (
+              <div className="flex justify-between items-center text-[11px]">
+                <span className="text-slate-500">Subtotal:</span>
+                <span className="text-slate-700">{formatIDR(Number(extracted.subtotal))}</span>
+              </div>
+            ) : null}
+            {extracted.vat_amount ? (
+              <div className="flex justify-between items-center text-[11px]">
+                <span className="text-slate-500">PPN / Pajak:</span>
+                <span className="text-slate-700">{formatIDR(Number(extracted.vat_amount))}</span>
+              </div>
+            ) : null}
+            <div className="flex justify-between items-center">
+              <span className="text-slate-500">Tanggal Transaksi:</span>
+              <span className="text-slate-900 font-medium">
+                {extracted.transaction_date ? formatDate(String(extracted.transaction_date)) : <span className="text-slate-400 italic">Tidak terdeteksi</span>}
+              </span>
             </div>
-          ) : null}
-          <div className="flex justify-between items-center">
-            <span className="text-slate-500">Tanggal Transaksi:</span>
-            <span className="text-slate-900 font-medium">
-              {extracted.transaction_date ? formatDate(String(extracted.transaction_date)) : <span className="text-slate-400 italic">Tidak terdeteksi</span>}
-            </span>
+            {extracted.due_date ? (
+              <div className="flex justify-between items-center text-[11px]">
+                <span className="text-slate-500">Jatuh Tempo:</span>
+                <span className="text-slate-700">{formatDate(String(extracted.due_date))}</span>
+              </div>
+            ) : null}
           </div>
-          {extracted.due_date ? (
-            <div className="flex justify-between items-center text-[11px]">
-              <span className="text-slate-500">Jatuh Tempo:</span>
-              <span className="text-slate-700">{formatDate(String(extracted.due_date))}</span>
-            </div>
-          ) : null}
-        </div>
+        )}
       </div>
 
-      {/* Line Items Table (Slice 2 extracted items) */}
-      {lineItems.length > 0 && (
+      {/* Line Items Table (Slice 2 extracted items, hidden for TRANSFER_PROOF) */}
+      {lineItems.length > 0 && document.document_type !== 'TRANSFER_PROOF' && (
         <div className="rounded-lg border border-slate-200 overflow-hidden text-xs">
           <div className="bg-slate-100 px-3 py-1.5 font-semibold text-slate-700 flex items-center gap-1.5">
             <Layers className="h-3.5 w-3.5 text-slate-600" />
@@ -360,6 +660,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
             <table className="min-w-full divide-y divide-slate-200 text-left">
               <thead className="bg-slate-50 text-[11px] text-slate-600">
                 <tr>
+                  <th className="px-3 py-1.5 w-8">#</th>
                   <th className="px-3 py-1.5">Deskripsi</th>
                   <th className="px-3 py-1.5 text-right">Kuantitas</th>
                   <th className="px-3 py-1.5 text-right">Harga Satuan</th>
@@ -368,19 +669,41 @@ export const DocumentReviewForm: React.FC<Props> = ({
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {lineItems.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50">
-                    <td className="px-3 py-1.5 text-slate-900">{String(item.description ?? '-')}</td>
-                    <td className="px-3 py-1.5 text-right text-slate-700">{String(item.quantity ?? '-')}</td>
-                    <td className="px-3 py-1.5 text-right text-slate-700">
-                      {item.unit_price ? formatIDR(Number(item.unit_price)) : '-'}
+                  <tr key={idx} className="hover:bg-slate-50 align-top">
+                    <td className="px-3 py-1.5 text-slate-400 font-mono text-[11px]">{idx + 1}.</td>
+                    <td className="px-3 py-1.5 text-slate-900 whitespace-pre-line font-medium leading-relaxed">
+                      {String(item.description ?? '-')}
                     </td>
-                    <td className="px-3 py-1.5 text-right font-medium text-slate-900">
-                      {item.total_amount ? formatIDR(Number(item.total_amount)) : '-'}
+                    <td className="px-3 py-1.5 text-right text-slate-700">
+                      {item.quantity != null
+                        ? `${item.quantity}${item.unit ? ' ' + String(item.unit).toUpperCase() : ''}`
+                        : '-'}
+                    </td>
+                    <td className="px-3 py-1.5 text-right text-slate-700">
+                      {item.unit_price != null ? formatIDR(Number(item.unit_price)) : '-'}
+                    </td>
+                    <td className="px-3 py-1.5 text-right font-semibold text-slate-900">
+                      {(item.amount ?? item.line_total ?? item.total_amount) != null
+                        ? formatIDR(Number(item.amount ?? item.line_total ?? item.total_amount))
+                        : '-'}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Ambiguous Matching Alert */}
+      {isAmbiguous && (
+        <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <strong className="font-semibold block">Pencocokan Ambigu Terdeteksi</strong>
+            <p className="mt-0.5">
+              Sistem mendeteksi beberapa kandidat tagihan/faktur dengan skor serupa. Silakan pilih salah satu kandidat di bawah ini untuk menetapkan alokasi pembayaran yang sesuai.
+            </p>
           </div>
         </div>
       )}
@@ -403,6 +726,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
                 cand.entity_id === selectedCandidateId ||
                 cand.entity_id === String(candidate.allocation_target_id ?? '');
               const scorePct = Math.round(Number(cand.score || 0) * 100);
+              const details = (cand.scoring_details || {}) as Record<string, unknown>;
 
               return (
                 <div
@@ -421,17 +745,17 @@ export const DocumentReviewForm: React.FC<Props> = ({
                               ? 'bg-emerald-100 text-emerald-800'
                               : cand.confidence_band === 'MEDIUM'
                               ? 'bg-amber-100 text-amber-800'
-                              : 'bg-slate-200 text-slate-700'
+                              : 'bg-slate-100 text-slate-700'
                           }`}
                         >
-                          Skor: {scorePct}% ({cand.confidence_band})
+                          Kecocokan {scorePct}% ({cand.confidence_band})
                         </span>
                       </div>
-                      <p className="mt-1 text-slate-700">{cand.explanation}</p>
+                      <p className="mt-1 text-slate-600">{cand.explanation}</p>
                     </div>
                     <Button
                       size="sm"
-                      variant={isSelected ? 'secondary' : 'primary'}
+                      variant={isSelected ? 'primary' : 'outline'}
                       onClick={() => handleSelectCandidate(cand)}
                       disabled={busy}
                     >
@@ -439,7 +763,50 @@ export const DocumentReviewForm: React.FC<Props> = ({
                     </Button>
                   </div>
 
-                  {/* Signals & Conflicts */}
+                  {/* Candidate Allocation Breakdown (Step 7) */}
+                  {Boolean(details.entity_code) && (
+                    <div className="mt-2.5 rounded border border-slate-200 bg-white p-2.5 text-[11px] space-y-1.5">
+                      <div className="font-medium text-slate-800">
+                        Pembayaran ini kemungkinan terkait:
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600">
+                        <div>
+                          <span className="text-slate-400">Kode:</span>{' '}
+                          <span className="font-semibold text-slate-800">{String(details.entity_code)}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400">{cand.entity_type === 'VENDOR_BILL' ? 'Vendor:' : 'Pelanggan:'}</span>{' '}
+                          <span className="font-medium text-slate-800">{String(details.counterparty_name || '-')}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400">Nilai Tagihan:</span>{' '}
+                          <span className="font-medium text-slate-800">{formatIDR(Number(details.total_amount ?? 0))}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400">Sudah Dibayar:</span>{' '}
+                          <span className="font-medium text-slate-800">{formatIDR(Number(details.paid_amount ?? 0))}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400">Sisa Tagihan:</span>{' '}
+                          <span className="font-semibold text-amber-700">{formatIDR(Number(details.outstanding_amount ?? 0))}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400">Alokasi Ini:</span>{' '}
+                          <span className="font-semibold text-emerald-700">{formatIDR(Number(details.proposed_allocation ?? 0))}</span>
+                        </div>
+                      </div>
+                      {details.after_allocation_outstanding !== undefined && (
+                        <div className="border-t border-slate-100 pt-1 text-slate-500 text-[10px]">
+                          Sisa setelah alokasi:{' '}
+                          <span className="font-semibold text-slate-700">
+                            {formatIDR(Number(details.after_allocation_outstanding))}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Signals */}
                   <div className="mt-2 flex flex-wrap gap-1">
                     {(cand.positive_signals || []).map((sig, sIdx) => (
                       <span
@@ -467,38 +834,29 @@ export const DocumentReviewForm: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Supporting Document Message */}
+      {/* Evidence-Only Informational Alert */}
       {isEvidenceOnly && (
         <div className="rounded-lg bg-blue-50 p-3 border border-blue-200 text-xs text-blue-900">
-          <div className="font-semibold flex items-center gap-1">
-            <ShieldCheck className="h-4 w-4 text-blue-600" />
-            Dokumen pendukung saja
-          </div>
-          <p className="mt-1 text-blue-800">
-            Dokumen ini disimpan sebagai bukti dan tidak langsung mengubah saldo atau membuat transaksi keuangan.
+          <strong className="font-semibold block mb-1">Dokumen pendukung saja</strong>
+          <p>
+            Dokumen jenis ini disimpan sebagai bukti dan tidak langsung mengubah saldo atau buku besar.
+            Persetujuan tidak diperlukan untuk dokumen pendukung non-finansial.
           </p>
         </div>
       )}
 
-      {/* Form Alerts */}
-      {projectLookupError && (
-        <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
-          {projectLookupError}
-        </div>
-      )}
-      {counterpartyLookupError && (
-        <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
-          {counterpartyLookupError}
-        </div>
-      )}
+      {/* Approval Lookup Error Display */}
       {approvalLookupError && (
-        <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+        <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
           {approvalLookupError}
         </div>
       )}
-      {actionError && (
-        <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
-          {actionError}
+
+      {/* Action / Validation Error Display */}
+      {(actionError || formValidationError) && (
+        <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+          <span>{formValidationError || actionError}</span>
         </div>
       )}
 
@@ -521,7 +879,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label htmlFor="total-amount" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-              Total Nominal
+              Total Nominal <span className="text-rose-500">*</span>
             </label>
             <input
               id="total-amount"
@@ -534,7 +892,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
           </div>
           <div>
             <label htmlFor="transaction-date" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-              Tanggal Transaksi
+              Tanggal Transaksi <span className="text-rose-500">*</span>
             </label>
             <input
               id="transaction-date"
@@ -558,6 +916,34 @@ export const DocumentReviewForm: React.FC<Props> = ({
             onChange={(e) => setDueDate(e.target.value)}
           />
         </div>
+
+        {requiresPaymentAccount && (
+          <div className="space-y-2">
+            <label htmlFor="payment-account-select" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+              Rekening Kas / Bank <span className="text-rose-500">*</span>
+            </label>
+            <Select
+              id="payment-account-select"
+              aria-label="Pilih Rekening Kas / Bank"
+              disabled={paymentAccountLookupLoading || !!paymentAccountLookupError}
+              value={paymentAccountId}
+              onChange={(e) => setPaymentAccountId(e.target.value)}
+              helperText="Pilih rekening kas atau bank yang digunakan untuk transaksi ini."
+            >
+              <option value="">Pilih rekening kas / bank</option>
+              {availablePaymentAccounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.bank_name
+                    ? `${account.bank_name} - ${account.name} (${account.account_number || account.coa_account_code})`
+                    : `${account.name} (${account.coa_account_code})`}
+                </option>
+              ))}
+            </Select>
+            {paymentAccountLookupError && (
+              <p className="text-xs text-rose-600">{paymentAccountLookupError}</p>
+            )}
+          </div>
+        )}
 
         <div className="space-y-2">
           <label htmlFor="project-search" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
@@ -673,7 +1059,8 @@ export const DocumentReviewForm: React.FC<Props> = ({
         </Button>
         <Button
           variant="secondary"
-          onClick={onApprove}
+          onClick={handleApprove}
+          isLoading={busy}
           disabled={
             document.review_flags.length > 0 ||
             isEvidenceOnly ||

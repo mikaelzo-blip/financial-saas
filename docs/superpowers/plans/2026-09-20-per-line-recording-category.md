@@ -255,6 +255,18 @@ def test_permit_and_licensing_is_permits_expense():
     res = classify_expense(raw_description="BIAYA PERIJINAN SBU")
     assert res.cost_category is None
     assert res.expense_category is ExpenseCategory.PERMITS
+
+
+def test_document_text_does_not_reclassify_an_unrelated_line():
+    # Regression: the service rules must read the line's own text, never the
+    # whole document, or a document-level "materai" keyword would hijack the
+    # freight line (and the document-level candidate's category).
+    res = classify_expense(
+        raw_description="JASA ANGKUT GERMAN TO JAKARTA",
+        document_text="INVOICE\nJASA ANGKUT GERMAN TO JAKARTA\nMETERAI TEMPEL 10.000",
+    )
+    assert res.cost_category is CostCategory.LOG
+    assert res.expense_category is None
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -294,10 +306,13 @@ _RE_INSTALLATION = re.compile(
 In `classify_expense`, insert this block immediately **before** `# 3. Default fallback classification` (line ~234):
 
 ```python
-    # 2b. Service / stamp-duty classification (line-item aware)
+    # 2b. Service / stamp-duty classification (LINE-SCOPED: search `raw`, the
+    # item's own text, never the whole document). A document-level keyword like
+    # "materai" must not reclassify an unrelated "JASA ANGKUT" line, and must not
+    # hijack the document-level candidate's category/project.
     # Stamp duty and document preparation are administrative overhead, never HPP,
     # even when the document carries a project.
-    if _RE_STAMP_DUTY.search(full_text):
+    if _RE_STAMP_DUTY.search(raw):
         signals.append("STAMP_DUTY_KEYWORD_DETECTED")
         return ExpenseClassificationResult(
             raw_description=raw,
@@ -311,10 +326,10 @@ In `classify_expense`, insert this block immediately **before** `# 3. Default fa
             classification_confidence=Decimal("0.85"),
             classification_signals=signals,
             classification_conflicts=conflicts,
-            review_required=False,
+            review_required=review_required,
         )
 
-    if _RE_DOC_SERVICE.search(full_text):
+    if _RE_DOC_SERVICE.search(raw):
         signals.append("DOCUMENT_SERVICE_KEYWORD_DETECTED")
         return ExpenseClassificationResult(
             raw_description=raw,
@@ -328,10 +343,10 @@ In `classify_expense`, insert this block immediately **before** `# 3. Default fa
             classification_confidence=Decimal("0.80"),
             classification_signals=signals,
             classification_conflicts=conflicts,
-            review_required=False,
+            review_required=review_required,
         )
 
-    if _RE_PERMITS.search(full_text):
+    if _RE_PERMITS.search(raw):
         signals.append("PERMITS_KEYWORD_DETECTED")
         return ExpenseClassificationResult(
             raw_description=raw,
@@ -345,12 +360,12 @@ In `classify_expense`, insert this block immediately **before** `# 3. Default fa
             classification_confidence=Decimal("0.80"),
             classification_signals=signals,
             classification_conflicts=conflicts,
-            review_required=False,
+            review_required=review_required,
         )
 
     # Freight and installation are project services -> HPP (5101) when a project
     # is known; without a project the reviewer must supply one (approval rejects).
-    if _RE_FREIGHT.search(full_text):
+    if _RE_FREIGHT.search(raw):
         signals.append("FREIGHT_KEYWORD_DETECTED")
         return ExpenseClassificationResult(
             raw_description=raw,
@@ -367,7 +382,7 @@ In `classify_expense`, insert this block immediately **before** `# 3. Default fa
             review_required=review_required or (matched_project_id is None),
         )
 
-    if _RE_INSTALLATION.search(full_text):
+    if _RE_INSTALLATION.search(raw):
         signals.append("INSTALLATION_KEYWORD_DETECTED")
         return ExpenseClassificationResult(
             raw_description=raw,
@@ -388,7 +403,7 @@ In `classify_expense`, insert this block immediately **before** `# 3. Default fa
 - [ ] **Step 5: Run new tests, then reconcile any pinned expectations**
 
 Run: `cd backend && .venv/Scripts/python.exe -m pytest tests/unit/test_expense_classifier_services.py -v -p no:cacheprovider`
-Expected: PASS (4).
+Expected: PASS (8).
 
 Then run the existing classifier suite:
 Run: `cd backend && .venv/Scripts/python.exe -m pytest tests/unit -k "classif" -v -p no:cacheprovider`
@@ -411,7 +426,7 @@ git commit -m "feat(documents): classify freight, installation, stamp duty and d
 
 **Interfaces:**
 - Consumes: `classify_expense` (Task 3), `LineItem` (Task 2).
-- Produces: `classify_line_items(items: List[LineItem], project_id: Optional[uuid.UUID], document_text: Optional[str]) -> List[LineItem]` — returns copies of the items with `cost_category`/`expense_category` filled when the item has none (an existing reviewer choice is never overwritten). Consumed by Task 5.
+- Produces: `classify_line_items(items: List[LineItem], project_id: Optional[uuid.UUID]) -> List[LineItem]` — returns copies of the items with `cost_category`/`expense_category` filled when the item has none (an existing reviewer choice is never overwritten). Each line is classified from its OWN description only (no document text), so a document-level keyword never reclassifies an unrelated line. Consumed by Task 5.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -431,7 +446,7 @@ def test_suggests_log_for_freight_and_operational_for_stamp():
         LineItem(description="JASA ANGKUT GERMAN TO JAKARTA", amount=Decimal("19927250")),
         LineItem(description="STAMP", amount=Decimal("10000")),
     ]
-    out = classify_line_items(items, project_id=None, document_text="")
+    out = classify_line_items(items, project_id=None)
     assert out[0].cost_category is CostCategory.LOG
     assert out[1].expense_category is ExpenseCategory.OTHER_OPERATIONAL
     assert out[1].cost_category is None
@@ -445,13 +460,13 @@ def test_never_overwrites_an_existing_reviewer_choice():
             cost_category=CostCategory.SUB,
         )
     ]
-    out = classify_line_items(items, project_id=None, document_text="")
+    out = classify_line_items(items, project_id=None)
     assert out[0].cost_category is CostCategory.SUB
 
 
 def test_preserves_amount_and_description():
     items = [LineItem(description="STAMP", amount=Decimal("10000"))]
-    out = classify_line_items(items, project_id=uuid.uuid4(), document_text="")
+    out = classify_line_items(items, project_id=uuid.uuid4())
     assert out[0].amount == Decimal("10000")
     assert out[0].description == "STAMP"
 ```
@@ -481,7 +496,6 @@ from src.services.documents.expense_classifier import classify_expense
 def classify_line_items(
     items: List[LineItem],
     project_id: Optional[uuid.UUID] = None,
-    document_text: Optional[str] = None,
 ) -> List[LineItem]:
     classified: List[LineItem] = []
     for item in items:
@@ -491,7 +505,6 @@ def classify_line_items(
         result = classify_expense(
             raw_description=item.description or "",
             matched_project_id=project_id,
-            document_text=document_text,
         )
         classified.append(
             item.model_copy(
@@ -585,7 +598,6 @@ In the `elif document_type in {DocumentType.RECEIPT, DocumentType.VENDOR_INVOICE
             data.line_items = classify_line_items(
                 data.line_items,
                 project_id=matched_pid,
-                document_text=data.raw_text,
             )
 ```
 

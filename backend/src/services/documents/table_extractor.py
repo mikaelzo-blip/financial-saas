@@ -37,6 +37,158 @@ _HEADER_PREFIXES = (
     "jatuh tempo", "due date",
 )
 
+# Scanned invoices (RapidOCR on a rasterized page) frequently emit each table
+# cell on its own line, with the column headers repeated as standalone lines:
+#   No. / Description / Amount (IDR) / 1 / JASA ANGKUT ... / 19.927.250 / ...
+# These labels are structural, never line items, so the vertical-table parser
+# must not turn them (or adjacent metadata) into goods/services rows.
+_VERTICAL_DESC_HEADERS = frozenset({
+    "description", "deskripsi", "uraian", "keterangan", "item", "nama item",
+})
+_VERTICAL_AMOUNT_HEADERS = frozenset({
+    "amount", "amount (idr)", "amount (rp)", "amount idr", "amount rp",
+    "total", "total (idr)", "total (rp)", "jumlah", "jumlah (idr)",
+    "harga", "harga (idr)", "harga satuan", "subtotal", "nilai",
+})
+_VERTICAL_SKIP_LABELS = frozenset({
+    "no", "no.", "nomor", "description", "deskripsi", "uraian", "keterangan",
+    "item", "amount", "amount (idr)", "amount (rp)", "amount idr", "amount rp",
+    "total", "total (idr)", "total (rp)", "jumlah", "jumlah (idr)", "harga",
+    "harga (idr)", "bank account", "account name", "notes", "invoice date",
+    "delivery date", "bill to", "etd", "eta", "bl /awb", "bl/awb", "halaman",
+    "page", "qty", "quantity", "kuantitas", "satuan", "unit", "unit price",
+})
+_BARE_INDEX_RE = re.compile(r"^\d{1,4}[.)]?$")
+_MONEY_LINE_RE = re.compile(r"^(?:rp\.?|idr)?\s*\(?-?\d[\d.,]*\)?\s*,?-?$", re.I)
+_TABLE_TERMINATOR_RE = re.compile(
+    r"^(?:total|subtotal|sub total|grand total|jumlah|total bayar|total tagihan|dpp)\b",
+    re.I,
+)
+_METADATA_LINE_RE = re.compile(
+    r"^(?:bill\s+to|invoice\s+date|delivery\s+date|bl\s*/?\s*awb|etd|eta|"
+    r"bank\s+account|account\s+name|notes|halaman\b.*\b(?:dari|of)\b)\s*[:.]?$",
+    re.I,
+)
+
+
+def _normalize_label(text: str) -> str:
+    return re.sub(r"\s+", " ", text.strip().lower()).rstrip(":").strip()
+
+
+def _is_amount_header(line: str) -> bool:
+    label = _normalize_label(line)
+    if label in _VERTICAL_AMOUNT_HEADERS:
+        return True
+    return bool(re.match(r"^(?:amount|total|jumlah|harga|nilai|subtotal)\b", label))
+
+
+def _looks_like_money(line: str) -> bool:
+    """True for a money amount, false for a bare row index like '1' or '2'.
+
+    A lone small integer (no thousand/decimal separator) is a row number in a
+    vertical table, not an amount; require a separator between digits or at
+    least four digits.
+    """
+    stripped = line.strip()
+    if not _MONEY_LINE_RE.match(stripped):
+        return False
+    if re.search(r"\d[.,]\d", stripped):
+        return True
+    return len(re.sub(r"\D", "", stripped)) >= 4
+
+
+def _parse_vertical_money(line: str) -> Optional[Decimal]:
+    """Parse an amount from a vertical IDR table.
+
+    In an Indonesian invoice a bare '10.000' or '19.927.250' uses '.' as the
+    thousands separator. The shared normalizer flags a single-dot token with a
+    3-digit tail as AMBIGUOUS (it could also be a decimal), so resolve that
+    Indonesian-currency case here instead of loosening the shared normalizer.
+    """
+    token = re.sub(r"(?i)^(?:.*?(?:rp\.?|idr))\s*", "", line.strip())
+    token = re.sub(r"^[^\d]+", "", token).replace(" ", "")
+    if re.fullmatch(r"\d{1,3}(?:\.\d{3})+", token):
+        return Decimal(token.replace(".", ""))
+    if re.fullmatch(r"\d{1,3}(?:\.\d{3})+,\d{2}", token):
+        return Decimal(token.replace(".", "").replace(",", "."))
+    candidate = parse_candidate_money(line)
+    return candidate.value
+
+
+def _is_vertical_table_header(lines: List[str]) -> bool:
+    """True when a standalone 'Description' header is followed by an amount header.
+
+    This is the signature of a field-per-line (vertical) OCR table. Horizontal
+    invoices carry the column headers inside a single row, so they never match.
+    """
+    for idx, raw in enumerate(lines):
+        if _normalize_label(raw) not in _VERTICAL_DESC_HEADERS:
+            continue
+        for look_ahead in lines[idx + 1: idx + 4]:
+            if _is_amount_header(look_ahead):
+                return True
+    return False
+
+
+def _parse_money_line(line: str) -> Optional[Decimal]:
+    if not _looks_like_money(line):
+        return None
+    candidate = parse_candidate_money(line)
+    return candidate.value
+
+
+def _extract_vertical_table_items(lines: List[str]) -> List[LineItem]:
+    """Parse a field-per-line (vertical) table into line items.
+
+    Row grammar: an optional bare index, one or more description lines, then a
+    money line. Everything before the 'Description' header (address, dates,
+    BL/AWB) and everything from the summary total onward (bank details, notes,
+    page footer) is outside the block and never becomes an item.
+    """
+    start: Optional[int] = None
+    for idx, raw in enumerate(lines):
+        if _normalize_label(raw) not in _VERTICAL_DESC_HEADERS:
+            continue
+        for offset in range(1, 4):
+            if idx + offset < len(lines) and _is_amount_header(lines[idx + offset]):
+                start = idx + offset + 1
+                break
+        if start is not None:
+            break
+
+    if start is None:
+        return []
+
+    items: List[LineItem] = []
+    pending: List[str] = []
+
+    for raw in lines[start:]:
+        line = raw.strip()
+        if not line:
+            continue
+        if _TABLE_TERMINATOR_RE.match(line):
+            break
+        if not pending and _BARE_INDEX_RE.match(line):
+            continue
+        if _looks_like_money(line):
+            amount = _parse_vertical_money(line)
+            if pending and amount is not None:
+                items.append(
+                    LineItem(
+                        description="\n".join(pending),
+                        amount=amount,
+                        line_total=amount,
+                    )
+                )
+                pending = []
+            continue
+        label = _normalize_label(line)
+        if label in _VERTICAL_SKIP_LABELS or _METADATA_LINE_RE.match(line):
+            continue
+        pending.append(line)
+
+    return items
+
 
 def is_header_or_summary_line(desc: str) -> bool:
     clean = desc.strip().lower()
@@ -320,6 +472,13 @@ def cluster_ocr_boxes_into_lines(boxes: any, txts: List[str], line_threshold: fl
 
 
 def _parse_lines_into_items(lines: List[str]) -> List[LineItem]:
+    # Field-per-line (vertical) scanned tables: parse the block directly so that
+    # metadata lines outside the table never become items.
+    if _is_vertical_table_header(lines):
+        vertical_items = _extract_vertical_table_items(lines)
+        if vertical_items:
+            return vertical_items
+
     items: List[LineItem] = []
     pending_desc: List[str] = []
 

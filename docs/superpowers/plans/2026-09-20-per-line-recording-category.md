@@ -764,11 +764,49 @@ def test_same_category_lines_are_merged_into_one_allocation():
         "line_items": [
             {"description": "SEMEN", "amount": "100", "cost_category": "MAT"},
             {"description": "BESI", "amount": "200", "cost_category": "MAT"},
+            {"description": "JASA ANGKUT", "amount": "50", "cost_category": "LOG"},
         ]
     }
-    allocs = build_line_allocations(extracted, _candidate(project_id=project_id))
-    assert len(allocs) == 1
-    assert allocs[0].amount == Decimal("300")
+    cand = _candidate(project_id=project_id)
+    cand.amount = Decimal("350")
+    allocs = build_line_allocations(extracted, cand)
+    assert len(allocs) == 2
+    by_cat = {a.cost_category: a.amount for a in allocs}
+    assert by_cat[CostCategory.MAT] == Decimal("300")
+    assert by_cat[CostCategory.LOG] == Decimal("50")
+
+
+def test_single_bucket_invoice_keeps_the_legacy_path():
+    # Regression: the per-line classifier fills EVERY line, so a legacy invoice
+    # (e.g. a PPN invoice whose extracted lines are the pre-VAT subtotal) would
+    # otherwise be forced through the multi-allocation sum guard and hard-fail on
+    # approve. A document whose lines all collapse to ONE bucket is not a
+    # multi-account split — return None so the legacy path posts the full total.
+    project_id = uuid.uuid4()
+    extracted = {
+        "line_items": [
+            {"description": "SEMEN", "amount": "100000", "cost_category": "MAT"},
+        ]
+    }
+    cand = _candidate(project_id=project_id)
+    cand.amount = Decimal("111000")  # line 100000 != total 111000 (PPN)
+    assert build_line_allocations(extracted, cand) is None
+
+
+def test_multi_bucket_sum_mismatch_is_rejected():
+    # A genuine multi-account split whose lines do not reconcile to the invoice
+    # total must be refused (spec D5), not posted with a missing amount.
+    project_id = uuid.uuid4()
+    extracted = {
+        "line_items": [
+            {"description": "JASA ANGKUT", "amount": "100", "cost_category": "LOG"},
+            {"description": "STAMP", "amount": "10", "expense_category": "OTHER_OPERATIONAL"},
+        ]
+    }
+    cand = _candidate(project_id=project_id)
+    cand.amount = Decimal("200")
+    with pytest.raises(InvariantViolationException):
+        build_line_allocations(extracted, cand)
 
 
 def test_returns_none_when_no_line_items():
@@ -792,7 +830,9 @@ def test_uncategorised_lines_fall_back_to_document_category():
             {"description": "NO CATEGORY", "amount": "50"},
         ]
     }
-    allocs = build_line_allocations(extracted, _candidate(project_id=project_id))
+    cand = _candidate(project_id=project_id)
+    cand.amount = Decimal("150")
+    allocs = build_line_allocations(extracted, cand)
     by_cat = {a.cost_category or a.expense_category: a.amount for a in allocs}
     assert by_cat[CostCategory.LOG] == Decimal("100")
     assert by_cat[CostCategory.MAT] == Decimal("50")
@@ -854,10 +894,13 @@ def build_line_allocations(
 ) -> Optional[List[TransactionAllocationInput]]:
     """Group invoice line items into one allocation per (project, cost, expense) bucket.
 
-    Returns None when there are no line items, or when neither the lines nor the
-    document carry any category — so the caller keeps the existing single-category
-    behaviour. Uncategorised lines inherit the document-level category so their
-    amount is never dropped.
+    Returns None unless the invoice GENUINELY spans more than one allocation
+    bucket — a single-bucket document is not a multi-account split, so the caller
+    keeps the existing single-category behaviour. This matters because the
+    per-line classifier fills EVERY line (MAT when a project is present, else
+    OTHER_OPERATIONAL): a legacy invoice never reviewed per line must not be
+    forced through the multi-allocation sum guard. Uncategorised lines inherit
+    the document-level category so their amount is never dropped.
     """
     items = (extracted_data or {}).get("line_items") or []
     if not items:
@@ -901,6 +944,24 @@ def build_line_allocations(
     if all(key[1] is None and key[2] is None for key in groups):
         return None
 
+    # A project-cost category (MAT/SUB/TRN/EQP/LOG) without a project would fall
+    # through to 6199 in posting_rules; refuse rather than book to the wrong
+    # account. Checked before the single-bucket gate so it holds for one-line
+    # documents too.
+    for project_raw, cost_raw, _expense_raw in groups:
+        if cost_raw in PROJECT_REQUIRED_COST_CATEGORIES and not project_raw:
+            raise InvariantViolationException(
+                f"Project is required for project cost category {cost_raw}.",
+                details={"failure_reason": "ALLOCATION_INVALID"},
+            )
+
+    # Only a genuine multi-bucket invoice is split across allocations. A document
+    # whose lines all collapse to one (project, cost, expense) bucket posts via the
+    # legacy single-category path instead — this avoids hard-failing legacy
+    # invoices whose extracted lines (e.g. pre-PPN amounts) do not sum to the total.
+    if len(groups) < 2:
+        return None
+
     allocations = [
         TransactionAllocationInput(
             project_id=uuid.UUID(key[0]) if key[0] else None,
@@ -911,18 +972,14 @@ def build_line_allocations(
         for key, amount in groups.items()
     ]
 
-    # A project-cost category (MAT/SUB/TRN/EQP/LOG) without a project would fall
-    # through to 6199 in posting_rules; refuse rather than book to the wrong account.
-    for alloc in allocations:
-        if (
-            alloc.cost_category is not None
-            and alloc.cost_category.value in PROJECT_REQUIRED_COST_CATEGORIES
-            and not alloc.project_id
-        ):
-            raise InvariantViolationException(
-                f"Project is required for project cost category {alloc.cost_category.value}.",
-                details={"failure_reason": "ALLOCATION_INVALID"},
-            )
+    # Spec D5: a genuine multi-account split must reconcile to the invoice total,
+    # or an amount would be silently dropped. Refuse rather than post a partial.
+    allocation_sum = sum(a.amount for a in allocations)
+    if allocation_sum != candidate.amount:
+        raise InvariantViolationException(
+            f"Sum of line allocations ({allocation_sum}) does not match invoice total ({candidate.amount}).",
+            details={"failure_reason": "ALLOCATION_INVALID"},
+        )
 
     return allocations
 ```
@@ -930,7 +987,7 @@ def build_line_allocations(
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd backend && .venv/Scripts/python.exe -m pytest tests/unit/test_posting_line_allocations.py -v -p no:cacheprovider`
-Expected: PASS (7).
+Expected: PASS (9).
 
 - [ ] **Step 5: Use the allocations in the approve path**
 
@@ -938,14 +995,11 @@ In `backend/src/services/document_posting_service.py`, replace the `trx_input = 
 
 ```python
         # 8. Create Transaction via canonical TransactionService
+        # build_line_allocations returns None for documents that do not genuinely
+        # span multiple accounts (and raises on a non-reconciling split), so the
+        # legacy single-category path is used for everything else.
         line_allocations = build_line_allocations(document.extracted_data or {}, candidate)
         if line_allocations is not None:
-            allocation_sum = sum(a.amount for a in line_allocations)
-            if allocation_sum != candidate.amount:
-                raise InvariantViolationException(
-                    f"Sum of line allocations ({allocation_sum}) does not match invoice total ({candidate.amount}).",
-                    details={"failure_reason": "ALLOCATION_INVALID"},
-                )
             trx_input = TransactionCreate(
                 transaction_type=candidate.proposed_transaction_type,
                 transaction_date=candidate.transaction_date,
@@ -982,7 +1036,7 @@ Ensure `InvariantViolationException` is imported (it is used elsewhere in the fi
 - [ ] **Step 6: Run the backend tests**
 
 Run: `cd backend && .venv/Scripts/python.exe -m pytest tests/unit -q -p no:cacheprovider`
-Expected: no `FAILED` lines (the new 5 pass; pre-existing skips remain).
+Expected: no `FAILED` lines (the new 9 pass; pre-existing skips remain).
 
 - [ ] **Step 7: Commit**
 

@@ -4,6 +4,7 @@ from src.models.enums import (CandidateStatus, CostCategory, DocumentType,
                               ExpenseCategory, ReviewFlag, TransactionType)
 from src.schemas.document import StructuredExtraction, TransactionCandidate
 from src.services.documents.expense_classifier import classify_expense
+from src.services.documents.line_item_classifier import classify_line_items
 
 
 SUPPORTING_DOCUMENT_TYPES = {
@@ -83,6 +84,12 @@ def build_candidate(document_id: uuid.UUID, document_type: DocumentType,
             document_project_hint=proj_hint,
         )
         matches["expense_classification"] = exp_res.to_dict()
+
+        if data.line_items:
+            data.line_items = classify_line_items(
+                data.line_items,
+                project_id=matched_pid,
+            )
 
         if exp_res.cost_category:
             category = exp_res.cost_category

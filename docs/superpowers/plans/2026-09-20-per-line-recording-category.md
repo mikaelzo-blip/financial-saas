@@ -776,6 +776,23 @@ def test_uncategorised_lines_fall_back_to_document_category():
     assert all(a.project_id == project_id for a in allocs)
 
 
+def test_operational_line_does_not_inherit_the_project():
+    # posting_rules debits 5101 when an allocation has a project_id, else the
+    # expense category's own account. An operational line on a project invoice
+    # must therefore keep project_id=None, or it would book to HPP (5101).
+    project_id = uuid.uuid4()
+    extracted = {
+        "line_items": [
+            {"description": "JASA ANGKUT", "amount": "19927250", "cost_category": "LOG"},
+            {"description": "STAMP", "amount": "10000", "expense_category": "OTHER_OPERATIONAL"},
+        ]
+    }
+    allocs = build_line_allocations(extracted, _candidate(project_id=project_id))
+    by_cat = {a.cost_category or a.expense_category: a for a in allocs}
+    assert by_cat[CostCategory.LOG].project_id == project_id
+    assert by_cat[ExpenseCategory.OTHER_OPERATIONAL].project_id is None
+
+
 def test_hpp_category_without_project_is_rejected():
     # A project-cost line with no project would silently book to 6199 in
     # posting_rules; refuse it here instead of posting to the wrong account.
@@ -843,7 +860,15 @@ def build_line_allocations(
         elif item.get("expense_category"):
             cost_raw = None
 
-        project_raw = str(candidate.project_id) if candidate.project_id else None
+        # posting_rules routes by PROJECT PRESENCE: a project-cost line (cost
+        # category) debits 5101, an operational line (expense category) debits
+        # its 610x/6199 account. So only a project-cost line may carry the
+        # project; an operational line must NOT inherit it — otherwise it would
+        # book to 5101 (HPP). Mirrors candidate.py's resolved_proj_id rule.
+        if cost_raw:
+            project_raw = str(candidate.project_id) if candidate.project_id else None
+        else:
+            project_raw = None
         key = (project_raw, cost_raw, expense_raw)
         groups[key] = groups.get(key, Decimal("0.00")) + Decimal(str(raw_amount))
 
@@ -882,7 +907,7 @@ def build_line_allocations(
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `cd backend && .venv/Scripts/python.exe -m pytest tests/unit/test_posting_line_allocations.py -v -p no:cacheprovider`
-Expected: PASS (4).
+Expected: PASS (7).
 
 - [ ] **Step 5: Use the allocations in the approve path**
 

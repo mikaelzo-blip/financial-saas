@@ -117,3 +117,9 @@ def test_evidence_type_renamed_to_financial_returns_review():
     assert resolve_document_status(
         DocumentType.VENDOR_INVOICE, None, [], CONFIDENT
     ) == DocumentProcessingStatus.REVIEW_REQUIRED
+
+
+def test_pipeline_reexports_document_status_for():
+    from src.services.documents.pipeline import document_status_for as pipeline_status_for
+    assert pipeline_status_for(_candidate(DocumentType.VENDOR_INVOICE, "VENDOR_BILL"), []) == \
+        DocumentProcessingStatus.READY_FOR_APPROVAL

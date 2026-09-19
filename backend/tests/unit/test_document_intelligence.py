@@ -8,7 +8,7 @@ from src.models.enums import CandidateStatus, DocumentProcessingStatus, Document
 from src.schemas.document import ConfidenceScores, StructuredExtraction
 from src.services.documents.candidate import build_candidate, derive_flags
 from src.services.documents.confidence import below_threshold
-from src.services.documents.pipeline import document_status_for
+from src.services.documents.status import document_status_for
 from src.services.documents.extraction import get_extraction_provider, register_extraction_provider
 
 

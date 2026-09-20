@@ -11,22 +11,23 @@ import re
 from typing import List, Optional
 
 from src.schemas.document import LineItem
-from src.services.documents.normalization import parse_candidate_money
+from src.services.documents.normalization import extract_document_monetary_totals, parse_candidate_money
 
 _CONSTRUCTION_UNITS = {
     "sak", "zak", "m3", "m2", "m1", "m", "cm", "mm", "kg", "ton",
     "btg", "batang", "lbr", "lembar", "dus", "box", "roll", "rit",
     "ls", "lumpsum", "pcs", "pc", "unit", "set", "hari", "bln", "bulan",
     "jam", "titik", "ttk", "bh", "buah", "btl", "botol", "can", "drum", "pail",
-    "meter", "kubik", "tonase",
+    "meter", "kubik", "tonase", "pax", "paket", "pkt", "lot", "trip", "karton",
+    "koli", "ktn", "each", "ea", "piece", "pieces",
 }
 
 _IGNORED_DESCRIPTIONS = {
     "total", "subtotal", "sub total", "jumlah", "grand total", "total bayar",
-    "ppn", "vat", "pajak", "dpp", "diskon", "discount", "uang muka", "dp",
-    "terbilang", "catatan", "note", "keterangan", "syarat", "pembayaran",
-    "tanda terima", "hormat kami", "penerima", "bank", "bca", "mandiri",
-    "jatuh tempo", "due date", "tanggal", "date",
+    "total tagihan", "ppn", "vat", "pajak", "dpp", "diskon", "discount",
+    "uang muka", "dp", "terbilang", "catatan", "note", "keterangan", "syarat",
+    "pembayaran", "tanda terima", "hormat kami", "penerima", "bank", "bca",
+    "mandiri", "jatuh tempo", "due date", "tanggal", "date", "halaman", "page",
 }
 
 _HEADER_PREFIXES = (
@@ -34,7 +35,9 @@ _HEADER_PREFIXES = (
     "tanggal", "date", "no:", "no.", "nomor", "inv:", "inv.", "invoice",
     "faktur", "quotation", "penawaran", "surat jalan", "po:", "po.",
     "kepada", "yth", "attn", "hal:", "lampiran", "pt ", "pt.", "cv ", "cv.",
-    "jatuh tempo", "due date",
+    "jatuh tempo", "due date", "proyek:", "project:", "proyek", "project",
+    "vendor:", "vendor", "deskripsi barang", "rincian barang", "item barang",
+    "nama barang",
 )
 
 # Scanned invoices (RapidOCR on a rasterized page) frequently emit each table
@@ -61,7 +64,7 @@ _VERTICAL_SKIP_LABELS = frozenset({
 _BARE_INDEX_RE = re.compile(r"^\d{1,4}[.)]?$")
 _MONEY_LINE_RE = re.compile(r"^(?:rp\.?|idr)?\s*\(?-?\d[\d.,]*\)?\s*,?-?$", re.I)
 _TABLE_TERMINATOR_RE = re.compile(
-    r"^(?:total|subtotal|sub total|grand total|jumlah|total bayar|total tagihan|dpp)\b",
+    r"\b(?:total|subtotal|sub\s+total|grand\s+total|total\s+bayar|total\s+tagihan|dpp|ex[\s-]*tax|vat|payment\s+to\s+be\s+made|cheques?\s+should\s+be|bank\s+[a-z]+|authorised\s+signature|due\s+date|faktur\s+pajak)\b",
     re.I,
 )
 _METADATA_LINE_RE = re.compile(
@@ -194,15 +197,36 @@ def is_header_or_summary_line(desc: str) -> bool:
     clean = desc.strip().lower()
     if not clean:
         return True
-    if clean in _IGNORED_DESCRIPTIONS:
+    if clean in _IGNORED_DESCRIPTIONS or clean in _VERTICAL_SKIP_LABELS:
         return True
     if any(clean.startswith(prefix) for prefix in _HEADER_PREFIXES):
         return True
-    if re.search(r"\b(?:tanggal|date|jatuh tempo|due date)\b", clean):
+    if re.search(r"\b(?:tanggal|date|jatuh\s+tempo|due\s+date|etd|eta|bl\s*/?\s*awb|halaman|page|rekening|bank\s+account|account\s+name|notes)\b", clean):
         return True
     if re.search(r"\b(?:no|nomor|invoice|inv|faktur)\s*[:=.]?\s*[A-Za-z0-9]", clean):
         return True
+    if re.search(r"\b(?:total|subtotal|grand\s+total|total\s+bayar|total\s+tagihan|dpp|ppn|ex[\s-]*tax|vat)\b", clean):
+        return True
+    if re.search(r"\b(?:deskripsi\s+barang|rincian\s+barang)\s*/?\s*jasa\s*[:=]?", clean):
+        return True
+    if re.search(r"\b(?:ph|phone|telp?|fax)\b\s*[:#+0-9]", clean):
+        return True
+    if re.search(r"\b(?:npwp|tax\s+id)\b|\b\d{2}\.\d{3}\.\d{3}\.\d[-.]\d{3}\.\d{3}\b", clean):
+        return True
+    if re.search(r"\b(?:email|e-mail|website|http)\b", clean) or ("@" in clean and "." in clean):
+        return True
+    if re.search(r"\b(?:bank\b|payment\s+to\s+be\s+made|cheques?|swift|acc#|account#|authorised\s+signature|company\s+chop)\b", clean):
+        return True
+    if re.search(r"\b(?:gedung|blok\s+[a-z0-9]|rt\s*\d+|rw\s*\d+|jl\b|jl\.|jalan|raya|protokol|tanjung\s+priok|jakarta\s+(?:timur|utara|barat|selatan|pusat)|dki\s+jakarta)\b", clean):
+        return True
     return False
+
+
+def _is_horizontal_table_header_line(line: str) -> bool:
+    norm = _normalize_label(line)
+    has_desc = any(w in norm for w in ("description", "deskripsi", "uraian", "nama barang", "nama item", "rincian"))
+    has_amount_or_qty = any(w in norm for w in ("amount", "total", "harga", "jumlah", "nilai", "qty", "kuantitas"))
+    return bool(has_desc and has_amount_or_qty)
 
 
 def is_continuation_line(line: str) -> bool:
@@ -217,6 +241,9 @@ def is_continuation_line(line: str) -> bool:
     # Dimension patterns like 100 MM X 10.000 MM or 100MM X 10.000MM
     if re.search(r"\b\d+\s*(?:MM|CM|M|INCH|MTR|METER|\")\s*[Xx*]\s*[\d.]+\s*(?:MM|CM|M|INCH|MTR|METER|\")?", unbulleted, re.I):
         return True
+    # Technical specification patterns like 103.630MM PITCH, 50MM, 12MM THK, etc.
+    if re.search(r"\b\d+(?:[.,]\d+)?\s*(?:MM|CM|M|INCH|MTR|METER|PITCH|OD|ID|THK|DIA|KG|TON|LTR|VOLT|WATT|AMP|HP|KW|RPM|PSI|BAR)\b", unbulleted, re.I):
+        return True
     return False
 
 
@@ -227,6 +254,8 @@ def parse_line_item_text(line: str, has_pending_desc: bool = False) -> Optional[
         return None
 
     # Skip lines that are clearly headers or summary totals
+    if is_header_or_summary_line(clean):
+        return None
     first_token = clean.split()[0].lower()
     if first_token in ("subtotal", "total", "jumlah", "grand", "ppn", "vat", "terbilang", "no.", "no"):
         return None
@@ -270,24 +299,25 @@ def parse_line_item_text(line: str, has_pending_desc: bool = False) -> Optional[
                     line_total=total,
                 )
 
-        # Pattern 0B: Qty [Unit] LineTotal (single money amount)
-        p_num_one = re.match(
-            r"^(?:(?P<no>\d+)[\.\)]\s+)?(?P<qty>\d+(?:[.,]\d+)?)\s*"
-            r"(?P<unit>[a-zA-Z0-9]{1,10})?\s*"
-            r"(?:[:=]|->)?\s*"
+        # Pattern 0D: DJP e-Faktur format: [code] Rp <price> [x|×] <qty> <unit> [Potongan ...] <total>
+        p_faktur = re.match(
+            r"^(?:\d+\s+)?(?:(?:Rp\.?|IDR)\s*)?(?P<price>[\d.,]+)\s*[x×@]\s*"
+            r"(?P<qty>[\d.,]+)\s*"
+            r"(?P<unit>[a-zA-Z]+)?.*?\s+"
             r"(?P<total>(?:(?:Rp\.?|IDR)\s*)?[\d.,]+(?:[.,]\s*[-–—])?)$",
             clean,
             re.I,
         )
-        if p_num_one:
-            gd = p_num_one.groupdict()
+        if p_faktur:
+            gd = p_faktur.groupdict()
             unit_str = (gd["unit"] or "").strip().lower()
+            p_cand = parse_candidate_money(gd["price"])
             q_cand = parse_candidate_money(gd["qty"])
             t_cand = parse_candidate_money(gd["total"])
+            price = p_cand.value
             qty = q_cand.value
             total = t_cand.value
             if total is not None:
-                price = (total / qty).quantize(Decimal("0.01")) if qty and qty > 0 else total
                 return LineItem(
                     description="",
                     quantity=qty,
@@ -297,12 +327,58 @@ def parse_line_item_text(line: str, has_pending_desc: bool = False) -> Optional[
                     line_total=total,
                 )
 
+        # Pattern 0B: Qty Unit LineTotal (single money amount with explicit unit)
+        p_num_one = re.match(
+            r"^(?:(?P<no>\d+)[\.\)]\s+)?(?P<qty>\d+(?:[.,]\d+)?)\s*"
+            r"(?P<unit>[a-zA-Z]{1,10})\s+"
+            r"(?:[:=]|->)?\s*"
+            r"(?P<total>(?:(?:Rp\.?|IDR)\s*)?[\d.,]+(?:[.,]\s*[-–—])?)$",
+            clean,
+            re.I,
+        )
+        if p_num_one:
+            gd = p_num_one.groupdict()
+            unit_str = (gd["unit"] or "").strip().lower()
+            if unit_str in _CONSTRUCTION_UNITS:
+                q_cand = parse_candidate_money(gd["qty"])
+                t_cand = parse_candidate_money(gd["total"])
+                qty = q_cand.value
+                total = t_cand.value
+                if total is not None:
+                    price = (total / qty).quantize(Decimal("0.01")) if qty and qty > 0 else total
+                    return LineItem(
+                        description="",
+                        quantity=qty,
+                        unit=unit_str,
+                        unit_price=price,
+                        amount=total,
+                        line_total=total,
+                    )
+
+        # Pattern 0C: Standalone money line when preceded by description (e.g. "Rp 1.250.000")
+        p_money_only = re.match(
+            r"^(?:(?:Rp\.?|IDR)\s*)?[\d.,]+(?:[.,]\s*[-–—])?$",
+            clean,
+            re.I,
+        )
+        if p_money_only and _looks_like_money(clean):
+            amt = _parse_vertical_money(clean) or (parse_candidate_money(clean).value if parse_candidate_money(clean) else None)
+            if amt is not None and amt > 0:
+                return LineItem(
+                    description="",
+                    quantity=None,
+                    unit=None,
+                    unit_price=amt,
+                    amount=amt,
+                    line_total=amt,
+                )
+
     # Pattern 1: [No.] Description   Qty   Unit   UnitPrice   [Tax]   LineTotal
     # E.g.: "Semen Portland 50kg 20 sak Rp 65.000 Rp 1.300.000"
     # E.g.: "Pasir Pasang 2 m3 @ 350.000 = 700.000"
     # E.g.: "LEM SC 2000 + HARDENER UTR 10 SET 620.000 6.200.000"
     p1 = re.match(
-        r"^(?:(?P<no>\d+)[\.\)]\s+)?(?P<desc>[A-Za-z0-9\s/.,\-\(\):+&%*\"\'#]+?)\s+"
+        r"^(?:(?P<no>\d+)(?:[\.\)]|\s{2,})\s*)?(?P<desc>[A-Za-z0-9\s/.,\-\(\):+&%*\"\'#]+?)\s+"
         r"(?P<qty>\d+(?:[.,]\d+)?)\s*"
         r"(?P<unit>[a-zA-Z0-9]{1,10})?\s*"
         r"(?:x|@)?\s*"
@@ -315,7 +391,7 @@ def parse_line_item_text(line: str, has_pending_desc: bool = False) -> Optional[
     )
     if p1:
         gd = p1.groupdict()
-        desc = gd["desc"].strip(" -:\t")
+        desc = re.sub(r"[ \t]+", " ", gd["desc"]).strip(" -:\t")
         if is_header_or_summary_line(desc):
             return None
 
@@ -323,7 +399,7 @@ def parse_line_item_text(line: str, has_pending_desc: bool = False) -> Optional[
         if unit_str and unit_str not in _CONSTRUCTION_UNITS:
             if len(unit_str) > 6:
                 desc = f"{desc} {unit_str}".strip()
-                unit_str = None
+            unit_str = None
 
         total_str = gd.get("total_plain") or gd.get("total_curr")
         q_cand = parse_candidate_money(gd["qty"])
@@ -341,6 +417,20 @@ def parse_line_item_text(line: str, has_pending_desc: bool = False) -> Optional[
             if price is None and qty and total and qty > 0:
                 price = (total / qty).quantize(Decimal("0.01"))
 
+            # If qty is 0 or mathematically inconsistent with price * qty == total,
+            # check if expected_qty = total / price matches numbers at the tail of desc (common in multi-column tables)
+            if price and total and price > 0 and total > 0 and (qty is None or qty == 0 or abs(qty * price - total) > Decimal("1.00")):
+                expected_qty = total / price
+                exp_rounded = round(expected_qty)
+                cand_nums = re.findall(r"\b\d+(?:[.,]\d+)?\b", desc)
+                if abs(expected_qty - exp_rounded) < Decimal("0.001"):
+                    str_exp = str(int(exp_rounded))
+                    if str_exp in cand_nums:
+                        qty = Decimal(int(exp_rounded))
+                        desc = re.sub(r"\s+[\d\s.,]+$", "", desc).strip()
+                    elif qty is None or qty == 0:
+                        qty = Decimal(int(exp_rounded))
+
             return LineItem(
                 description=desc,
                 quantity=qty,
@@ -351,11 +441,11 @@ def parse_line_item_text(line: str, has_pending_desc: bool = False) -> Optional[
                 line_total=total,
             )
 
-    # Pattern 1B: [No.] Description   Qty   Unit   LineTotal (single money amount)
+    # Pattern 1B: [No.] Description   Qty   Unit   LineTotal (with explicit recognized unit)
     p1b = re.match(
-        r"^(?:(?P<no>\d+)[\.\)]\s+)?(?P<desc>[A-Za-z0-9\s/.,\-\(\):+&%*\"\'#]+?)\s+"
+        r"^(?:(?P<no>\d+)(?:[\.\)]|\s{2,})\s*)?(?P<desc>[A-Za-z0-9\s/.,\-\(\):+&%*\"\'#]+?)\s+"
         r"(?P<qty>\d+(?:[.,]\d+)?)\s*"
-        r"(?P<unit>[a-zA-Z0-9]{1,10})?\s*"
+        r"(?P<unit>[a-zA-Z]{1,10})\s+"
         r"(?:[:=]|->)?\s*"
         r"(?P<total>(?:(?:Rp\.?|IDR)\s*)?[\d.,]+(?:[.,]\s*[-–—])?)$",
         clean,
@@ -364,13 +454,8 @@ def parse_line_item_text(line: str, has_pending_desc: bool = False) -> Optional[
     if p1b:
         gd = p1b.groupdict()
         desc = gd["desc"].strip(" -:\t")
-        if not is_header_or_summary_line(desc):
-            unit_str = (gd["unit"] or "").strip().lower()
-            if unit_str and unit_str not in _CONSTRUCTION_UNITS:
-                if len(unit_str) > 6:
-                    desc = f"{desc} {unit_str}".strip()
-                    unit_str = None
-
+        unit_str = (gd["unit"] or "").strip().lower()
+        if unit_str in _CONSTRUCTION_UNITS and not is_header_or_summary_line(desc):
             q_cand = parse_candidate_money(gd["qty"])
             t_cand = parse_candidate_money(gd["total"])
             qty = q_cand.value
@@ -381,7 +466,7 @@ def parse_line_item_text(line: str, has_pending_desc: bool = False) -> Optional[
                 return LineItem(
                     description=desc,
                     quantity=qty,
-                    unit=unit_str or None,
+                    unit=unit_str,
                     unit_price=price,
                     amount=total,
                     line_total=total,
@@ -390,7 +475,7 @@ def parse_line_item_text(line: str, has_pending_desc: bool = False) -> Optional[
     # Pattern 2: [No.] Description   Qty x UnitPrice = LineTotal
     # E.g.: "Kawat Bendrat 5 x 25.000 = 125.000"
     p2 = re.match(
-        r"^(?:(?P<no>\d+)[\.\)]\s+)?(?P<desc>[A-Za-z0-9\s/.,\-\(\):+&%*\"\'#]+?)\s+"
+        r"^(?:(?P<no>\d+)(?:[\.\)]|\s{2,})\s*)?(?P<desc>[A-Za-z0-9\s/.,\-\(\):+&%*\"\'#]+?)\s+"
         r"(?P<qty>\d+(?:[.,]\d+)?)\s*(?:x|@)\s*"
         r"(?P<price>(?:(?:Rp\.?|IDR)\s*)?[\d.,]+(?:[.,]\s*[-–—])?)\s*(?:[:=])\s*"
         r"(?P<total>(?:(?:Rp\.?|IDR)\s*)?[\d.,]+(?:[.,]\s*[-–—])?)$",
@@ -420,12 +505,43 @@ def parse_line_item_text(line: str, has_pending_desc: bool = False) -> Optional[
                 line_total=total,
             )
 
+    # Pattern 1C: [No.] Description [-:=]? [Rp/IDR] LineTotal (single amount without explicit quantity)
+    # E.g.: "1   JASA ANGKUT GERMAN TO JAKARTA   19.927.250"
+    # E.g.: "2   STAMP   10.000"
+    # E.g.: " 1. Pengadaan Material Panel Listrik - Rp 5.000.000"
+    p1c = re.match(
+        r"^(?:(?P<no>\d+)(?:[\.\)]|\s{2,})\s*)?(?P<desc>[A-Za-z0-9\s/.,\-\(\):+&%*\"\'#]+?)\s*"
+        r"(?:[-–—:]|->)?\s*"
+        r"(?P<total>(?:(?:Rp\.?|IDR)\s*)?\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{2})?|(?:(?:Rp\.?|IDR)\s*)\d+(?:[.,]\d{2})?)$",
+        clean,
+        re.I,
+    )
+    if p1c:
+        gd = p1c.groupdict()
+        desc = gd["desc"].strip(" -:\t")
+        desc = re.sub(r"(?i)\s*[-–—:]?\s*(?:rp\.?|idr)\s*$", "", desc).strip()
+        if desc and not is_header_or_summary_line(desc):
+            total_raw = gd["total"]
+            amt = _parse_vertical_money(total_raw)
+            if amt is None:
+                cand = parse_candidate_money(total_raw)
+                amt = cand.value
+            if amt is not None and amt > 0:
+                return LineItem(
+                    description=desc,
+                    quantity=None,
+                    unit=None,
+                    unit_price=amt,
+                    amount=amt,
+                    line_total=amt,
+                )
+
     return None
 
 
 def cluster_ocr_boxes_into_lines(boxes: any, txts: List[str], line_threshold: float = 12.0) -> List[str]:
     """Clusters 2D OCR text boxes into horizontal text lines based on y-coordinate proximity."""
-    if not boxes or not txts or len(boxes) != len(txts):
+    if boxes is None or len(boxes) == 0 or not txts or len(boxes) != len(txts):
         return txts or []
 
     items = []
@@ -479,14 +595,32 @@ def _parse_lines_into_items(lines: List[str]) -> List[LineItem]:
         if vertical_items:
             return vertical_items
 
+    # If any line is a horizontal table header, start scanning from after the first header
+    header_idx = None
+    for idx, raw in enumerate(lines):
+        if _is_horizontal_table_header_line(raw.strip()):
+            header_idx = idx
+            break
+
+    start_idx = (header_idx + 1) if header_idx is not None else 0
     items: List[LineItem] = []
     pending_desc: List[str] = []
+    seen_table_header = header_idx is not None
 
-    for raw in lines:
+    for raw in lines[start_idx:]:
         line = raw.strip()
         if not line:
             continue
+
+        if _is_horizontal_table_header_line(line):
+            if not items:
+                seen_table_header = True
+                pending_desc.clear()
+            continue
+
         if is_header_or_summary_line(line):
+            if items and _TABLE_TERMINATOR_RE.search(line):
+                break
             pending_desc.clear()
             continue
 
@@ -500,15 +634,58 @@ def _parse_lines_into_items(lines: List[str]) -> List[LineItem]:
                 if pending_desc:
                     item.description = "\n".join(pending_desc)
                     pending_desc.clear()
-            item.description = re.sub(r"^\d+[\.\)]\s*", "", item.description.strip())
-            items.append(item)
+            item.description = re.sub(r"^\d+(?:[\.\)]\s*|\s{2,})", "", item.description.strip())
+            if not is_header_or_summary_line(item.description):
+                items.append(item)
         else:
             if items and not pending_desc and is_continuation_line(line):
                 items[-1].description = f"{items[-1].description}\n{line}"
+            elif not seen_table_header and any(w in line.lower() for w in ("inv", "tgl", "date", "bill", "alamat", "jl.", "jalan", "telp", "phone", "etd", "eta", "awb")):
+                pending_desc.clear()
             else:
                 pending_desc.append(line)
 
     return items
+
+
+def _score_item_candidates(items: List[LineItem], raw_text: str = "") -> float:
+    if not items:
+        return 0.0
+    score = 0.0
+    totals = extract_document_monetary_totals(raw_text) if raw_text else {}
+    doc_total = totals.get("total_amount")
+    subtotal = totals.get("subtotal")
+    target_total = subtotal or doc_total
+
+    items_sum = sum((it.amount or Decimal("0")) for it in items)
+
+    for it in items:
+        desc = (it.description or "").strip()
+        amt = it.amount or Decimal("0")
+        if not desc or amt <= Decimal("0"):
+            score -= 5.0
+            continue
+        if is_header_or_summary_line(desc):
+            score -= 10.0
+            continue
+        score += 2.0
+        if it.quantity and it.unit_price and it.line_total:
+            if abs(it.quantity * it.unit_price - it.line_total) <= Decimal("1.00"):
+                score += 3.0
+
+    if subtotal and (items_sum == subtotal or abs(items_sum - subtotal) <= Decimal("1.00")):
+        score += 50.0
+    elif doc_total and (items_sum == doc_total or abs(items_sum - doc_total) <= Decimal("1.00")):
+        score += 50.0
+    elif target_total and target_total > Decimal("0"):
+        if items_sum < target_total:
+            diff_ratio = abs(items_sum - target_total) / target_total
+            if diff_ratio < Decimal("0.15"):
+                score += 20.0
+        else:
+            score -= 20.0
+
+    return score
 
 
 def extract_line_items_from_text(
@@ -518,8 +695,10 @@ def extract_line_items_from_text(
 ) -> List[LineItem]:
     """Extracts structured line items from document text or OCR bounding geometry."""
     clustered_items: List[LineItem] = []
+    clustered_text = ""
     if ocr_boxes is not None and ocr_txts:
         clustered_lines = cluster_ocr_boxes_into_lines(ocr_boxes, ocr_txts)
+        clustered_text = "\n".join(clustered_lines)
         clustered_items = _parse_lines_into_items(clustered_lines)
 
     raw_items: List[LineItem] = []
@@ -527,8 +706,9 @@ def extract_line_items_from_text(
         raw_items = _parse_lines_into_items(raw_text.splitlines())
 
     if clustered_items and raw_items:
-        # Prefer the set with more line items or valid extracted amounts
-        if len(clustered_items) >= len(raw_items):
+        score_clustered = _score_item_candidates(clustered_items, clustered_text or raw_text)
+        score_raw = _score_item_candidates(raw_items, raw_text)
+        if score_clustered >= score_raw:
             return clustered_items
         return raw_items
     elif clustered_items:

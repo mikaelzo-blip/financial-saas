@@ -186,14 +186,24 @@ def extract_document_monetary_totals(text: str | None) -> dict[str, Any]:
     vat_val: Decimal | None = None
     vat_ev: str | None = None
     vat_patterns = [
-        r"\b(?:ppn|vat|pajak\s+pertambahan\s+nilai|pajak)(?:\s*\(?\s*1[12]\s*%\s*\)?)?\s*[:=]?\s*(?:Rp\.?|IDR)?\s*([\d.,\-]+)",
+        r"(?<!faktur\s)(?<!faktur)(?<!nomor\s)(?<!nomor)(?<!seri\s)(?<!seri)(?<!kantor\s)(?<!objek\s)(?<!wajib\s)\b(?:ppn|vat|pajak\s+pertambahan\s+nilai|nilai\s+pajak|jumlah\s+pajak)(?:\s*\(?\s*1[12]\s*%\s*\)?)?\s*[:=]?\s*(?:Rp\.?|IDR)?\s*([\d.,\-]+)",
     ]
     for pat in vat_patterns:
         for m in re.finditer(pat, text, re.I):
+            # Check surrounding context to avoid false matches like "Faktur Pajak: 040..."
+            start_pos = max(0, m.start() - 25)
+            prefix = text[start_pos:m.start()].lower()
+            if any(w in prefix for w in ("faktur", "seri", "nomor", "npwp", "kantor", "objek", "wajib")):
+                continue
+
             cand = parse_candidate_money(m.group(0))
             if cand.value is None:
                 cand = parse_candidate_money(m.group(1))
             if cand.value is not None:
+                # Serial numbers, tax invoice codes or NPWP have 15-16 bare digits
+                raw_digits = re.sub(r"\D", "", m.group(1))
+                if len(raw_digits) >= 13 and ("." not in m.group(1) and "," not in m.group(1)):
+                    continue
                 vat_cand = cand
                 vat_val = cand.value
                 vat_ev = m.group(0).strip()

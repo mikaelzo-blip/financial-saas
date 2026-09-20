@@ -29,7 +29,10 @@ from src.services.documents.normalization import (
 )
 from src.services.documents.quality_gate import evaluate_page_text_quality
 from src.services.documents.rasterizer import open_pdf_document, render_pdf_page_to_image
-from src.services.documents.table_extractor import extract_line_items_from_text
+from src.services.documents.table_extractor import (
+    cluster_ocr_boxes_into_lines,
+    extract_line_items_from_text,
+)
 
 
 def sanitize_raw_text(text: str) -> str:
@@ -208,9 +211,22 @@ class LocalExtractionProvider:
 
         field_evidence: Dict[str, ExtractedField] = {}
 
+        # If bounding boxes exist, build clustered lines text for superior table and total parsing
+        clustered_text = ""
+        if all_boxes and all_ocr_txts:
+            clustered_lines = cluster_ocr_boxes_into_lines(all_boxes, all_ocr_txts)
+            clustered_text = "\n".join(clustered_lines)
+
         # 1-3. Financial Totals Extraction (Grand Total, Subtotal, VAT)
-        # Uses strict semantic priority: Grand Total > Total Amount > Amount Due > Net Payable > Subtotal fallback
-        totals = extract_document_monetary_totals(text)
+        # Check clustered_text first for horizontally aligned totals, fallback to raw text
+        totals = extract_document_monetary_totals(clustered_text) if clustered_text else {}
+        raw_totals = extract_document_monetary_totals(text)
+        if not totals.get("total_amount"):
+            totals = raw_totals
+        else:
+            for k, v in raw_totals.items():
+                if totals.get(k) is None:
+                    totals[k] = v
         total_amount = totals["total_amount"]
         total_candidate = totals["total_candidate"]
         if total_amount is not None:
@@ -315,9 +331,19 @@ class LocalExtractionProvider:
         tax_invoice_num = tax_inv_match.group(1) if tax_inv_match else None
 
         # Standard invoice number
-        inv_match = re.search(r"\b(?:INV|FAK|BILL)[-/][A-Z0-9-/]+", text, re.I)
+        inv_match = re.search(r"\b(?:INV|FAK|BILL)[-/][A-Z0-9\-\/.]+", text, re.I)
         if not inv_match:
-            inv_match = re.search(r"\b(?:no(?:mor)?\s*invoice|no(?:mor)?\s*faktur|invoice\s*no)\s*[:#]?\s*([A-Za-z0-9\-\/]+)", text, re.I)
+            inv_match = re.search(
+                r"\b(?:no(?:mor)?\s*invoice|no(?:mor)?\s*faktur|invoice\s*(?:no(?:mor)?)?|faktur)\s*[:#]\s*([A-Za-z0-9\-\/.]+)",
+                text,
+                re.I,
+            )
+        if not inv_match:
+            inv_match = re.search(
+                r"\b(?:no(?:mor)?\s*invoice|no(?:mor)?\s*faktur|invoice\s*no(?:mor)?)\s*[:#]?\s*([A-Za-z0-9\-\/.]+)",
+                text,
+                re.I,
+            )
         invoice_number = tax_invoice_num or (inv_match.group(1) if (inv_match and inv_match.groups()) else (inv_match.group(0) if inv_match else None))
         if invoice_number:
             field_evidence["invoice_number"] = ExtractedField(
@@ -441,6 +467,7 @@ class LocalExtractionProvider:
         project_ref = spk_number or (re.search(r"\bPRJ[-/][A-Z0-9-/]+", text, re.I).group(0) if re.search(r"\bPRJ[-/][A-Z0-9-/]+", text, re.I) else None)
 
         # 10. Structured Extraction Schema
+        doc_desc = ", ".join(dict.fromkeys(it.description for it in line_items if it.description)) or None
         data = StructuredExtraction(
             document_number=invoice_number or spk_number or bast_number or transfer_ref,
             invoice_number=invoice_number,
@@ -450,6 +477,7 @@ class LocalExtractionProvider:
             due_date=due_date,
             issuer_name=issuer_name,
             recipient_name=recipient_name,
+            description=doc_desc,
             subtotal=subtotal_amount,
             vat_amount=vat_amount,
             total_amount=total_amount,

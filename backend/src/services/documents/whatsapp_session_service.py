@@ -177,16 +177,25 @@ class WhatsAppSessionService:
                     open_session.message_wamids = list(open_session.message_wamids) + [wamid]
                 if document_id and str(document_id) not in open_session.document_ids:
                     open_session.document_ids = list(open_session.document_ids) + [str(document_id)]
-                if text and text.strip():
+                clean_text = text.strip() if text else ""
+                is_placeholder = bool(clean_text.startswith("[") and clean_text.endswith(" received]"))
+                if clean_text and not is_placeholder:
                     open_session.captions = list(open_session.captions) + [{
                         "wamid": wamid,
-                        "text": text.strip(),
+                        "text": clean_text,
                         "timestamp": ts.isoformat(),
                     }]
 
                 # Update document source_metadata with session info
                 if document_id:
                     await cls._link_document_session(db, document_id, open_session)
+                elif open_session.document_ids:
+                    # When a caption message arrives after documents, update all documents in session
+                    for did in open_session.document_ids:
+                        try:
+                            await cls._link_document_session(db, uuid.UUID(did), open_session)
+                        except Exception:
+                            pass
 
                 await db.flush()
                 return open_session, False
@@ -197,7 +206,9 @@ class WhatsAppSessionService:
 
         # Check late message enrichment on recently finalized session (Section 22)
         # If pure text message arrives for recently finalized session (within 5 minutes)
-        if message_type.upper() == "TEXT" and text and text.strip():
+        clean_text = text.strip() if text else ""
+        is_placeholder = bool(clean_text.startswith("[") and clean_text.endswith(" received]"))
+        if message_type.upper() == "TEXT" and clean_text and not is_placeholder:
             latest = await cls.get_latest_session(db, organization_id, phone_number)
             if latest and latest.status == "FINALIZED":
                 latest_last_ts = latest.last_message_at
@@ -205,7 +216,7 @@ class WhatsAppSessionService:
                     latest_last_ts = latest_last_ts.replace(tzinfo=timezone.utc)
                 if (ts - latest_last_ts).total_seconds() <= 300:
                     enriched = await cls._handle_late_message_enrichment(
-                        db, organization_id, latest, wamid, text.strip(), ts
+                        db, organization_id, latest, wamid, clean_text, ts
                     )
                     if enriched:
                         return latest, False
@@ -225,7 +236,7 @@ class WhatsAppSessionService:
             ack_wamid=None,
             document_ids=[str(document_id)] if document_id else [],
             message_wamids=[wamid],
-            captions=[{"wamid": wamid, "text": text.strip(), "timestamp": ts.isoformat()}] if text and text.strip() else [],
+            captions=[{"wamid": wamid, "text": clean_text, "timestamp": ts.isoformat()}] if clean_text and not is_placeholder else [],
             session_metadata={},
         )
         db.add(new_session)
@@ -249,11 +260,21 @@ class WhatsAppSessionService:
             meta = dict(doc.source_metadata or {})
             meta["session_id"] = str(session.id)
             meta["session_code"] = session.session_code
-            # If session has captions, store latest caption hints in metadata
-            if session.captions:
-                all_caption_text = " ".join(c.get("text", "") for c in session.captions if c.get("text"))
+            # If session has captions, store latest caption hints and caption in metadata
+            valid_captions = [
+                c.get("text", "").strip() for c in (session.captions or [])
+                if c.get("text") and not (c.get("text", "").strip().startswith("[") and c.get("text", "").strip().endswith(" received]"))
+            ]
+            if valid_captions:
+                all_caption_text = " ".join(valid_captions)
                 hints = extract_caption_hints(all_caption_text)
                 meta["session_caption_hints"] = hints
+                meta["hints"] = hints
+                existing_cap = meta.get("caption")
+                if not existing_cap or (existing_cap.strip().startswith("[") and existing_cap.strip().endswith(" received]")):
+                    meta["caption"] = all_caption_text
+                elif all_caption_text not in existing_cap:
+                    meta["caption"] = f"{existing_cap} | {all_caption_text}"
             doc.source_metadata = meta
             await db.flush()
 
@@ -317,12 +338,22 @@ class WhatsAppSessionService:
             return True
 
         # Not yet posted: enrich document metadata with new caption hints
-        all_caption_text = " ".join(c.get("text", "") for c in session.captions if c.get("text"))
+        valid_captions = [
+            c.get("text", "").strip() for c in (session.captions or [])
+            if c.get("text") and not (c.get("text", "").strip().startswith("[") and c.get("text", "").strip().endswith(" received]"))
+        ]
+        all_caption_text = " ".join(valid_captions)
         hints = extract_caption_hints(all_caption_text)
 
         for doc in docs:
             meta = dict(doc.source_metadata or {})
             meta["session_caption_hints"] = hints
+            meta["hints"] = hints
+            existing_cap = meta.get("caption")
+            if not existing_cap or (existing_cap.strip().startswith("[") and existing_cap.strip().endswith(" received]")):
+                meta["caption"] = all_caption_text
+            elif text.strip() not in existing_cap:
+                meta["caption"] = f"{existing_cap} | {text.strip()}"
             meta.setdefault("late_captions", []).append(text)
             doc.source_metadata = meta
 

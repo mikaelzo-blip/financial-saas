@@ -23,7 +23,7 @@ class ClassificationResult:
 
 # Header regex rules checked preferentially in the first 25 lines of text
 _HEADER_RULES: List[Tuple[DocumentType, str, int, str]] = [
-    (DocumentType.TRANSFER_PROOF, r"\b(?:bukti\s+transfer|bukti\s+transaksi|transfer\s+berhasil|transfer\s+sukses|m-transfer|m-banking|internet\s+banking|transaksi\s+berhasil)\b", 70, "header: transfer-proof"),
+    (DocumentType.TRANSFER_PROOF, r"\b(?:bukti\s+transfer|bukti\s+transaksi|transfer\s+berhasil|transfer\s+sukses|m-transfer|m-banking|internet\s+banking|transaksi\s+berhasil|single\s+transfer|transfer\s+to\b|transaction\s+status|transfer\s+receipt)\b", 70, "header: transfer-proof"),
     (DocumentType.BANK_STATEMENT, r"\b(?:rekening\s+koran|bank\s+statement|mutasi\s+rekening|account\s+statement)\b", 70, "header: bank-statement"),
     (DocumentType.TAX_INVOICE, r"\b(?:faktur\s+pajak|e-faktur)\b", 70, "header: tax-invoice"),
     (DocumentType.CUSTOMER_INVOICE, r"\b(?:customer\s+invoice|invoice\s+pelanggan|faktur\s+penjualan|tagihan\s+proyek|progress\s+billing)\b", 65, "header: customer-invoice"),
@@ -41,12 +41,12 @@ _HEADER_RULES: List[Tuple[DocumentType, str, int, str]] = [
 # Body signals: (pattern, score, signal_name) per document type
 _BODY_SIGNALS: Dict[DocumentType, List[Tuple[str, int, str]]] = {
     DocumentType.TRANSFER_PROOF: [
-        (r"\b(?:rekening\s+tujuan|nama\s+tujuan|penerima|tujuan\s+transfer)\b", 25, "transfer-target"),
-        (r"\b(?:rekening\s+pengirim|sumber\s+dana|pengirim)\b", 20, "transfer-source"),
-        (r"\b(?:no\s+referensi|ref\s*#?|nomor\s+transaksi|reference\s+no)\b", 20, "transfer-ref"),
+        (r"\b(?:rekening\s+tujuan|nama\s+tujuan|penerima|tujuan\s+transfer|destination\s+account|beneficiary(?:\s+bank)?|transfer\s+to)\b", 25, "transfer-target"),
+        (r"\b(?:rekening\s+pengirim|sumber\s+dana|pengirim|source\s+of\s+funds?|from\s+account)\b", 20, "transfer-source"),
+        (r"\b(?:no\s+referensi|\bref\b\s*#?|nomor\s+transaksi|reference\s+no|transaction\s+(?:reference|id)|document\s+number)\b", 20, "transfer-ref"),
         (r"\b(?:bi-fast|realtime\s+online|skn|rtgs|kliring)\b", 20, "transfer-network"),
         (r"\b(?:bca|bank\s+central\s+asia|mandiri|bri|bni|bsi|cimb|permata|danamon|jago|jenius)\b", 15, "bank-identity"),
-        (r"\b(?:nominal|jumlah\s+transfer)\b", 20, "transfer-amount-label"),
+        (r"\b(?:nominal|jumlah\s+transfer|total\s+debit\s+amount|transfer\s+amount)\b", 20, "transfer-amount-label"),
     ],
     DocumentType.BANK_STATEMENT: [
         (r"\b(?:saldo\s+awal|saldo\s+akhir)\b", 40, "statement-balance"),
@@ -134,7 +134,7 @@ def classify_text(text: str) -> ClassificationResult:
     has_po_title = bool(re.search(r"\b(?:purchase\s+order|order\s+pembelian)\b", header_region, re.I))
     has_bast_title = bool(re.search(r"\b(?:berita\s+acara\s+serah\s+terima|\bbast\b)\b", header_region, re.I))
     has_sj_title = bool(re.search(r"\b(?:surat\s+jalan|delivery\s+order)\b", header_region, re.I))
-    has_transfer_title = bool(re.search(r"\b(?:bukti\s+transfer|bukti\s+transaksi|transfer\s+berhasil|transfer\s+sukses|m-transfer)\b", header_region, re.I))
+    has_transfer_title = bool(re.search(r"\b(?:bukti\s+transfer|bukti\s+transaksi|transfer\s+berhasil|transfer\s+sukses|m-transfer|single\s+transfer|transfer\s+to\b|transaction\s+status|transfer\s+receipt)\b", header_region, re.I))
 
     if has_invoice_title and not has_po_title:
         scores[DocumentType.VENDOR_INVOICE] += 30

@@ -83,3 +83,9 @@ uploads/
 storage/
 .runtime/
 
+# Session / runtime artifacts
+session.json
+dogfood-output/
+graphify-out/
+.superpowers/
+

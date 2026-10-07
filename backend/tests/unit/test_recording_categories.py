@@ -27,11 +27,13 @@ def test_loads_every_recording_category_in_order():
     assert [e.value for e in entries] == [
         "MAT",
         "SUB",
+        "LAB",
         "TRN",
         "EQP",
         "LOG",
         "TRAVEL_OFFICE",
         "OFFICE_ADMIN",
+        "FEE",
         "OTHER_OPERATIONAL",
     ]
 
@@ -39,7 +41,8 @@ def test_loads_every_recording_category_in_order():
 def test_project_required_cost_categories_matches_curated_business_rule():
     # LOG (logistics & freight) joined the project-required cost categories so
     # "JASA ANGKUT" lines can book to HPP 5101 instead of falling to 6199.
-    assert PROJECT_REQUIRED_COST_CATEGORIES == {"MAT", "SUB", "TRN", "EQP", "LOG"}
+    # LAB (direct labor) also requires a project to book to HPP 5101.
+    assert PROJECT_REQUIRED_COST_CATEGORIES == {"MAT", "SUB", "LAB", "TRN", "EQP", "LOG"}
 
 
 def test_every_category_is_a_real_enum_member():

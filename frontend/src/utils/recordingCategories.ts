@@ -12,11 +12,13 @@ interface SharedRecordingCategory {
 const LABELS: Record<string, string> = {
   MAT: 'Beli Barang / Material',
   SUB: 'Jasa / Subkontraktor',
+  LAB: 'Upah Tukang & Tenaga Kerja (proyek)',
   TRN: 'Bensin & Transport (proyek)',
   EQP: 'Peralatan / Sewa Alat',
   LOG: 'Jasa Angkut / Ekspedisi (proyek)',
   TRAVEL_OFFICE: 'Bensin / Kendaraan (kantor)',
   OFFICE_ADMIN: 'ATK / Operasional Kantor',
+  FEE: 'Honorarium / Fee (kantor)',
   OTHER_OPERATIONAL: 'Lain-lain',
 };
 

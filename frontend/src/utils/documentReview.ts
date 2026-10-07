@@ -55,6 +55,31 @@ export const EVIDENCE_DOCUMENT_TYPES: ReadonlySet<string> = new Set<string>([
 export const isEvidenceDocument = (documentType: string | undefined | null): boolean =>
   Boolean(documentType && EVIDENCE_DOCUMENT_TYPES.has(documentType));
 
+export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
+  TRANSFER_PROOF: 'Bukti Transfer Bank',
+  RECEIPT: 'Kuitansi / Nota Pembelian',
+  VENDOR_INVOICE: 'Tagihan / Faktur Vendor',
+  CUSTOMER_INVOICE: 'Invoice / Penagihan Pelanggan',
+  SPK: 'Surat Perintah Kerja (SPK)',
+  CONTRACT: 'Kontrak / Perjanjian',
+  BAST: 'Berita Acara Serah Terima (BAST)',
+  SURAT_JALAN: 'Surat Jalan / Delivery Order',
+  PURCHASE_ORDER: 'Purchase Order (PO)',
+  PO_CUSTOMER: 'PO Pelanggan',
+  BANK_STATEMENT: 'Rekening Koran / Mutasi Bank',
+  PETTY_CASH_PROOF: 'Bukti Kas Kecil',
+  TAX_INVOICE: 'Faktur Pajak',
+  WITHHOLDING_DOCUMENT: 'Bukti Potong Pajak',
+  OTHER_TAX_DOCUMENT: 'Dokumen Pajak Lainnya',
+  PROGRESS_REPORT: 'Laporan Progres',
+  TIMESHEET: 'Timesheet / Absensi',
+  QUOTATION: 'Penawaran Harga / Quotation',
+  VARIATION_ORDER: 'Variation Order (VO)',
+  SUBCONTRACT_AGREEMENT: 'Perjanjian Subkontrak',
+  CUSTOMER_RECEIPT: 'Tanda Terima Pelanggan',
+  UNKNOWN: 'Lainnya / Tidak Diketahui',
+};
+
 export const isPaymentAccountRequired = (
   transactionType: TransactionType | undefined,
   documentType?: string,

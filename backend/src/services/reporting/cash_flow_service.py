@@ -2,12 +2,12 @@ import uuid
 from datetime import date
 from decimal import Decimal
 from typing import List, Dict
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.journal import JournalEntry, JournalLine
 from src.models.transaction import Transaction
-from src.models.coa import ChartOfAccount
+from src.models.coa import ChartOfAccount, PaymentAccount
 from src.models.enums import AccountType, TransactionType
 from src.schemas.reporting import (
     ReportLineItem,
@@ -35,11 +35,18 @@ class CashFlowService:
         org_name = await get_organization_name(session, organization_id)
         period_label = format_period_label(s_date, e_date)
 
-        # 1. Fetch cash/bank COA IDs (1101 prefix)
+        # 1. Fetch cash/bank COA IDs
         cash_acc_stmt = select(ChartOfAccount.id).where(
             and_(
                 ChartOfAccount.organization_id == organization_id,
-                ChartOfAccount.account_code.like("1101%"),
+                or_(
+                    ChartOfAccount.account_code.like("110%"),
+                    ChartOfAccount.report_group.in_(["Kas & Bank", "CASH", "Kas & Rekening Bank"]),
+                    ChartOfAccount.id.in_(
+                        select(PaymentAccount.coa_account_id).where(PaymentAccount.organization_id == organization_id)
+                    )
+                ),
+                ChartOfAccount.account_type == AccountType.ASSET,
                 ChartOfAccount.is_active == True
             )
         )

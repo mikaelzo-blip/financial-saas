@@ -95,10 +95,22 @@ def parse_candidate_date(raw: str | None) -> NormalizedCandidate[date]:
         except ValueError:
             return NormalizedCandidate(value=None, confidence=Decimal("0"), evidence=raw, validation_status="INVALID")
 
-    # 2. Named month format: e.g. "13 September 2026", "13-Sep-2026", "13 Sep 2026", "September 13, 2026"
+    # 2. Named month format: e.g. "13 September 2026", "13-Sep-2026", "13 Sep 2026"
     named_pattern = r"(?i)^\s*(?:tanggal|tgl|date)?\s*[:=]?\s*(\d{1,2})[\s\-]+([a-zA-Z]+)[\s\-]+(\d{4})\s*$"
     if m := re.match(named_pattern, value):
         day_str, month_str, year_str = m.group(1), m.group(2).upper(), m.group(3)
+        month_num = _MONTH_MAP.get(month_str)
+        if month_num:
+            try:
+                parsed = date(int(year_str), month_num, int(day_str))
+                return NormalizedCandidate(value=parsed, confidence=Decimal("1"), evidence=raw, validation_status="VALID")
+            except ValueError:
+                return NormalizedCandidate(value=None, confidence=Decimal("0"), evidence=raw, validation_status="INVALID")
+
+    # 2b. Month first format: e.g. "Jul 03, 2026", "September 13, 2026"
+    named_month_first_pattern = r"(?i)^\s*(?:tanggal|tgl|date)?\s*[:=]?\s*([a-zA-Z]+)[\s\-]+(\d{1,2}),?[\s\-]+(\d{4})\s*$"
+    if m := re.match(named_month_first_pattern, value):
+        month_str, day_str, year_str = m.group(1).upper(), m.group(2), m.group(3)
         month_num = _MONTH_MAP.get(month_str)
         if month_num:
             try:

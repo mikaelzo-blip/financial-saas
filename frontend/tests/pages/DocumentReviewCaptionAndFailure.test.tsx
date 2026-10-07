@@ -57,6 +57,31 @@ describe('Requirement C & E: Caption separation and human-friendly status', () =
     expect(screen.getByDisplayValue('INV-123')).toBeInTheDocument();
   });
 
+  it('does not render placeholder strings like [image received] as sender caption', () => {
+    const docWithPlaceholder: DocumentResponse = {
+      ...baseDoc,
+      source_metadata: {
+        caption: '[image received]',
+        wamid: 'wamid.test.placeholder',
+      },
+    };
+
+    render(
+      <DocumentReviewForm
+        document={docWithPlaceholder}
+        projects={[]}
+        counterparties={[]}
+        paymentAccounts={[]}
+        onSave={vi.fn().mockResolvedValue(undefined)}
+        onApprove={vi.fn().mockResolvedValue(undefined)}
+        onReject={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    expect(screen.queryByLabelText('Keterangan dari Pengirim')).not.toBeInTheDocument();
+    expect(screen.queryByText('[image received]')).not.toBeInTheDocument();
+  });
+
   it('translates technical failure codes into human-friendly Indonesian text', () => {
     expect(formatFailureReason('DOWNLOAD_FAILED')).toBe('Gagal mengunduh file dari WhatsApp');
     expect(formatFailureReason('OCR_CORRUPT_PAYLOAD')).toBe('File dokumen rusak atau tidak terbaca');

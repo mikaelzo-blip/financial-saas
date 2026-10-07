@@ -119,6 +119,11 @@ class BaileysBridgeWhatsAppProvider(WhatsAppProvider):
             file_name = item.get("fileName") or "document"
             mime_type = item.get("mime") or None
 
+            raw_body = (item.get("body", "") or "").strip()
+            # Bridge returns synthetic placeholders like '[image received]' when uncaptioned
+            if raw_body.startswith("[") and raw_body.endswith(" received]"):
+                raw_body = ""
+
             if has_media:
                 media_path = media_urls[0] if media_urls else None
                 if not mime_type and media_path:
@@ -143,7 +148,7 @@ class BaileysBridgeWhatsAppProvider(WhatsAppProvider):
                         sender_phone=sender_phone,
                         timestamp=ts,
                         message_type=msg_kind,
-                        text=item.get("body", "") or "",
+                        text=raw_body,
                         media_id=media_path,
                         mime_type=mime_type,
                         file_name=file_name,
@@ -157,7 +162,7 @@ class BaileysBridgeWhatsAppProvider(WhatsAppProvider):
                         sender_phone=sender_phone,
                         timestamp=ts,
                         message_type="TEXT",
-                        text=item.get("body", "") or "",
+                        text=raw_body,
                         media_id=None,
                         mime_type=None,
                         file_name="document",

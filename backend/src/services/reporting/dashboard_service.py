@@ -40,7 +40,7 @@ class DashboardService:
         start_of_year = date(as_of.year, 1, 1)
         org_name = await get_organization_name(session, organization_id)
 
-        # 1. Kas & Bank Balance (1101%)
+        # 1. Kas & Bank Balance
         cash_stmt = select(
             func.coalesce(func.sum(JournalLine.debit_amount - JournalLine.credit_amount), Decimal("0.00"))
         ).join(
@@ -51,7 +51,14 @@ class DashboardService:
             and_(
                 JournalEntry.organization_id == organization_id,
                 JournalEntry.posting_date <= as_of,
-                ChartOfAccount.account_code.like("1101%")
+                or_(
+                    ChartOfAccount.account_code.like("110%"),
+                    ChartOfAccount.report_group.in_(["Kas & Bank", "CASH", "Kas & Rekening Bank"]),
+                    ChartOfAccount.id.in_(
+                        select(PaymentAccount.coa_account_id).where(PaymentAccount.organization_id == organization_id)
+                    )
+                ),
+                ChartOfAccount.account_type == AccountType.ASSET,
             )
         )
         cash_balance = Decimal(str((await session.execute(cash_stmt)).scalar() or "0.00"))
@@ -77,7 +84,14 @@ class DashboardService:
                     JournalEntry.organization_id == organization_id,
                     JournalEntry.posting_date >= start_of_month,
                     JournalEntry.posting_date <= as_of,
-                    ChartOfAccount.account_code.like("1101%"),
+                    or_(
+                        ChartOfAccount.account_code.like("110%"),
+                        ChartOfAccount.report_group.in_(["Kas & Bank", "CASH", "Kas & Rekening Bank"]),
+                        ChartOfAccount.id.in_(
+                            select(PaymentAccount.coa_account_id).where(PaymentAccount.organization_id == organization_id)
+                        )
+                    ),
+                    ChartOfAccount.account_type == AccountType.ASSET,
                 )
             )
             .group_by(JournalEntry.id)
@@ -328,7 +342,14 @@ class DashboardService:
                         JournalEntry.organization_id == organization_id,
                         JournalEntry.posting_date >= start_m,
                         JournalEntry.posting_date <= end_m,
-                        ChartOfAccount.account_code.like("1101%"),
+                        or_(
+                            ChartOfAccount.account_code.like("110%"),
+                            ChartOfAccount.report_group.in_(["Kas & Bank", "CASH", "Kas & Rekening Bank"]),
+                            ChartOfAccount.id.in_(
+                                select(PaymentAccount.coa_account_id).where(PaymentAccount.organization_id == organization_id)
+                            )
+                        ),
+                        ChartOfAccount.account_type == AccountType.ASSET,
                     )
                 )
                 .group_by(JournalEntry.id)
@@ -525,13 +546,22 @@ class DashboardService:
         failed = doc_counts.get(DocumentProcessingStatus.FAILED, 0)
         ready_to_post = doc_counts.get(DocumentProcessingStatus.READY_TO_POST, 0)
 
-        unmatched_mov_stmt = select(
-            func.count(MoneyMovement.id)
-        ).where(
-            and_(
-                MoneyMovement.organization_id == organization_id,
-                ~MoneyMovement.id.in_(
-                    select(Settlement.money_movement_id).where(Settlement.organization_id == organization_id)
+        settlement_subq = (
+            select(
+                Settlement.money_movement_id,
+                func.coalesce(func.sum(Settlement.amount), Decimal("0.00")).label("settled_amount")
+            )
+            .where(Settlement.organization_id == organization_id)
+            .group_by(Settlement.money_movement_id)
+            .subquery()
+        )
+        unmatched_mov_stmt = (
+            select(func.count(MoneyMovement.id))
+            .outerjoin(settlement_subq, MoneyMovement.id == settlement_subq.c.money_movement_id)
+            .where(
+                and_(
+                    MoneyMovement.organization_id == organization_id,
+                    (MoneyMovement.amount - func.coalesce(settlement_subq.c.settled_amount, Decimal("0.00"))) > Decimal("0.00")
                 )
             )
         )
@@ -654,14 +684,29 @@ class DashboardService:
             ).group_by(MoneyMovement.payment_account_id)
             last_mov_map = dict((await session.execute(mov_stmt)).all())
 
-        unmatched_stmt = select(
-            func.count(MoneyMovement.id),
-            func.coalesce(func.sum(MoneyMovement.amount), Decimal("0.00"))
-        ).where(
-            and_(
-                MoneyMovement.organization_id == organization_id,
-                ~MoneyMovement.id.in_(
-                    select(Settlement.money_movement_id).where(Settlement.organization_id == organization_id)
+        settlement_subq = (
+            select(
+                Settlement.money_movement_id,
+                func.coalesce(func.sum(Settlement.amount), Decimal("0.00")).label("settled_amount")
+            )
+            .where(Settlement.organization_id == organization_id)
+            .group_by(Settlement.money_movement_id)
+            .subquery()
+        )
+
+        unmatched_stmt = (
+            select(
+                func.count(MoneyMovement.id),
+                func.coalesce(
+                    func.sum(MoneyMovement.amount - func.coalesce(settlement_subq.c.settled_amount, Decimal("0.00"))),
+                    Decimal("0.00")
+                )
+            )
+            .outerjoin(settlement_subq, MoneyMovement.id == settlement_subq.c.money_movement_id)
+            .where(
+                and_(
+                    MoneyMovement.organization_id == organization_id,
+                    (MoneyMovement.amount - func.coalesce(settlement_subq.c.settled_amount, Decimal("0.00"))) > Decimal("0.00")
                 )
             )
         )

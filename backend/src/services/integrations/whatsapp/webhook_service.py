@@ -179,6 +179,8 @@ class WhatsAppWebhookService:
                 # Silent download and submission into session pipeline (Section 10)
                 # No immediate ACK per file: one ACK delivered when session finalizes.
                 media = await self.media.download(event)
+                raw_caption = (event.text or "").strip()
+                clean_caption = None if not raw_caption or (raw_caption.startswith("[") and raw_caption.endswith(" received]")) else raw_caption
                 outcome = await client.submit_document(
                     HermesSubmissionRequest(
                         idempotency_key="wa-msg-" + hashlib.sha256(event.wamid.encode()).hexdigest()
@@ -189,7 +191,7 @@ class WhatsAppWebhookService:
                     source_metadata={
                         "wamid": event.wamid,
                         "sender_phone": event.sender_phone,
-                        "caption": event.text,
+                        "caption": clean_caption,
                         "timestamp": event.timestamp.isoformat(),
                         "media_id": event.media_id,
                     },

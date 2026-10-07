@@ -1,0 +1,875 @@
+schema_version: 1
+skill_version: "3.0.0"
+
+project:
+  name: financial-saas
+  repository_path: "C:\\Projects\\financial-saas"
+
+registry_policy:
+  graphify_is_source_of_truth: false
+  live_source_wins_over_graphify: true
+  browser_required_for_full_verification: true
+  backend_trace_required_for_financial_mutations: true
+  application_wide_claims_require_application_wide_evidence: true
+  preserve_issue_history: true
+
+baseline:
+  run_id: "E2E-TEST-20260920-1139"
+  verified_sha: "26ab5affee58"
+  branch: "hermes/document-review-simplification-v2"
+  environment: "local-development"
+  tenant_name: "PT Kontraktor Utama Indonesia"
+
+journeys:
+  J1_document_to_journal:
+    title: "Document → OCR → Review → Approval → Posting → Journal → Report → Reversal"
+    status: "PASS_WITH_FRICTION"
+    freshness: "CURRENT"
+    last_verified_sha: "26ab5affee58"
+    last_verified_run: "E2E-TEST-20260920-1139"
+    claim_scope: "JOURNEY-SCOPED"
+    browser_verified: true
+    backend_trace_verified: true
+    accounting_verified: true
+    report_verified: true
+    reversal_verified: true
+    verified_backend_path:
+      - "Document approval"
+      - "READY_TO_POST"
+      - "DocumentPostingService"
+      - "TransactionService.create_transaction"
+      - "AccountingEngine.post_transaction"
+      - "journal_entries"
+    accounting_contract:
+      vendor_bill:
+        debit: "5101 Harga Pokok Proyek"
+        credit: "2101 Utang Usaha"
+        amount: 5550000
+        balanced: true
+      reversal:
+        debit: "2101 Utang Usaha"
+        credit: "5101 Harga Pokok Proyek"
+        amount: 5550000
+        net_effect: 0
+        balanced: true
+    findings: ["WF-001", "WF-002", "WF-004"]
+    known_limitations:
+      - "Does not establish application-wide absence of direct AccountingEngine bypasses."
+      - "Does not establish application-wide tenant-safety."
+      - "Graphify code-only AST does not directly connect React HTTP calls to FastAPI routes."
+    revalidation_triggers:
+      full:
+        - "backend/src/services/document_posting_service.py"
+        - "backend/src/services/transaction_service.py"
+        - "backend/src/services/accounting_engine.py"
+        - "backend/src/services/posting_rules.py"
+        - "backend/src/services/reversal_service.py"
+        - "backend/alembic/versions/**"
+      targeted:
+        - "frontend/src/pages/documents/**"
+        - "frontend/src/api/documents.ts"
+        - "frontend/src/pages/transactions/**"
+        - "backend/src/api/v1/documents.py"
+        - "backend/src/api/v1/reversals.py"
+        - "frontend/src/pages/reports/**"
+        - "backend/src/services/reporting/**"
+
+  J2_duplicate_document_protection:
+    title: "Duplicate document protection"
+    status: "FULLY_VERIFIED"
+    freshness: "CURRENT"
+    last_verified_sha: "26ab5affee58"
+    last_verified_run: "E2E-TEST-20260920-1139"
+    claim_scope: "JOURNEY-SCOPED"
+    behavior:
+      - "identical synthetic document uploaded twice"
+      - "SHA-256 duplicate detection"
+      - "HTTP 409 Conflict"
+      - "no financial mutation"
+      - "database uniqueness on organization_id + file_hash"
+    limitation:
+      - "Does not establish semantic duplicate detection for non-identical file bytes."
+
+  J3_ap_vendor_payment:
+    title: "AP / Vendor payment"
+    status: "PASS_WITH_FRICTION"
+    freshness: "CURRENT"
+    last_verified_sha: "26ab5af"
+    last_verified_run: "E2E-TEST-20260920-1301"
+    claim_scope: "JOURNEY-SCOPED"
+    browser_verified: true
+    backend_trace_verified: true
+    accounting_verified: true
+    reversal_verified: true
+    environment: "local-development"
+    tenant: "PT Kontraktor Utama Indonesia"
+    test_records:
+      - vendor_bill: "E2E-TEST-20260920-1301-BILL"
+        vendor_bill_trx: "TRX-2026-000013"
+        vendor_bill_journal: "JE-2026-000013"
+        payment_trx: "TRX-2026-000014"
+        payment_journal: "JE-2026-000014"
+        reversal_payment: "TRX-2026-000015"
+        reversal_bill: "TRX-2026-000016"
+        cleanup: "REVERSED"
+    accounting_contract:
+      vendor_bill:
+        debit: "5101 Harga Pokok Proyek"
+        credit: "2101 Utang Usaha"
+        amount: 7500000
+        balanced: true
+      vendor_payment:
+        debit: "2101 Utang Usaha"
+        credit: "1101 Kas dan Bank"
+        amount: 7500000
+        balanced: true
+        expense_duplicated: false
+      reversal_net_effect:
+        "1101": 0
+        "2101": 0
+        "5101": 0
+    verified_backend_path:
+      - "POST /api/v1/transactions → TransactionCreatePage → TransactionService.create_transaction (VENDOR_BILL)"
+      - "POST /api/v1/transactions/{id}/post → AccountingEngine.post_transaction → journal_entries + journal_lines"
+      - "POST /api/v1/vendor-payments → record_vendor_payment → TransactionService (PAY_VENDOR_BILL) → AccountingEngine.post_transaction → VendorAPService.allocate_vendor_payment → MoneyMovementService.synchronize_payment_money_movement"
+      - "POST /api/v1/transactions/{id}/reverse → ReversalService → compensating journals → REVERSED status"
+    idempotency:
+      duplicate_payment_on_paid_bill: "HTTP 422 INVARIANT_VIOLATION"
+      overpayment: "HTTP 422 INVARIANT_VIOLATION — amount exceeds outstanding"
+      ui_paid_bill_no_button: true
+    findings: ["WF-005"]
+    known_limitations:
+      - "Partial payment not tested (UI pre-fills full outstanding amount, no partial flow)"
+      - "Vendor/Pelanggan and Akun Kas/Bank fields show '-' in TRX detail UI for PAY_VENDOR_BILL"
+      - "Does not establish application-wide tenant-safety beyond this journey"
+    revalidation_triggers:
+      full:
+        - "backend/src/services/payable_service.py"
+        - "backend/src/services/transaction_service.py"
+        - "backend/src/services/accounting_engine.py"
+        - "backend/src/services/posting_rules.py"
+        - "backend/src/services/reversal_service.py"
+        - "backend/src/api/v1/payables.py"
+        - "backend/src/models/payable.py"
+        - "backend/alembic/versions/**"
+      targeted:
+        - "frontend/src/pages/payables/**"
+        - "frontend/src/api/payables.ts"
+        - "frontend/src/pages/transactions/**"
+        - "backend/src/api/v1/transactions.py"
+        - "backend/src/services/money_movement_service.py"
+
+  J4_ar_customer_receipt:
+    title: "AR / Customer receipt"
+    status: "PASS_WITH_FRICTION"
+    freshness: "CURRENT"
+    last_verified_sha: "26ab5affee58"
+    last_verified_run: "E2E-TEST-20260920-1345"
+    claim_scope: "JOURNEY-SCOPED"
+    browser_verified: true
+    backend_trace_verified: true
+    accounting_verified: true
+    reversal_verified: true
+    environment: "local-development"
+    tenant: "PT Kontraktor Utama Indonesia"
+    test_records:
+      - customer: "E2E-TEST-CUSTOMER-J4"
+        project: "E2E-TEST-PROJECT-J4 Renovasi Kantor"
+        invoice_code: "INV-E2E-J4-001"
+        customer_invoice_trx: "TRX-2026-000017"
+        customer_invoice_journal: "JE-2026-000017"
+        payment1_trx: "TRX-2026-000018 (Partial Rp 5jt)"
+        payment1_journal: "JE-2026-000018"
+        payment2_trx: "TRX-2026-000019 (Full Settlement Rp 10jt)"
+        payment2_journal: "JE-2026-000019"
+        reversal_payment2: "TRX-2026-000020"
+        reversal_payment1: "TRX-2026-000021"
+        reversal_invoice: "TRX-2026-000022"
+        cleanup: "REVERSED"
+    accounting_contract:
+      customer_invoice:
+        debit: "1201 Piutang Usaha"
+        credit: "4101 Pendapatan Proyek dan Jasa"
+        amount: 15000000
+        balanced: true
+      customer_receipt_partial:
+        debit: "1101 Kas dan Bank (Bank Mandiri)"
+        credit: "1201 Piutang Usaha"
+        amount: 5000000
+        balanced: true
+        revenue_duplicated: false
+      customer_receipt_settlement:
+        debit: "1101 Kas dan Bank (BCA)"
+        credit: "1201 Piutang Usaha"
+        amount: 10000000
+        balanced: true
+        revenue_duplicated: false
+      reversal_net_effect:
+        "1101": 0
+        "1201": 0
+        "4101": 0
+    verified_backend_path:
+      - "POST /api/v1/transactions → TransactionCreatePage → TransactionService.create_transaction (CUSTOMER_INVOICE)"
+      - "POST /api/v1/transactions/{id}/post → AccountingEngine.post_transaction → journal_entries (Dr 1201 / Cr 4101) → CustomerARService.issue_customer_invoice (customer_invoices)"
+      - "POST /api/v1/customer-payments → record_customer_payment → TransactionService (CUSTOMER_PAYMENT) → AccountingEngine.post_transaction (Dr 1101 / Cr 1201) → CustomerARService.allocate_customer_payment (customer_payment_allocations) → MoneyMovementService.synchronize_payment_money_movement"
+      - "POST /api/v1/transactions/{id}/reverse → ReversalService → compensating journals → status REVERSED"
+    idempotency:
+      duplicate_payment_on_paid_invoice: "HTTP 422 INVARIANT_VIOLATION — Invoice is already fully paid"
+      overpayment: "HTTP 422 INVARIANT_VIOLATION — Customer payment amount exceeds outstanding balance"
+      ui_paid_invoice_no_button: true
+    findings: ["WF-006", "WF-007", "WF-008"]
+    known_limitations:
+      - "Customer retention withholding/release flow was not exercised in this specific run"
+      - "Vendor/Pelanggan and Akun Kas/Bank fields show '-' in TRX detail UI for CUSTOMER_PAYMENT"
+      - "Does not establish application-wide tenant-safety beyond this journey"
+    revalidation_triggers:
+      full:
+        - "backend/src/services/receivable_service.py"
+        - "backend/src/services/transaction_service.py"
+        - "backend/src/services/accounting_engine.py"
+        - "backend/src/services/posting_rules.py"
+        - "backend/src/services/reversal_service.py"
+        - "backend/src/api/v1/receivables.py"
+        - "backend/src/models/receivable.py"
+        - "backend/alembic/versions/**"
+      targeted:
+        - "frontend/src/pages/receivables/**"
+        - "frontend/src/api/receivables.ts"
+        - "frontend/src/pages/transactions/**"
+        - "backend/src/api/v1/transactions.py"
+        - "backend/src/services/money_movement_service.py"
+
+  J5_bank_reconciliation:
+    title: "Bank reconciliation"
+    status: "PARTIAL"
+    freshness: "CURRENT"
+    last_verified_sha: "26ab5af"
+    last_verified_run: "E2E-TEST-20260920-1350"
+    environment: "local-development"
+    evidence:
+      browser_execution: "PARTIAL — page blocked by URL prefix defect (WF-009)"
+      statement_upload: true
+      sha256_duplicate_detection: true
+      deterministic_auto_match: true
+      duplicate_reconciliation_blocked: true
+      amount_mismatch_blocked: true
+      payment_account_mismatch_blocked: true
+      backend_trace: true
+      accounting_verification: true
+      reversal_tested: true
+      undo_unmatch_supported: false
+    test_records:
+      organization_id: "9670673b-c0fd-4ebe-87e4-a646358084ea"
+      payment_account_id: "978c8ceb-a387-4a07-bbc1-644ae0e16db4"
+      statement_import_id: "96984b90-e600-478a-9bbc-bea33dc33969"
+      statement_file_hash: "50b2912803b9f44621ebafb6c43c490029b359fce8f334a1ceeb0e2fb7256aa4"
+      matched_statement_line_id: "adb7f71b-0f81-45ef-9fdf-789469ff7111"
+      unmatched_statement_line_id: "2c53d408-f9c3-46ee-a580-25d7e75b93a7"
+      reconciliation_id: "bc9f6f92-9b28-4c83-941a-b9da5e5b3360"
+      source_transaction_code: "TRX-2026-000023"
+      source_transaction_id: "5b4733be-eb0c-4141-81b0-e3868a7345d6"
+      source_journal_entry: "JE-2026-000023"
+      matched_journal_line_id: "31c0d9ef-de23-44cb-b857-8a6cfe517cbf"
+      reversal_transaction_code: "TRX-2026-000024"
+      reversal_transaction_id: "ce77dd92-1486-4d4c-8c6f-b2d580efbf03"
+      reversal_journal_entry: "JE-2026-000024"
+    accounting_contract:
+      debit_equals_credit: true
+      no_duplicate_journals: true
+      direct_purchase_posting:
+        debit: "6199 Beban Operasional Lainnya Rp 2.500.000,00"
+        credit: "1101 Kas dan Bank (Bank Mandiri) Rp 2.500.000,00"
+      reversal_posting:
+        debit: "1101 Kas dan Bank (Bank Mandiri) Rp 2.500.000,00"
+        credit: "6199 Beban Operasional Lainnya Rp 2.500.000,00"
+        net_financial_effect: "Rp 0,00"
+    source_files:
+      frontend:
+        - "frontend/src/pages/reconciliation/BankReconciliationPage.tsx"
+        - "frontend/src/api/bankReconciliation.ts"
+      backend:
+        - "backend/src/api/v1/bank_reconciliation.py"
+        - "backend/src/services/bank_reconciliation_service.py"
+        - "backend/src/models/bank_reconciliation.py"
+    findings: ["WF-009", "WF-010", "WF-011", "WF-012"]
+    known_limitations:
+      - "JOURNEY-SCOPED: Verified specifically for bank reconciliation of DIRECT_PURCHASE and bank statement imports"
+      - "NOT application-wide proof for all bank import formats or all transaction types"
+      - "UI is blocked by duplicate /api/v1 prefix in frontend/src/api/bankReconciliation.ts"
+      - "Undo / unmatch is unsupported across the entire stack"
+      - "ReversalService does not invalidate active bank reconciliations"
+
+  J6_error_recovery:
+    title: "Error recovery"
+    status: "PASS_WITH_FRICTION"
+    freshness: "CURRENT"
+    last_verified_sha: "26ab5af"
+    last_verified_run: "E2E-TEST-20260920-1406"
+    claim_scope: "JOURNEY-SCOPED"
+    browser_verified: true
+    backend_trace_verified: true
+    accounting_verified: true
+    reversal_verified: true
+    environment: "local-development"
+    tenant: "PT Kontraktor Utama Indonesia"
+    evidence:
+      validation_failure_paths: true
+      double_click_submit_creates_duplicate_staged: true
+      double_click_post_idempotent_single_journal: true
+      invalid_state_transition_blocked: true
+      interrupted_flow_data_lost_no_phantom_db: true
+      session_expiry_redirect: true
+      reversal_net_zero_effect: true
+      broader_recovery_matrix: true
+    test_records:
+      duplicate_draft_trx: "TRX-2026-000025 (STAGED, no journal)"
+      tested_trx: "TRX-2026-000026 (REVERSED)"
+      tested_journal: "JE-2026-000025"
+      reversal_trx: "TRX-2026-000027"
+      reversal_journal: "JE-2026-000026"
+      cleanup: "REVERSED — net effect zero on all accounts"
+    accounting_contract:
+      debit_equals_credit: true
+      no_duplicate_journals: true
+      direct_purchase_posting:
+        debit: "6103 Beban Operasional Kantor dan Administrasi Rp 1.500.000,00"
+        credit: "1101 Kas dan Bank (Bank Mandiri) Rp 1.500.000,00"
+      reversal_posting:
+        debit: "1101 Kas dan Bank (Bank Mandiri) Rp 1.500.000,00"
+        credit: "6103 Beban Operasional Kantor dan Administrasi Rp 1.500.000,00"
+        net_financial_effect: "Rp 0,00"
+    source_files:
+      frontend:
+        - "frontend/src/components/forms/TransactionForm.tsx"
+        - "frontend/src/pages/transactions/TransactionCreatePage.tsx"
+        - "frontend/src/pages/transactions/TransactionDetailPage.tsx"
+        - "frontend/src/pages/documents/DocumentReviewPage.tsx"
+        - "frontend/src/utils/documentReview.ts"
+        - "frontend/src/components/feedback/Toast.tsx"
+      backend:
+        - "backend/src/api/v1/transactions.py"
+        - "backend/src/api/v1/documents.py"
+        - "backend/src/services/processing_policy_service.py"
+        - "backend/src/services/accounting_engine.py"
+        - "backend/src/services/reversal_service.py"
+    findings: ["WF-001", "WF-002", "WF-013", "WF-014", "WF-015", "WF-016"]
+    known_limitations:
+      - "JOURNEY-SCOPED: Verified specifically for manual operational purchases, document review approvals, and transactional reversals"
+      - "Does not establish application-wide idempotency for all concurrent endpoints"
+      - "Does not establish application-wide tenant isolation beyond the tested entities"
+
+  J7_reporting_traceability:
+    title: "Reporting traceability"
+    status: "PASS_WITH_FRICTION"
+    freshness: "CURRENT"
+    last_verified_sha: "26ab5affee58"
+    last_verified_run: "E2E-TEST-20260920-1425"
+    claim_scope: "JOURNEY-SCOPED"
+    evidence:
+      general_ledger_amount_verified: true
+      trial_balance_verified: true
+      profit_loss_verified: true
+      balance_sheet_verified: true
+      project_profitability_verified: true
+      ar_ap_aging_verified: true
+      direct_journal_to_transaction_drilldown: false
+      reversal_net_zero_effect: true
+      date_filter_consistency: true
+      tenant_isolation_enforced: true
+    findings: ["WF-003", "WF-017", "WF-018"]
+    revalidation_triggers:
+      full:
+        - "backend/src/services/reporting/**"
+        - "backend/src/api/v1/reports.py"
+        - "backend/src/schemas/reporting.py"
+      targeted:
+        - "frontend/src/pages/reports/**"
+        - "frontend/src/api/reports.ts"
+        - "frontend/src/pages/transactions/TransactionDetailPage.tsx"
+
+  J8_whatsapp_to_web_review:
+    title: "WhatsApp intake → Web review"
+    status: "PARTIAL"
+    freshness: "CURRENT"
+    last_verified_sha: "26ab5af"
+    last_verified_run: "E2E-TEST-20260920-1505"
+    claim_scope: "JOURNEY-SCOPED"
+    accounting_contract:
+      vendor_bill:
+        debit: "5101 Harga Pokok Proyek"
+        credit: "2101 Utang Usaha"
+        amount: 3750000
+        balanced: true
+      reversal:
+        debit: "2101 Utang Usaha"
+        credit: "5101 Harga Pokok Proyek"
+        amount: 3750000
+        net_effect: 0
+        balanced: true
+    findings:
+      - "WF-019"
+    notes:
+      - "Internal ingestion (Hermes upload + remote inbox backlog sync), OCR extraction, integrity flags, review approval, GL posting, and transaction reversal fully verified."
+      - "Real external WhatsApp cellular/Meta network transport marked NOT_VERIFIED due to INTERNAL_INGESTION_ONLY environment classification (no active mobile sender)."
+      - "WF-019 identified: frontend /api/v1 prefix duplication in inbox.ts breaks /whatsapp-inbox."
+
+findings:
+  WF-001:
+    title: "AMOUNT_MISMATCH requires nominal re-entry"
+    severity: "HIGH"
+    status: "OPEN"
+    journey: "J1_document_to_journal"
+    first_seen_run: "E2E-TEST-20260920-1139"
+    last_seen_run: "E2E-TEST-20260920-1406"
+    category: "workflow/form-gating"
+    summary: "Frontend dirty-only diff omits unchanged amount, so backend does not clear AMOUNT_MISMATCH."
+    retest_when:
+      - "DocumentReviewForm changes"
+      - "DocumentReviewPage changes"
+      - "documents correction payload changes"
+      - "backend flag-clearing logic changes"
+
+  WF-002:
+    title: "Raw backend/Pydantic error leaks into UI"
+    severity: "HIGH"
+    status: "OPEN"
+    journey: "J1_document_to_journal"
+    first_seen_run: "E2E-TEST-20260920-1139"
+    last_seen_run: "E2E-TEST-20260920-1406"
+    category: "terminology/localization"
+    summary: "Technical English backend validation string is shown directly to the user."
+    retest_when:
+      - "frontend error mapping changes"
+      - "API/Pydantic error serialization changes"
+      - "document review validation UI changes"
+
+  WF-003:
+    title: "General ledger has no drilldown to source transaction"
+    severity: "MEDIUM"
+    status: "OPEN"
+    journey: "J7_reporting_traceability"
+    first_seen_run: "E2E-TEST-20260920-1139"
+    last_seen_run: "E2E-TEST-20260920-1425"
+    category: "traceability/navigation"
+    summary: "Journal number is plain text and cannot navigate to transaction/source evidence."
+    retest_when:
+      - "general ledger UI changes"
+      - "journal row rendering changes"
+      - "transaction route/navigation changes"
+
+  WF-004:
+    title: "Approve → Post two-step flow confuses non-accountants"
+    severity: "MEDIUM"
+    status: "OPEN"
+    journey: "J1_document_to_journal"
+    first_seen_run: "E2E-TEST-20260920-1139"
+    last_seen_run: "E2E-TEST-20260920-1139"
+    category: "workflow-efficiency"
+    summary: "User may think 'Setujui untuk Diposting' already booked the transaction while state is only READY_TO_POST."
+    retest_when:
+      - "approval CTA changes"
+      - "READY_TO_POST UX changes"
+      - "document list posting action changes"
+      - "combined approve+post flow is introduced"
+
+  WF-005:
+    title: "Vendor/Pelanggan dan Akun Kas/Bank tidak ditampilkan di detail transaksi PAY_VENDOR_BILL"
+    severity: "MEDIUM"
+    status: "OPEN"
+    journey: "J3_ap_vendor_payment"
+    first_seen_run: "E2E-TEST-20260920-1301"
+    last_seen_run: "E2E-TEST-20260920-1301"
+    category: "traceability/display"
+    summary: "TransactionDetailPage menampilkan '-' untuk field Vendor/Pelanggan dan Akun Kas/Bank pada transaksi PAY_VENDOR_BILL dan REVERSAL, meskipun counterparty_id dan payment_account_id tersimpan di database. User tidak dapat melihat dari rekening mana pembayaran dikeluarkan atau kepada vendor mana langsung dari halaman detail."
+    evidence:
+      url: "http://localhost:5173/transactions/f19f38b0-d6ca-40e0-821b-5a96936508c1"
+      trx: "TRX-2026-000014"
+      counterparty_id_in_db: "611ed65e-be6c-4b60-8e0f-b9794e8f3436 (PT Nusa Engineering)"
+      payment_account_id_in_db: "978c8ceb-a387-4a07-bbc1-644ae0e16db4 (Bank Mandiri)"
+    retest_when:
+      - "TransactionDetailPage rendering changes"
+      - "payables API response shape changes"
+      - "counterparty/payment_account display logic changes"
+
+  WF-006:
+    title: "Gagal pemetaan pesan error backend pada CustomerPaymentAllocationModal"
+    severity: "MEDIUM"
+    status: "OPEN"
+    journey: "J4_ar_customer_receipt"
+    first_seen_run: "E2E-TEST-20260920-1345"
+    last_seen_run: "E2E-TEST-20260920-1345"
+    category: "error-handling/ui-feedback"
+    summary: "CustomerPaymentAllocationModal menangkap err.response?.data?.detail untuk pesan error. Namun backend mengembalikan skema error { error: { code: 'INVARIANT_VIOLATION', message: '...' } }. Akibatnya saat overpayment atau validasi invariant gagal, pengguna hanya melihat toast fallback generik 'Gagal mencatat pembayaran invoice.' alih-alih pesan spesifik backend yang menjelaskan bahwa nominal melebihi sisa piutang."
+    evidence:
+      component: "frontend/src/pages/receivables/components/CustomerPaymentAllocationModal.tsx:74"
+      backend_message: "Customer payment amount (20000000) exceeds outstanding balance (15000000.00) on INV-E2E-J4-001."
+      ui_displayed: "Gagal mencatat pembayaran invoice."
+    retest_when:
+      - "CustomerPaymentAllocationModal error handling changes"
+      - "receivablesApi error serialization changes"
+      - "frontend apiClient error interceptor changes"
+
+  WF-007:
+    title: "Vendor/Pelanggan dan Akun Kas/Bank tidak ditampilkan di detail transaksi CUSTOMER_PAYMENT"
+    severity: "MEDIUM"
+    status: "OPEN"
+    journey: "J4_ar_customer_receipt"
+    first_seen_run: "E2E-TEST-20260920-1345"
+    last_seen_run: "E2E-TEST-20260920-1345"
+    category: "traceability/display"
+    summary: "TransactionDetailPage menampilkan '-' untuk field Vendor/Pelanggan dan Akun Kas/Bank pada transaksi CUSTOMER_PAYMENT (TRX-2026-000018, TRX-2026-000019) dan REVERSAL-nya, meskipun counterparty_id dan payment_account_id tersimpan lengkap di database. Pengguna keuangan tidak dapat melihat pelanggan mana yang membayar atau rekening mana yang menerima dana dari halaman detail transaksi."
+    evidence:
+      trx1: "TRX-2026-000018 (Bank Mandiri, E2E-TEST-CUSTOMER-J4)"
+      trx2: "TRX-2026-000019 (BCA, E2E-TEST-CUSTOMER-J4)"
+      counterparty_id_in_db: "81b7e55b-30f5-4ad8-89b2-c6d28b857568"
+      payment_account_id_in_db: "978c8ceb-a387-4a07-bbc1-644ae0e16db4 / b7e35449-b615-4767-b498-64ad6dc9c027"
+    retest_when:
+      - "TransactionDetailPage rendering changes"
+      - "transactions API counterparty/payment_account serialization changes"
+
+  WF-008:
+    title: "Tidak ada tautan / informasi nomor invoice pada detail transaksi CUSTOMER_PAYMENT"
+    severity: "LOW"
+    status: "OPEN"
+    journey: "J4_ar_customer_receipt"
+    first_seen_run: "E2E-TEST-20260920-1345"
+    last_seen_run: "E2E-TEST-20260920-1345"
+    category: "traceability/navigation"
+    summary: "Pada TransactionDetailPage untuk transaksi CUSTOMER_PAYMENT, tidak ada informasi nomor customer invoice (misal INV-E2E-J4-001) yang dilunasi, meskipun alokasi tercatat di tabel customer_payment_allocations. Pengguna harus membuka halaman Piutang terpisah untuk menelusuri invoice terkait."
+    evidence:
+      page: "TransactionDetailPage"
+      missing_info: "invoice_code, allocation_amount"
+    retest_when:
+      - "TransactionDetailPage allocation display changes"
+      - "customer payment allocation UI components change"
+
+  WF-009:
+    title: "Duplikasi prefix '/api/v1' pada frontend/src/api/bankReconciliation.ts memblokir UI /bank-reconciliation"
+    severity: "HIGH"
+    status: "OPEN"
+    journey: "J5_bank_reconciliation"
+    first_seen_run: "E2E-TEST-20260920-1350"
+    last_seen_run: "E2E-TEST-20260920-1350"
+    category: "api/routing"
+    summary: "Fungsi-fungsi di frontend/src/api/bankReconciliation.ts mendefinisikan path '/api/v1/bank-reconciliation/...' sementara apiClient sudah memiliki baseURL '/api/v1', menghasilkan URL '/api/v1/api/v1/bank-reconciliation/dashboard' yang berujung HTTP 404 dan memblokir seluruh halaman di browser."
+    evidence:
+      file: "frontend/src/api/bankReconciliation.ts:32, 45, 52, 61"
+      error: "HTTP 404 Not Found"
+    retest_when:
+      - "frontend/src/api/bankReconciliation.ts changes"
+
+  WF-010:
+    title: "Ketiadaan fitur Undo / Unmatch / Batalkan Rekonsiliasi Bank di API dan antarmuka"
+    severity: "MEDIUM"
+    status: "OPEN"
+    journey: "J5_bank_reconciliation"
+    first_seen_run: "E2E-TEST-20260920-1350"
+    last_seen_run: "E2E-TEST-20260920-1350"
+    category: "workflow/error_recovery"
+    summary: "Setelah baris mutasi bank direkonsiliasikan ke jurnal/transaksi, sistem tidak menyediakan mekanisme unmatch atau undo untuk membatalkan relasi pencocokan yang salah. Status rekonsiliasi bersifat permanen."
+    evidence:
+      backend: "backend/src/api/v1/bank_reconciliation.py (tidak ada route DELETE/POST unmatch)"
+      frontend: "frontend/src/pages/reconciliation/BankReconciliationPage.tsx (tidak ada aksi batalkan)"
+    retest_when:
+      - "bank reconciliation unmatch feature implemented"
+
+  WF-011:
+    title: "Halaman Rekonsiliasi Bank tidak memiliki tabel rincian baris mutasi rekening koran dan pemilih kandidat di UI"
+    severity: "HIGH"
+    status: "OPEN"
+    journey: "J5_bank_reconciliation"
+    first_seen_run: "E2E-TEST-20260920-1350"
+    last_seen_run: "E2E-TEST-20260920-1350"
+    category: "ux/missing_feature"
+    summary: "Halaman /bank-reconciliation hanya menyajikan 4 kartu metrik ringkasan kelengkapan kas, tanpa menampilkan tabel baris mutasi bank yang diimpor, status kecocokan tiap baris, maupun antarmuka pencocokan manual antara mutasi bank dan pembukuan kas."
+    evidence:
+      page: "BankReconciliationPage.tsx"
+    retest_when:
+      - "BankReconciliationPage.tsx redesign/enhancement"
+
+  WF-012:
+    title: "ReversalService tidak memeriksa atau membatalkan relasi rekonsiliasi bank saat membatalkan transaksi"
+    severity: "MEDIUM"
+    status: "OPEN"
+    journey: "J5_bank_reconciliation"
+    first_seen_run: "E2E-TEST-20260920-1350"
+    last_seen_run: "E2E-TEST-20260920-1350"
+    category: "accounting/integrity"
+    summary: "Saat transaksi yang sudah direkonsiliasi dengan mutasi bank dibatalkan melalui ReversalService, transaksi pembalik dibuat dan is_reversed menjadi true, tetapi BankReconciliation tetap MATCHED terhadap journal_line yang sudah dibatalkan. Hal ini menimbulkan anomali di mana mutasi bank terhubung ke jurnal mati."
+    evidence:
+      backend: "backend/src/services/reversal_service.py"
+      db_records: "TRX-2026-000023 is_reversed=True, BankReconciliation bc9f6f92-... still MATCHED"
+    retest_when:
+      - "backend/src/services/reversal_service.py changes"
+
+  WF-013:
+    title: "Klik ganda pada submit form transaksi membuat rekaman draft ganda di database"
+    severity: "HIGH"
+    status: "OPEN"
+    journey: "J6_error_recovery"
+    first_seen_run: "E2E-TEST-20260920-1406"
+    last_seen_run: "E2E-TEST-20260920-1406"
+    category: "concurrency/idempotency"
+    summary: "Pada TransactionCreatePage, double-click cepat pada tombol 'Simpan Transaksi' menghasilkan 2 transaksi draft STAGED (TRX-2026-000025 dan TRX-2026-000026) dengan atribut identik. Hal ini disebabkan disabling tombol bergantung pada re-render state React (isLoading) yang asinkron terhadap event queue browser, dan backend POST /api/v1/transactions tidak memiliki idempotency key atau deduplikasi."
+    evidence:
+      created_trx: ["TRX-2026-000025", "TRX-2026-000026"]
+      component: "frontend/src/pages/transactions/TransactionCreatePage.tsx:14"
+      backend_endpoint: "backend/src/api/v1/transactions.py:29"
+    retest_when:
+      - "TransactionCreatePage debounce / isSubmitting ref implemented"
+      - "POST /api/v1/transactions idempotency key implemented"
+
+  WF-014:
+    title: "Posting transaksi yang sudah diposting menghasilkan unhandled HTTP 500 Internal Server Error"
+    severity: "HIGH"
+    status: "OPEN"
+    journey: "J6_error_recovery"
+    first_seen_run: "E2E-TEST-20260920-1406"
+    last_seen_run: "E2E-TEST-20260920-1406"
+    category: "error-handling/backend"
+    summary: "Pemanggilan POST /api/v1/transactions/{id}/post pada transaksi yang sudah berstatus POSTED menghasilkan HTTP 500 Internal Server Error alih-alih HTTP 409 Conflict. ProcessingPolicyService.authorize_and_post mengubah workflow_status menjadi APPROVED di memori sebelum memanggil AccountingEngine.post_transaction, sehingga guard status POSTED terlewati dan PostgreSQL melempar UniqueViolationError pada uq_je_transaction_id yang tidak tertangkap oleh handler domain."
+    evidence:
+      exception: "asyncpg.exceptions.UniqueViolationError: duplicate key value violates unique constraint 'uq_je_transaction_id'"
+      service: "backend/src/services/processing_policy_service.py:129"
+      db_constraint: "uq_je_transaction_id"
+    retest_when:
+      - "ProcessingPolicyService workflow_status check fixed"
+      - "IntegrityError exception handler added in FastAPI"
+
+  WF-015:
+    title: "Transaksi operasional berstatus STAGED tidak dapat diedit, dibatalkan, atau dihapus"
+    severity: "MEDIUM"
+    status: "OPEN"
+    journey: "J6_error_recovery"
+    first_seen_run: "E2E-TEST-20260920-1406"
+    last_seen_run: "E2E-TEST-20260920-1406"
+    category: "workflow/ux"
+    summary: "Saat pengguna membuat transaksi draft/STAGED melalui antarmuka manual, antarmuka detail transaksi hanya menampilkan tombol 'Posting ke Buku Besar'. Tidak tersedia opsi Edit, Batal, atau Hapus untuk transaksi draft. Jika terjadi kesalahan input sebelum posting, pengguna terpaksa memposting transaksi salah lalu membatalkannya melalui reversal, atau membiarkan transaksi draft terbengkalai selamanya."
+    evidence:
+      page: "frontend/src/pages/transactions/TransactionDetailPage.tsx"
+      backend_routes: "backend/src/api/v1/transactions.py (tidak ada PATCH/PUT/DELETE)"
+    retest_when:
+      - "transaction draft edit or cancel endpoints added"
+
+  WF-016:
+    title: "Ketiadaan guard navigasi 'beforeunload' pada form penginputan menyebabkan data hilang saat refresh/back"
+    severity: "LOW"
+    status: "OPEN"
+    journey: "J6_error_recovery"
+    first_seen_run: "E2E-TEST-20260920-1406"
+    last_seen_run: "E2E-TEST-20260920-1406"
+    category: "ux/data-loss"
+    summary: "Form pencatatan transaksi (TransactionForm) dan form reviu dokumen (DocumentReviewForm) tidak mengimplementasikan event listener beforeunload. Jika pengguna secara tidak sengaja me-refresh halaman atau menekan tombol browser Back saat sedang mengisi data, seluruh input langsung terhapus tanpa dialog konfirmasi atau peringatan penyimpanan."
+    evidence:
+      form: "frontend/src/components/forms/TransactionForm.tsx"
+      window_beforeunload: null
+    retest_when:
+      - "beforeunload dirty navigation guard implemented"
+
+  WF-017:
+    title: "Ketiadaan tautan navigasi balik (reverse traceability) ke dokumen bukti dan jurnal akuntansi pada TransactionDetailPage"
+    severity: "MEDIUM"
+    status: "OPEN"
+    journey: "J7_reporting_traceability"
+    first_seen_run: "E2E-TEST-20260920-1425"
+    last_seen_run: "E2E-TEST-20260920-1425"
+    category: "traceability/navigation"
+    summary: "TransactionDetailPage tidak menampilkan nomor entri jurnal (entry_number / JE-XXXXXX) maupun rincian baris debit/kredit yang dihasilkan saat transaksi berstatus POSTED. Selain itu, untuk transaksi yang dikonversi dari dokumen bukti (misal DOC-2026-000017 -> TRX-2026-000011), antarmuka detail transaksi tidak menyediakan tautan kembali ke dokumen bukti sumber. Transaksi pembalik (reversal_of_id) juga tidak memiliki tautan silang dua arah antara transaksi asal dan transaksi pembaliknya. Akibatnya alur penelusuran audit terputus di halaman detail transaksi."
+    evidence:
+      page: "frontend/src/pages/transactions/TransactionDetailPage.tsx"
+      missing_fields: ["journal_entry_number", "source_document_link", "reversal_cross_link"]
+    retest_when:
+      - "TransactionDetailPage layout updated"
+      - "transaction detail API includes journal and document linkages"
+
+  WF-018:
+    title: "Nomor invoice dan tagihan vendor pada Laporan Umur Piutang (AR Aging) dan Umur Utang (AP Aging) berpenampilan hyperlink namun tidak dapat diklik"
+    severity: "LOW"
+    status: "OPEN"
+    journey: "J7_reporting_traceability"
+    first_seen_run: "E2E-TEST-20260920-1425"
+    last_seen_run: "E2E-TEST-20260920-1425"
+    category: "ux/affordance"
+    summary: "Kolom No. Invoice pada ARAgingPage.tsx:111 dan No. Tagihan (Bill) pada APAgingPage.tsx:119 menggunakan kelas styling text-indigo-700 font-bold font-mono yang secara visual menyerupai tautan web (affordance link), namun elemen tersebut merupakan <td> statis tanpa interaksi klik ke detail invoice/transaksi. Hal ini menimbulkan kebingungan auditor (false affordance) dan memperlambat verifikasi bukti pendukung."
+    evidence:
+      ar_page: "frontend/src/pages/reports/ARAgingPage.tsx:111"
+      ap_page: "frontend/src/pages/reports/APAgingPage.tsx:119"
+      screenshot: "docs/audits/E2E-TEST-20260920-1425/screenshots/22-ar-aging-unclickable.png"
+    retest_when:
+      - "ARAgingPage row rendering updated"
+      - "APAgingPage row rendering updated"
+
+  WF-019:
+    title: "Duplicate /api/v1 URL prefix in inboxApi breaks WhatsApp Inbox page"
+    severity: "MEDIUM"
+    status: "OPEN"
+    journey: "J8_whatsapp_to_web_review"
+    first_seen_run: "E2E-TEST-20260920-1505"
+    last_seen_run: "E2E-TEST-20260920-1505"
+    category: "api/routing"
+    summary: "frontend/src/api/inbox.ts memanggil apiClient dengan leading /api/v1 (contoh: /api/v1/inbox/messages, /api/v1/inbox/sync, /api/v1/inbox/sessions), namun apiClient.baseURL sudah menyertakan /api/v1. Hal ini menyebabkan permintaan HTTP diarahkan ke /api/v1/api/v1/inbox/messages yang mengembalikan HTTP 404 Not Found. Pada UI WhatsAppInboxPage.tsx, kegagalan ini ditelan tanpa alert error dan hanya menampilkan pesan kosong 'Tidak ada pesan WhatsApp - Belum ada bukti transaksi yang diterima untuk filter status ini'."
+    evidence:
+      api_client: "frontend/src/api/inbox.ts:17,22,34,39"
+      ui_page: "frontend/src/pages/inbox/WhatsAppInboxPage.tsx:45"
+      screenshot: "docs/audits/E2E-TEST-20260920-1505/screenshots/03_whatsapp_inbox_page.png"
+    retest_when:
+      - "frontend/src/api/inbox.ts paths corrected to remove /api/v1"
+      - "frontend/src/pages/inbox/WhatsAppInboxPage.tsx error handling added"
+
+audit_history:
+  - run_id: "E2E-TEST-20260920-1139"
+    sha: "26ab5affee58"
+    environment: "local-development"
+    reports:
+      - "Financial_SaaS_Active_Workflow_Audit_Report.pdf"
+      - "Backend_Trace_Reconciliation_Report.pdf"
+    summary:
+      browser_workflow: "completed"
+      backend_reconciliation: "completed"
+      accounting_verification: "completed"
+      source_code_modified: false
+      production_data_mutated: false
+
+  - run_id: "E2E-TEST-20260920-1301"
+    sha: "26ab5affee58"
+    environment: "local-development"
+    journeys_covered: ["J3_ap_vendor_payment"]
+    reports:
+      - "Financial_SaaS_J3_AP_Vendor_Payment_Audit_Report.pdf"
+    summary:
+      browser_workflow: "completed"
+      backend_reconciliation: "completed"
+      accounting_verification: "completed"
+      idempotency_tested: true
+      reversal_tested: true
+      source_code_modified: false
+      production_data_mutated: false
+      cleanup: "REVERSED — net effect zero on all accounts"
+
+  - run_id: "E2E-TEST-20260920-1345"
+    sha: "26ab5affee58"
+    environment: "local-development"
+    journeys_covered: ["J4_ar_customer_receipt"]
+    reports:
+      - "Financial_SaaS_J4_AR_Customer_Receipt_Audit_Report.pdf"
+    summary:
+      browser_workflow: "completed"
+      backend_reconciliation: "completed"
+      accounting_verification: "completed"
+      idempotency_tested: true
+      partial_payment_tested: true
+      overpayment_rejected: true
+      settled_invoice_protected: true
+      reversal_tested: true
+      source_code_modified: false
+      production_data_mutated: false
+      cleanup: "REVERSED — net effect zero on all accounts"
+
+  - run_id: "E2E-TEST-20260920-1350"
+    sha: "26ab5af"
+    environment: "local-development"
+    journeys_covered: ["J5_bank_reconciliation"]
+    reports:
+      - "Financial_SaaS_J5_Bank_Reconciliation_Audit_Report.pdf"
+    summary:
+      browser_workflow: "blocked by WF-009"
+      backend_reconciliation: "completed"
+      accounting_verification: "completed"
+      idempotency_tested: true
+      duplicate_import_rejected: true
+      duplicate_match_rejected: true
+      nominal_mismatch_rejected: true
+      wrong_bank_account_rejected: true
+      undo_unmatch_tested: "unsupported (WF-010)"
+      reversal_tested: true
+      source_code_modified: false
+      production_data_mutated: false
+      cleanup: "REVERSED (Transaction) / RETAINED (Statement Import & Reconciliation)"
+
+  - run_id: "E2E-TEST-20260920-1406"
+    sha: "26ab5af"
+    environment: "local-development"
+    journeys_covered: ["J6_error_recovery"]
+    reports:
+      - "Financial_SaaS_J6_Error_Recovery_Audit_Report.pdf"
+    summary:
+      browser_workflow: "completed"
+      backend_reconciliation: "completed"
+      accounting_verification: "completed"
+      idempotency_tested: true
+      validation_failures_tested: true
+      invalid_transitions_tested: true
+      interrupted_flow_tested: true
+      reversal_tested: true
+      source_code_modified: false
+      production_data_mutated: false
+      cleanup: "REVERSED (Tested Transaction) / RETAINED (Duplicate Draft Evidence)"
+
+  - run_id: "E2E-TEST-20260920-1425"
+    sha: "26ab5affee58"
+    environment: "local-development"
+    journeys_covered: ["J7_reporting_traceability"]
+    reports:
+      - "Financial_SaaS_J7_Reporting_Traceability_Audit_Report.pdf"
+    summary:
+      browser_workflow: "completed"
+      backend_reconciliation: "completed"
+      accounting_verification: "completed"
+      trial_balance_balanced: true
+      balance_sheet_balanced: true
+      reversal_net_zero_tested: true
+      date_filter_isolation_tested: true
+      project_filter_isolation_tested: true
+      tenant_isolation_enforced: true
+      findings_revalidated: ["WF-003 (REPRODUCED/OPEN)"]
+      new_findings: ["WF-017", "WF-018"]
+      source_code_modified: false
+      production_data_mutated: false
+      cleanup: "NOT_REQUIRED_READ_ONLY_AUDIT"
+
+  - run_id: "E2E-TEST-20260920-1505"
+    sha: "26ab5affee58"
+    environment: "local-development"
+    journeys_covered: ["J8_whatsapp_to_web_review"]
+    reports:
+      - "Financial_SaaS_J8_WhatsApp_Web_Review_Audit_Report.pdf"
+      - "docs/audits/E2E-TEST-20260920-1505/audit_report.md"
+    summary:
+      browser_workflow: "completed"
+      backend_reconciliation: "completed"
+      accounting_verification: "completed"
+      transport_classification: "INTERNAL_INGESTION_ONLY"
+      real_transport_tested: false
+      internal_ingestion_tested: true
+      deferred_worker_sync_tested: true
+      idempotency_tested: true
+      duplicate_file_detection_tested: true
+      unregistered_sender_rejected: true
+      debit_equals_credit: true
+      reversal_net_zero_tested: true
+      new_findings: ["WF-019"]
+      source_code_modified: false
+      production_data_mutated: false
+      cleanup: "REVERSED (Tested Transaction TRX-2026-000028 -> TRX-2026-000029) / RETAINED (Audit Documents DOC-WA-27300435, DOC-2026-000018)"
+
+final_baseline:
+  status: "BASELINE_CERTIFIED_WITH_OPEN_FINDINGS"
+  certified_sha: "26ab5affee58"
+  run_id: "FINAL-BASELINE-20260920"
+  date: "2026-09-20"
+  journeys_current: 8
+  journeys_stale: 0
+  findings_open: 19
+  findings_fixed: 0
+  findings_needs_retest: 0
+  accounting_invariants: "VERIFIED (debit == credit = 400630988.86, 9 net-zero reversals, no duplicate expense/revenue)"
+  unverified_surfaces:
+    - "Real external WhatsApp cellular/Meta network transport (INTERNAL_INGESTION_ONLY)"
+    - "Partial AP payment UI flow (UI pre-fills full outstanding balance)"
+    - "Customer retention withholding/release flow"
+    - "Split bank reconciliation (1-to-many or many-to-1)"
+    - "Bank reconciliation undo/unmatch (unsupported in API/UI)"
+    - "STAGED transaction editing/cancellation in UI"
+    - "Application-wide multi-tenant adversarial concurrency"
+  evidence_path: "docs/audits/FINAL-BASELINE-20260920/"
+

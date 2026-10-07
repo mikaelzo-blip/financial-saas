@@ -20,6 +20,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import {
+  DOCUMENT_TYPE_LABELS,
   isEvidenceDocument,
   isPaymentAccountRequired,
   validateDocumentReviewForm,
@@ -124,6 +125,8 @@ export const DocumentReviewForm: React.FC<Props> = ({
   const [selectedCandidateId, setSelectedCandidateId] = useState(
     String(candidate.allocation_target_id ?? ''),
   );
+  const initialDocumentType = String(document.document_type ?? '');
+  const [documentType, setDocumentType] = useState<string>(initialDocumentType);
 
   const [projectSearch, setProjectSearch] = useState('');
   const [counterpartySearch, setCounterpartySearch] = useState('');
@@ -164,18 +167,18 @@ export const DocumentReviewForm: React.FC<Props> = ({
     candidate.proposed_transaction_type ??
       (selectedRecording
         ? 'DIRECT_PURCHASE'
-        : document.document_type === 'VENDOR_INVOICE'
+        : documentType === 'VENDOR_INVOICE'
         ? 'VENDOR_BILL'
-        : document.document_type === 'CUSTOMER_INVOICE'
+        : documentType === 'CUSTOMER_INVOICE'
         ? 'CUSTOMER_INVOICE'
-        : document.document_type === 'RECEIPT'
+        : documentType === 'RECEIPT'
         ? 'DIRECT_PURCHASE'
         : ''),
   );
 
   const requiresPaymentAccount = isPaymentAccountRequired(
     (transactionType as TransactionType) || undefined,
-    document.document_type,
+    documentType,
   );
 
   const customerTypes = new Set(['CUSTOMER_INVOICE', 'CUSTOMER_PAYMENT', 'CUSTOMER_ADVANCE', 'CUSTOMER_REFUND']);
@@ -244,15 +247,20 @@ export const DocumentReviewForm: React.FC<Props> = ({
       changes.allocation_target_id = selectedCandidateId || null;
       isDirty = true;
     }
+    if (documentType !== initialDocumentType) {
+      changes.document_type = documentType;
+      isDirty = true;
+    }
 
-    if (document.document_type === 'TRANSFER_PROOF') {
+    if (documentType === 'TRANSFER_PROOF') {
       const selected = RECORDING_CATEGORIES.find((c) => c.value === recordingCategory);
       if (selected) {
         const nextCost = selected.costCategory ?? null;
         const nextExpense = selected.expenseCategory ?? null;
         if (
           nextCost !== (candidate.cost_category ?? null) ||
-          nextExpense !== (candidate.expense_category ?? null)
+          nextExpense !== (candidate.expense_category ?? null) ||
+          documentType !== initialDocumentType
         ) {
           changes.cost_category = nextCost;
           changes.expense_category = nextExpense;
@@ -311,7 +319,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
     setFormValidationError(undefined);
     const validation = validateDocumentReviewForm(
       (transactionType as TransactionType) || undefined,
-      document.document_type,
+      documentType,
       {
         amount: totalAmount,
         transactionDate,
@@ -376,7 +384,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
     }
   };
 
-  const isEvidenceOnly = isEvidenceDocument(document.document_type);
+  const isEvidenceOnly = isEvidenceDocument(documentType);
   const candidateStatus = String(candidate.status ?? 'PROPOSED');
   const approvalStatus =
     candidateStatus === 'CONVERTED'
@@ -463,20 +471,26 @@ export const DocumentReviewForm: React.FC<Props> = ({
       )}
 
       {/* Keterangan dari Pengirim (WhatsApp caption / notes) */}
-      {Boolean(document.source_metadata && (document.source_metadata as any).caption) && (
-        <div className="rounded-lg bg-sky-50 p-3 border border-sky-200" aria-label="Keterangan dari Pengirim">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-sky-950 mb-1">
-            <MessageSquare className="h-4 w-4 text-sky-700 shrink-0" />
-            <span>Keterangan dari Pengirim</span>
+      {(() => {
+        const rawCaption = (document.source_metadata as any)?.caption;
+        if (!rawCaption || typeof rawCaption !== 'string') return null;
+        const trimmed = rawCaption.trim();
+        if (!trimmed || (trimmed.startsWith('[') && trimmed.endsWith('received]'))) return null;
+        return (
+          <div className="rounded-lg bg-sky-50 p-3 border border-sky-200" aria-label="Keterangan dari Pengirim">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-sky-950 mb-1">
+              <MessageSquare className="h-4 w-4 text-sky-700 shrink-0" />
+              <span>Keterangan dari Pengirim</span>
+            </div>
+            <p className="text-xs text-sky-900 bg-white/90 p-2.5 rounded border border-sky-100 font-medium whitespace-pre-wrap">
+              {trimmed}
+            </p>
+            <p className="text-[11px] text-sky-700 mt-1.5">
+              * Keterangan pesan pengirim dicatat terpisah sebagai petunjuk pencocokan dan tidak menggantikan teks hasil ekstraksi OCR dokumen.
+            </p>
           </div>
-          <p className="text-xs text-sky-900 bg-white/90 p-2.5 rounded border border-sky-100 font-medium whitespace-pre-wrap">
-            {(document.source_metadata as any).caption}
-          </p>
-          <p className="text-[11px] text-sky-700 mt-1.5">
-            * Keterangan pesan pengirim dicatat terpisah sebagai petunjuk pencocokan dan tidak menggantikan teks hasil ekstraksi OCR dokumen.
-          </p>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Session Context: Dokumen terkait dalam kiriman yang sama (Section 24) */}
       {Boolean(
@@ -581,7 +595,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
           <span>Hasil pembacaan</span>
         </div>
 
-        {document.document_type === 'TRANSFER_PROOF' ? (
+        {documentType === 'TRANSFER_PROOF' ? (
           <div className="p-3 space-y-2 bg-white">
             <div className="flex justify-between items-center">
               <span className="text-slate-500">Nomor Referensi Transfer:</span>
@@ -716,7 +730,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
       </div>
 
       {/* Line Items Table (Slice 2 extracted items, hidden for TRANSFER_PROOF) */}
-      {lineItems.length > 0 && !isEvidenceOnly && document.document_type !== 'TRANSFER_PROOF' && (
+      {lineItems.length > 0 && !isEvidenceOnly && documentType !== 'TRANSFER_PROOF' && (
         <div className="rounded-lg border border-slate-200 overflow-hidden text-xs">
           <div className="bg-slate-100 px-3 py-1.5 font-semibold text-slate-700 flex items-center gap-1.5">
             <Layers className="h-3.5 w-3.5 text-slate-600" />
@@ -947,6 +961,25 @@ export const DocumentReviewForm: React.FC<Props> = ({
       {/* Form Fields for Review & Correction */}
       <div className="space-y-3">
         <div>
+          <label htmlFor="document-type-select" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+            Jenis Dokumen <span className="text-rose-500">*</span>
+          </label>
+          <select
+            id="document-type-select"
+            aria-label="Jenis Dokumen"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm bg-white text-slate-900"
+            value={documentType}
+            onChange={(e) => setDocumentType(e.target.value)}
+          >
+            {Object.entries(DOCUMENT_TYPE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
           <label htmlFor="invoice-number" className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
             Nomor Faktur / Dokumen
           </label>
@@ -1001,7 +1034,7 @@ export const DocumentReviewForm: React.FC<Props> = ({
           />
         </div>
 
-        {document.document_type === 'TRANSFER_PROOF' && (
+        {documentType === 'TRANSFER_PROOF' && (
           <div className="space-y-2">
             <label
               htmlFor="recording-category"

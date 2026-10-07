@@ -451,6 +451,20 @@ async def correct_document(document_id: uuid.UUID, data: DocumentCorrectionReque
         await db.flush()
         return document
 
+    # Rehydrate candidate defaults if converting from evidence document or incomplete candidate
+    if not candidate.get("id"):
+        candidate["id"] = str(uuid.uuid5(uuid.NAMESPACE_URL, f"document:{document.id}"))
+    candidate.setdefault("currency_code", extracted.get("currency_code") or "IDR")
+    candidate.setdefault("status", CandidateStatus.REVIEW_REQUIRED.value)
+    if not candidate.get("amount") and extracted.get("total_amount"):
+        candidate["amount"] = extracted["total_amount"]
+    if not candidate.get("transaction_date") and extracted.get("transaction_date"):
+        candidate["transaction_date"] = extracted["transaction_date"]
+    if not candidate.get("external_reference"):
+        candidate["external_reference"] = extracted.get("invoice_number") or extracted.get("transfer_reference") or extracted.get("document_number")
+    if not candidate.get("description"):
+        candidate["description"] = extracted.get("description") or f"Candidate from {document.document_type.value}"
+
     validated = TransactionCandidate.model_validate(candidate)
     if validated.proposed_transaction_type is not None:
         PostingRuleRegistry.validate_generic_ingestion(validated.proposed_transaction_type)

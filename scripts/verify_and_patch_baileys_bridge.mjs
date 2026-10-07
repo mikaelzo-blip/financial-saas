@@ -206,6 +206,21 @@ export function verifyBridgeScript(scriptPath) {
   );
 }
 
+export function patchBridgeEnvelopes(source) {
+  if (typeof source !== 'string' || source.includes('botForwardedMessage')) return source;
+  const target = 'cur.documentWithCaptionMessage?.message;';
+  if (!source.includes(target)) return source;
+  const replacement = `cur.documentWithCaptionMessage?.message ??
+      cur.viewOnceMessageV2Extension?.message ??
+      cur.botForwardedMessage?.message ??
+      cur.associatedChildMessage?.message ??
+      cur.groupStatusMessage?.message ??
+      cur.groupStatusMessageV2?.message ??
+      cur.editedMessage?.message?.protocolMessage?.editedMessage ??
+      cur.editedMessage?.message;`;
+  return source.replace(target, replacement);
+}
+
 export function reapplyBridgePatch(scriptPath) {
   const helpersPath = path.join(path.dirname(scriptPath), 'bridge_helpers.js');
   if (!fs.existsSync(helpersPath)) {
@@ -216,13 +231,19 @@ export function reapplyBridgePatch(scriptPath) {
   const originalHelpers = fs.readFileSync(helpersPath, 'utf8');
 
   // Native LID-resolving bridge: canonical phone identity is already forwarded
-  // end to end, so neither the bridge nor its helpers need patching.
+  // end to end, but check if helpers need envelope peeling for forwarded media.
   if (isNativeLidBridge(originalBridge)) {
+    const patchedHelpers = patchBridgeEnvelopes(originalHelpers);
+    if (patchedHelpers !== originalHelpers) {
+      fs.writeFileSync(helpersPath, patchedHelpers, 'utf8');
+      return { ok: true, changed: true };
+    }
     return { ok: true, changed: false };
   }
 
   const patchedBridge = patchBridgeScriptContent(originalBridge);
-  const patchedHelpers = patchBridgeHelpersContent(originalHelpers);
+  let patchedHelpers = patchBridgeHelpersContent(originalHelpers);
+  patchedHelpers = patchBridgeEnvelopes(patchedHelpers);
   const status = verifyBridgeContents(patchedBridge, patchedHelpers);
   if (!status.ok) throw new Error(status.reason);
 

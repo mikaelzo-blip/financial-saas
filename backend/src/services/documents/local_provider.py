@@ -282,6 +282,7 @@ class LocalExtractionProvider:
         date_pattern = (
             r"\b(?:tanggal|tgl|date)\s*[:=]?\s*"
             r"(\d{1,2}[\s\-]+(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|MEI|AGU|OKT|DES)[A-Z]*[\s\-]+\d{4}"
+            r"|(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC|MEI|AGU|OKT|DES)[A-Z]*[\s\-]+\d{1,2},?[\s\-]+\d{4}"
             r"|\d{4}-\d{2}-\d{2}"
             r"|\d{2}[/-]\d{2}[/-]\d{4})\b"
         )
@@ -302,6 +303,7 @@ class LocalExtractionProvider:
         if not tx_date:
             generic_date = re.search(
                 r"\b(\d{1,2}\s+(?:JANUARI|FEBRUARI|MARET|APRIL|MEI|JUNI|JULI|AGUSTUS|SEPTEMBER|OKTOBER|NOVEMBER|DESEMBER|JAN|FEB|PEB|MAR|APR|MAY|JUN|JUL|AGU|AGS|AUG|SEP|OKT|OCT|NOV|NOP|DES|DEC)\s+\d{4}"
+                r"|(?:JANUARI|FEBRUARI|MARET|APRIL|MEI|JUNI|JULI|AGUSTUS|SEPTEMBER|OKTOBER|NOVEMBER|DESEMBER|JAN|FEB|PEB|MAR|APR|MAY|JUN|JUL|AGU|AGS|AUG|SEP|OKT|OCT|NOV|NOP|DES|DEC)\s+\d{1,2},?\s+\d{4}"
                 r"|\d{4}-\d{2}-\d{2}"
                 r"|\d{2}[/-]\d{2}[/-]\d{4})\b",
                 text,
@@ -389,7 +391,11 @@ class LocalExtractionProvider:
 
         # Transfer reference
         transfer_ref = None
-        tref_match = re.search(r"\b(?:no(?:mor)?\s*referensi|ref\s*#?|reference\s*no|no\s*transaksi)\s*[:=]?\s*([A-Za-z0-9\-\/]+)", text, re.I)
+        tref_match = re.search(
+            r"\b(?:no(?:mor)?\s*referensi|\bref\b\s*#?|reference\s*no|no\s*transaksi|transaction\s*(?:id|reference)|document\s*number)\s*[:=\n]?\s*([A-Za-z0-9\-\/]+)",
+            text,
+            re.I,
+        )
         if tref_match:
             transfer_ref = tref_match.group(1)
             field_evidence["transfer_reference"] = ExtractedField(
@@ -402,7 +408,11 @@ class LocalExtractionProvider:
         # Destination account name & number
         dest_account_no = None
         dest_account_name = None
-        acc_no_match = re.search(r"\b(?:rekening\s+tujuan|no\s+rek|nomor\s+rekening)\s*[:=]?\s*(\d{7,16})\b", text, re.I)
+        acc_no_match = re.search(
+            r"\b(?:rekening\s+tujuan|no\s+rek|nomor\s+rekening|destination\s+account)\s*[:=\n]?\s*(\d{7,16})\b",
+            text,
+            re.I,
+        )
         if acc_no_match:
             dest_account_no = acc_no_match.group(1)
             field_evidence["destination_account_number"] = ExtractedField(
@@ -412,7 +422,7 @@ class LocalExtractionProvider:
                 validation_status="VALID",
             )
 
-        acc_name_match = re.search(r"\b(?:nama\s+tujuan|nama\s+penerima|penerima)\s*[:=]?\s*([A-Za-z0-9\s.,\-]+)", text, re.I)
+        acc_name_match = re.search(r"\b(?:nama\s+tujuan|nama\s+penerima|penerima|destination\s+account)\s*[:=]?\s*([A-Za-z0-9\s.,\-]+)", text, re.I)
         if acc_name_match:
             first_line = acc_name_match.group(1).strip().splitlines()[0].strip()
             if len(first_line) > 2:

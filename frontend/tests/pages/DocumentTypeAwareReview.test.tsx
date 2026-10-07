@@ -174,4 +174,88 @@ describe('DocumentTypeAwareReview', () => {
     expect(isPaymentAccountRequired('VENDOR_BILL', 'VENDOR_INVOICE')).toBe(false);
     expect(isPaymentAccountRequired('CUSTOMER_INVOICE', 'CUSTOMER_INVOICE')).toBe(false);
   });
+
+  it('allows correcting a misclassified BANK_STATEMENT to TRANSFER_PROOF and reveals posting controls and categories', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    const onSave = vi.fn();
+    const onApprove = vi.fn();
+
+    const bankStatementDoc: DocumentResponse = {
+      id: 'doc-statement-1',
+      organization_id: 'org-1',
+      document_code: 'DOC-2026-000555',
+      document_type: 'BANK_STATEMENT',
+      file_name: 'mandiri-receipt.pdf',
+      file_hash: 'f'.repeat(64),
+      file_size_bytes: 50000,
+      mime_type: 'application/pdf',
+      source_channel: 'WHATSAPP',
+      created_at: '2026-09-15T12:00:00Z',
+      processing_status: 'REVIEW_REQUIRED',
+      extracted_data: {
+        total_amount: '1500000.00',
+        transaction_date: '2026-07-03',
+        transfer_reference: '202607031259641732',
+      },
+      matching_results: {},
+      confidence_scores: { document_type_confidence: '0.75' },
+      candidate_transaction: {
+        amount: '1500000.00',
+        transaction_date: '2026-07-03',
+      },
+      review_flags: [],
+    };
+
+    render(
+      <DocumentReviewForm
+        document={bankStatementDoc}
+        projects={mockProjects}
+        counterparties={mockCounterparties}
+        paymentAccounts={mockPaymentAccounts}
+        onSave={onSave}
+        onApprove={onApprove}
+        onReject={vi.fn()}
+      />,
+    );
+
+    // Initial state: treated as evidence-only
+    expect(screen.getByText('Dokumen pendukung saja')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Simpan Dokumen/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Setujui untuk Diposting/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Jenis Pencatatan')).not.toBeInTheDocument();
+
+    // Change document type to TRANSFER_PROOF
+    const typeSelect = screen.getByLabelText('Jenis Dokumen');
+    fireEvent.change(typeSelect, { target: { value: 'TRANSFER_PROOF' } });
+
+    // Now evidence-only banner disappears, posting controls appear
+    expect(screen.queryByText('Dokumen pendukung saja')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Setujui untuk Diposting/i })).toBeInTheDocument();
+    expect(screen.getByLabelText('Jenis Pencatatan')).toBeInTheDocument();
+
+    // Verify LAB and FEE are options in Jenis Pencatatan
+    expect(screen.getByRole('option', { name: /Upah Tukang & Tenaga Kerja \(proyek\)/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Honorarium \/ Fee \(kantor\)/i })).toBeInTheDocument();
+
+    // Select LAB category, project, and payment account
+    fireEvent.change(screen.getByLabelText('Jenis Pencatatan'), { target: { value: 'LAB' } });
+    fireEvent.change(screen.getByLabelText('Pilih Proyek'), { target: { value: mockProjects[0].id } });
+    fireEvent.change(screen.getByLabelText(/Asal Dana/i), { target: { value: mockPaymentAccounts[0].id } });
+
+    // Click Setujui untuk Diposting
+    fireEvent.click(screen.getByRole('button', { name: /Setujui untuk Diposting/i }));
+
+    // onSave should be called with document_type: 'TRANSFER_PROOF', proposed_transaction_type: 'DIRECT_PURCHASE', cost_category: 'LAB'
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        document_type: 'TRANSFER_PROOF',
+        proposed_transaction_type: 'DIRECT_PURCHASE',
+        cost_category: 'LAB',
+        payment_account_id: mockPaymentAccounts[0].id,
+        project_id: mockProjects[0].id,
+      }),
+      expect.any(String),
+      expect.objectContaining({ silent: true }),
+    );
+  });
 });

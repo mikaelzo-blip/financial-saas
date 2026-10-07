@@ -17,3 +17,12 @@ async def test_safe_command_allowlist_and_authorization():
     for command in ("POST", "APPROVE", "DELETE HISTORY", "debit 100 credit 100", "STATUS; DROP TABLE"):
         assert "SaaS" in await commands.reply(command, manager, client)
     client.channel_request.assert_not_awaited()
+
+
+async def test_informational_text_returns_none_for_session_recording():
+    client = AsyncMock()
+    commands = WhatsAppCommandService()
+    manager = SimpleNamespace(role_in_org="PROJECT_MANAGER", phone_number="+628****7890")
+    for text in ("fee po conveyor arjer", "nota semen 50 sak", "transfer Mandiri ke PT Jaya"):
+        assert await commands.reply(text, manager, client) is None
+    client.channel_request.assert_not_awaited()

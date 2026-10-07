@@ -30,7 +30,8 @@ class ARAgingService:
         stmt = select(CustomerInvoice).options(
             selectinload(CustomerInvoice.customer),
             selectinload(CustomerInvoice.project),
-            selectinload(CustomerInvoice.allocations).selectinload(CustomerPaymentAllocation.payment_transaction)
+            selectinload(CustomerInvoice.allocations).selectinload(CustomerPaymentAllocation.payment_transaction),
+            selectinload(CustomerInvoice.retention_releases),
         ).where(
             and_(
                 CustomerInvoice.organization_id == organization_id,
@@ -51,9 +52,6 @@ class ARAgingService:
         lines: List[ARAgingInvoiceLine] = []
 
         def _allocation_date(alloc) -> date:
-            if hasattr(alloc, "allocated_at") and alloc.allocated_at is not None:
-                val = alloc.allocated_at
-                return val.date() if isinstance(val, datetime) else val
             trx = getattr(alloc, "payment_transaction", None)
             if trx is not None and getattr(trx, "transaction_date", None) is not None:
                 val = trx.transaction_date
@@ -66,12 +64,22 @@ class ARAgingService:
             return date.min
 
         for inv in invoices_list:
-            tot_amt = inv.calculate_collectible_amount()
+            sum_releases_as_of = sum(
+                (
+                    Decimal(str(r.release_amount))
+                    for r in (inv.retention_releases or [])
+                    if r.release_date <= as_of
+                ),
+                Decimal("0.00")
+            )
+            collectible = (
+                Decimal(str(inv.total_amount)) - Decimal(str(inv.retention_amount or Decimal("0.00")))
+            ) + sum_releases_as_of
             paid_amt = sum(
                 (Decimal(str(a.allocated_amount)) for a in inv.allocations if _allocation_date(a) <= as_of),
                 Decimal("0.00")
             )
-            outstanding = max(Decimal("0.00"), tot_amt - paid_amt)
+            outstanding = max(Decimal("0.00"), collectible - paid_amt)
 
             if outstanding <= Decimal("0.00"):
                 continue
@@ -106,7 +114,7 @@ class ARAgingService:
                     invoice_date=inv.invoice_date,
                     due_date=inv.due_date,
                     days_overdue=days_overdue,
-                    total_amount=tot_amt,
+                    total_amount=collectible,
                     paid_amount=paid_amt,
                     outstanding_amount=outstanding,
                     bucket=bucket

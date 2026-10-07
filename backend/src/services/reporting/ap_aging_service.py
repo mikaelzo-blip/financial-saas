@@ -52,9 +52,6 @@ class APAgingService:
         lines: List[APAgingBillLine] = []
 
         def _allocation_date(alloc) -> date:
-            if hasattr(alloc, "allocated_at") and alloc.allocated_at is not None:
-                val = alloc.allocated_at
-                return val.date() if isinstance(val, datetime) else val
             trx = getattr(alloc, "payment_transaction", None)
             if trx is not None and getattr(trx, "transaction_date", None) is not None:
                 val = trx.transaction_date

@@ -44,7 +44,7 @@ REPORT_GROUPS = {
         "name": "Aset Tetap",
         "account_types": [AccountType.ASSET],
         "normal_balance": NormalBalance.DEBIT,
-        "prefix_match": ["12"]
+        "prefix_match": ["15"]
     },
     "CURRENT_LIABILITIES": {
         "code": "CL",

@@ -2,7 +2,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 from typing import List, Dict, Tuple
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.journal import JournalEntry, JournalLine
@@ -45,11 +45,29 @@ class BalanceSheetService:
         ).order_by(ChartOfAccount.account_code)
         coa_list = (await session.execute(coa_stmt)).scalars().all()
 
+        start_of_year = date(as_of.year, 1, 1)
+
         # 2. Aggregate cumulative movements up to as_of
         stmt = select(
             JournalLine.account_id,
             func.coalesce(func.sum(JournalLine.debit_amount), Decimal("0.00")),
-            func.coalesce(func.sum(JournalLine.credit_amount), Decimal("0.00"))
+            func.coalesce(func.sum(JournalLine.credit_amount), Decimal("0.00")),
+            func.coalesce(
+                func.sum(case((JournalEntry.posting_date < start_of_year, JournalLine.debit_amount), else_=Decimal("0.00"))),
+                Decimal("0.00")
+            ),
+            func.coalesce(
+                func.sum(case((JournalEntry.posting_date < start_of_year, JournalLine.credit_amount), else_=Decimal("0.00"))),
+                Decimal("0.00")
+            ),
+            func.coalesce(
+                func.sum(case((JournalEntry.posting_date >= start_of_year, JournalLine.debit_amount), else_=Decimal("0.00"))),
+                Decimal("0.00")
+            ),
+            func.coalesce(
+                func.sum(case((JournalEntry.posting_date >= start_of_year, JournalLine.credit_amount), else_=Decimal("0.00"))),
+                Decimal("0.00")
+            )
         ).join(JournalEntry, JournalLine.journal_entry_id == JournalEntry.id).where(
             and_(
                 JournalEntry.organization_id == organization_id,
@@ -58,8 +76,12 @@ class BalanceSheetService:
         ).group_by(JournalLine.account_id)
 
         cum_data = (await session.execute(stmt)).all()
-        movements: Dict[uuid.UUID, Tuple[Decimal, Decimal]] = {
-            row[0]: (Decimal(str(row[1])), Decimal(str(row[2]))) for row in cum_data
+        movements: Dict[uuid.UUID, Tuple[Decimal, Decimal, Decimal, Decimal, Decimal, Decimal]] = {
+            row[0]: (
+                Decimal(str(row[1])), Decimal(str(row[2])),
+                Decimal(str(row[3])), Decimal(str(row[4])),
+                Decimal(str(row[5])), Decimal(str(row[6]))
+            ) for row in cum_data
         }
 
         # 3. Classify into Balance Sheet categories
@@ -75,17 +97,21 @@ class BalanceSheetService:
         tot_ll = Decimal("0.00")
         tot_eq = Decimal("0.00")
 
-        # Running tally for current year/period earnings (Revenue - Expenses)
-        tot_rev_cum = Decimal("0.00")
-        tot_exp_cum = Decimal("0.00")
+        prior_rev = Decimal("0.00")
+        prior_exp = Decimal("0.00")
+        cur_rev = Decimal("0.00")
+        cur_exp = Decimal("0.00")
 
         for acc in coa_list:
-            dr, cr = movements.get(acc.id, (Decimal("0.00"), Decimal("0.00")))
+            cum_dr, cum_cr, prior_dr, prior_cr, cur_dr, cur_cr = movements.get(
+                acc.id,
+                (Decimal("0.00"), Decimal("0.00"), Decimal("0.00"), Decimal("0.00"), Decimal("0.00"), Decimal("0.00"))
+            )
             code = acc.account_code
 
             if acc.account_type == AccountType.ASSET:
                 # Normal balance DEBIT
-                net = dr - cr
+                net = cum_dr - cum_cr
                 if net != Decimal("0.00") or code in ["1101", "1102"]:
                     if acc.report_section == "FIXED_ASSET" or classify_asset_report_group(code, acc.report_group) == "FIXED_ASSETS":
                         tot_fa += net
@@ -96,7 +122,7 @@ class BalanceSheetService:
 
             elif acc.account_type == AccountType.LIABILITY:
                 # Normal balance CREDIT
-                net = cr - dr
+                net = cum_cr - cum_dr
                 if net != Decimal("0.00") or code in ["2101"]:
                     if acc.report_section == "LONG_TERM_LIABILITY" or code.startswith("25"):
                         tot_ll += net
@@ -106,21 +132,39 @@ class BalanceSheetService:
                         current_liab_lines.append(ReportLineItem(account_code=code, line_name=acc.account_name, amount=net))
 
             elif acc.account_type == AccountType.EQUITY:
-
                 # Normal balance CREDIT
-                net = cr - dr
-                if net != Decimal("0.00") or code in ["3101"]:
+                net = cum_cr - cum_dr
+                if net != Decimal("0.00") or code in ["3101", "3201"]:
                     tot_eq += net
                     equity_lines.append(ReportLineItem(account_code=code, line_name=acc.account_name, amount=net))
 
             elif acc.account_type == AccountType.REVENUE:
-                tot_rev_cum += (cr - dr)
+                prior_rev += (prior_cr - prior_dr)
+                cur_rev += (cur_cr - cur_dr)
 
             elif acc.account_type == AccountType.EXPENSE:
-                tot_exp_cum += (dr - cr)
+                prior_exp += (prior_dr - prior_cr)
+                cur_exp += (cur_dr - cur_cr)
 
-        # Current Year Earnings = Cumulative Revenue - Cumulative Expense
-        current_year_earnings = tot_rev_cum - tot_exp_cum
+        prior_years_profit = prior_rev - prior_exp
+        current_year_earnings = cur_rev - cur_exp
+
+        # Roll prior years profit into Retained Earnings (3201)
+        re_line = next((line for line in equity_lines if line.account_code == "3201"), None)
+        if re_line:
+            re_line.amount += prior_years_profit
+            tot_eq += prior_years_profit
+        elif prior_years_profit != Decimal("0.00"):
+            equity_lines.append(
+                ReportLineItem(
+                    account_code="3201",
+                    line_name="Saldo Laba Ditahan",
+                    amount=prior_years_profit
+                )
+            )
+            tot_eq += prior_years_profit
+
+        # Current Year Earnings = Current Year Revenue - Current Year Expense
         if current_year_earnings != Decimal("0.00"):
             equity_lines.append(
                 ReportLineItem(

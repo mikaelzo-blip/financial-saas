@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import List
 from sqlalchemy import select, and_, func
@@ -31,7 +31,7 @@ class APAgingService:
         stmt = select(VendorBill).options(
             selectinload(VendorBill.vendor),
             selectinload(VendorBill.project),
-            selectinload(VendorBill.allocations)
+            selectinload(VendorBill.allocations).selectinload(VendorPaymentAllocation.payment_transaction)
         ).where(
             and_(
                 VendorBill.organization_id == organization_id,
@@ -51,10 +51,28 @@ class APAgingService:
 
         lines: List[APAgingBillLine] = []
 
+        def _allocation_date(alloc) -> date:
+            if hasattr(alloc, "allocated_at") and alloc.allocated_at is not None:
+                val = alloc.allocated_at
+                return val.date() if isinstance(val, datetime) else val
+            trx = getattr(alloc, "payment_transaction", None)
+            if trx is not None and getattr(trx, "transaction_date", None) is not None:
+                val = trx.transaction_date
+                return val.date() if isinstance(val, datetime) else val
+            val = getattr(alloc, "created_at", None)
+            if isinstance(val, datetime):
+                return val.date()
+            if isinstance(val, date):
+                return val
+            return date.min
+
         for bill in bills_list:
-            paid_amt = sum((Decimal(str(a.allocated_amount)) for a in bill.allocations), Decimal("0.00"))
+            paid_amt = sum(
+                (Decimal(str(a.allocated_amount)) for a in bill.allocations if _allocation_date(a) <= as_of),
+                Decimal("0.00")
+            )
             tot_amt = Decimal(str(bill.total_amount))
-            outstanding = tot_amt - paid_amt
+            outstanding = max(Decimal("0.00"), tot_amt - paid_amt)
 
             if outstanding <= Decimal("0.00"):
                 continue

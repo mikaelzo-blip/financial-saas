@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import List
 from sqlalchemy import select, and_, func
@@ -30,7 +30,7 @@ class ARAgingService:
         stmt = select(CustomerInvoice).options(
             selectinload(CustomerInvoice.customer),
             selectinload(CustomerInvoice.project),
-            selectinload(CustomerInvoice.allocations)
+            selectinload(CustomerInvoice.allocations).selectinload(CustomerPaymentAllocation.payment_transaction)
         ).where(
             and_(
                 CustomerInvoice.organization_id == organization_id,
@@ -50,10 +50,28 @@ class ARAgingService:
 
         lines: List[ARAgingInvoiceLine] = []
 
+        def _allocation_date(alloc) -> date:
+            if hasattr(alloc, "allocated_at") and alloc.allocated_at is not None:
+                val = alloc.allocated_at
+                return val.date() if isinstance(val, datetime) else val
+            trx = getattr(alloc, "payment_transaction", None)
+            if trx is not None and getattr(trx, "transaction_date", None) is not None:
+                val = trx.transaction_date
+                return val.date() if isinstance(val, datetime) else val
+            val = getattr(alloc, "created_at", None)
+            if isinstance(val, datetime):
+                return val.date()
+            if isinstance(val, date):
+                return val
+            return date.min
+
         for inv in invoices_list:
-            outstanding = inv.calculate_outstanding_amount()
             tot_amt = inv.calculate_collectible_amount()
-            paid_amt = inv.calculate_paid_amount()
+            paid_amt = sum(
+                (Decimal(str(a.allocated_amount)) for a in inv.allocations if _allocation_date(a) <= as_of),
+                Decimal("0.00")
+            )
+            outstanding = max(Decimal("0.00"), tot_amt - paid_amt)
 
             if outstanding <= Decimal("0.00"):
                 continue

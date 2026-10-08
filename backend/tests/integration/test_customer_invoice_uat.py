@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -339,9 +339,10 @@ async def test_customer_invoice_with_allocated_payment_cannot_be_reversed(db_ses
 @pytest.mark.asyncio
 async def test_customer_invoice_api_exposes_ar_subledger(client, db_session: AsyncSession):
     org, customer, _, project = await setup_invoice_context(db_session, "invoice-api")
+    today = date.today()
     transaction = await TransactionService(db_session).create_transaction(org.id, TransactionCreate(
         transaction_type=TransactionType.CUSTOMER_INVOICE,
-        transaction_date=date(2026, 9, 1), amount=Decimal("25000000.00"),
+        transaction_date=today, amount=Decimal("25000000.00"),
         counterparty_id=customer.id, project_id=project.id,
         reference_no="INV-API-001", description="Invoice API",
     ))
@@ -363,8 +364,8 @@ async def test_customer_invoice_api_exposes_ar_subledger(client, db_session: Asy
         "project_id": str(project.id),
         "project_name": project.project_name,
         "invoice_number": "INV-API-001",
-        "invoice_date": "2026-09-01",
-        "due_date": "2026-10-01",
+        "invoice_date": today.isoformat(),
+        "due_date": (today + timedelta(days=30)).isoformat(),
         "total_amount": "25000000.00",
         "retention_rate": "0.0000",
         "retention_amount": "0.00",

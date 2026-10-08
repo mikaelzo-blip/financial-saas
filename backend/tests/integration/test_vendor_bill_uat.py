@@ -201,7 +201,7 @@ async def test_vendor_bills_list_api_returns_persisted_bills(client: AsyncClient
         org.id,
         TransactionCreate(
             transaction_type=TransactionType.VENDOR_BILL,
-            transaction_date=date(2026, 9, 2),
+            transaction_date=date.today(),
             amount=Decimal("12000000.00"),
             counterparty_id=vendor.id,
             project_id=project.id,

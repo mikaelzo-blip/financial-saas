@@ -1,8 +1,20 @@
-# Task Remediasi Audit 2026-10-07 — untuk dieksekusi Gemini
+# Task Remediasi Audit 2026-10-07 — dieksekusi Hermes Coder, diorkestrasi Claude
 
 Sumber: audit mendalam `main` @ `690e761` (2026-10-07). Setiap task kecil, berdiri sendiri, dan
-punya kriteria terima yang bisa diverifikasi. Hasil kerja setiap task **akan diaudit ulang oleh
-Claude** sebelum merge.
+punya kriteria terima yang bisa diverifikasi.
+
+**Peran:**
+- **Hermes Coder** mengeksekusi T01–T17 (implementasi, tes, verifikasi, PR).
+- **Claude** adalah orchestrator: menetapkan urutan dan antrean di `PROJECT_STATUS.md`, mengaudit
+  setiap PR, dan memberi putusan merge.
+- **Pemilik (user)** memutuskan item kebijakan D1–D9.
+
+Dokumen ini adalah artefak task yang disetujui pemilik untuk batch remediasi ini (setara
+`tasks.md` + klarifikasi yang disetujui dalam urutan otoritas `AGENTS.md`). Setiap task adalah
+*contained bug fix*: ikuti jalur BUG FIX di `.hermes/skills/financial-saas-orchestrator/SKILL.md`
+(reproduksi → tes regresi → perbaikan terkecil → verifikasi). Tidak perlu siklus Spec Kit penuh
+per task, **kecuali** task ternyata membutuhkan kebijakan bisnis baru — saat itu berhenti dan
+laporkan (lihat aturan 1).
 
 ---
 
@@ -11,10 +23,15 @@ Claude** sebelum merge.
 1. Baca `AGENTS.md` dan `.specify/memory/constitution.md`. Urutan otoritas di `AGENTS.md` berlaku.
    **Jangan menciptakan kebijakan akuntansi baru.** Kalau sebuah task ternyata butuh keputusan
    kebijakan, berhenti dan tulis pertanyaannya di deskripsi PR — jangan menebak.
-2. **Satu task = satu branch = satu PR.**
-   - Branch: `gemini/<ID>-<slug>` dibuat dari `origin/main` terbaru (contoh `gemini/T03-review-flag-posted`).
+2. **Satu task = satu branch = satu PR** (satu-satunya pengecualian: T01 dan T02 digabung, lihat tabel urutan).
+   - Branch: `hermes/<ID>-<slug>` dibuat dari `origin/main` terbaru (contoh `hermes/T03-review-flag-posted`).
    - Judul PR diawali ID task: `[T03] fix(review): ...`.
-   - Base PR: `main`. **Jangan merge PR sendiri**, jangan force-push, jangan push ke `main`.
+   - Base PR: `main`. Jangan force-push, jangan push ke `main`.
+   - **Gerbang merge batch ini (instruksi pemilik, berlaku di atas langkah 8 skill orchestrator):**
+     PR **tidak boleh di-squash-merge**, walau CI hijau, sebelum ada komentar
+     `Claude audit: APPROVE` dari Claude di PR tersebut. Setelah APPROVE dan CI hijau, Hermes
+     boleh squash-merge lalu sinkronkan `main`. Jika putusannya `REQUEST CHANGES`, perbaiki di
+     branch yang sama lalu minta audit ulang.
 3. Ubah **hanya** file yang disebut di task. Kalau terpaksa menyentuh file lain, jelaskan alasannya
    di PR. Jangan refactor di luar scope.
 4. **Dilarang melemahkan tes** (menghapus assert, menambah skip/xfail, melonggarkan nilai yang
@@ -23,27 +40,35 @@ Claude** sebelum merge.
    **lulus sesudahnya**. Tulis output kedua kondisi itu di PR.
 6. Uang selalu `Decimal`/`NUMERIC`, tidak pernah `float`.
 7. Pesan error ke pengguna mengikuti gaya yang sudah ada (`InvariantViolationException` → HTTP 422).
-8. Jangan menyentuh database produksi, secret, `.env`, atau layanan berbayar.
+8. Jangan menyentuh database produksi, secret, `.env`, atau layanan berbayar. Di Finance PC,
+   container `financial-saas-postgres` (port 5432) berisi data operasional — **jangan pernah**
+   menjalankan tes, migrasi uji, atau probe terhadapnya. Gunakan hanya DB sekali pakai di bawah.
+9. Jangan perbarui `PROJECT_STATUS.md` di PR task. Status antrean dikelola orchestrator; kemajuan
+   diukur dari PR `[Txx]` yang sudah merge ke `main` (Git adalah sumber kebenaran).
 
 ### Urutan dan ketergantungan
 
 | Gelombang | Task | Catatan |
 |---|---|---|
-| 1 (buka blokir CI) | T01, T02 | Harus merge dulu; tanpa ini semua PR lain merah. |
-| 2 (independen, boleh paralel) | T03, T04, T06, T07, T08, T09, T11, T12, T13, T14, T15, T16, T17 | Masing-masing kecil. |
+| 1 (buka blokir CI) | T01, T02 | Kerjakan dalam **satu PR** `[T01+T02]` (dua commit terpisah) di branch `hermes/T01-T02-unblock-ci`: PR salah satunya saja tetap merah karena kegagalan yang diperbaiki yang lain. Harus merge dulu; tanpa ini semua PR lain merah. |
+| 2 (independen) | T03, T04, T06, T07, T08, T09, T11, T12, T13, T14, T15, T16, T17 | Kerjakan sesuai urutan nomor. Boleh lanjut ke task berikutnya saat PR sebelumnya menunggu audit, **maksimal 3 PR terbuka** sekaligus. |
 | 3 (berurutan — migrasi Alembic) | T05 → T10 | Rantai migrasi harus linear; T10 dikerjakan setelah T05 di-merge dan juga setelah T09. |
 
 ### Lingkungan verifikasi (dipakai semua task backend)
 
+Port **55432** dipakai supaya tidak bentrok dengan `financial-saas-postgres` (5432). Contoh di
+bawah memakai bash; di PowerShell ganti `export X=...` dengan `$env:X = "..."` dan
+`.venv/bin/python` dengan `.venv\Scripts\python`.
+
 ```bash
-# PostgreSQL 16 sekali pakai
-docker run -d --name fin-audit-pg -p 5432:5432 \
+# PostgreSQL 16 sekali pakai (hapus setelah selesai: docker rm -f fin-audit-pg)
+docker run -d --name fin-audit-pg -p 55432:5432 \
   -e POSTGRES_USER=fin001_ci_user -e POSTGRES_PASSWORD=fin001_ci_password \
   -e POSTGRES_DB=fin001_ci_disposable postgres:16
 
 cd backend
 uv sync --locked --extra test
-export U=postgresql+asyncpg://fin001_ci_user:fin001_ci_password@127.0.0.1:5432/fin001_ci_disposable
+export U=postgresql+asyncpg://fin001_ci_user:fin001_ci_password@127.0.0.1:55432/fin001_ci_disposable
 export SLICE5_TEST_DATABASE_URL=$U FIN_001_TEST_DATABASE_URL=$U RECON_001_TEST_DATABASE_URL=$U \
        FEATURE_012_TEST_DATABASE_URL=$U LIVE_POSTGRES_URL=$U DATABASE_URL=$U
 .venv/bin/python -m alembic upgrade head
@@ -56,9 +81,9 @@ meninggalkan data:
 
 ```bash
 docker exec fin-audit-pg createdb -U fin001_ci_user fin_audit_disposable
-DATABASE_URL=postgresql+asyncpg://fin001_ci_user:fin001_ci_password@127.0.0.1:5432/fin_audit_disposable \
+DATABASE_URL=postgresql+asyncpg://fin001_ci_user:fin001_ci_password@127.0.0.1:55432/fin_audit_disposable \
   .venv/bin/python -m alembic upgrade head
-AUDIT_PROBE_DATABASE_URL=postgresql+asyncpg://fin001_ci_user:fin001_ci_password@127.0.0.1:5432/fin_audit_disposable \
+AUDIT_PROBE_DATABASE_URL=postgresql+asyncpg://fin001_ci_user:fin001_ci_password@127.0.0.1:55432/fin_audit_disposable \
   .venv/bin/python ../tools/audit/regression_probe.py
 ```
 
@@ -355,7 +380,7 @@ T0x — <judul>
 
 ---
 
-## Bukan untuk Gemini — butuh keputusan pemilik bisnis atau desain dari Claude
+## Bukan untuk Hermes — butuh keputusan pemilik bisnis atau desain dari Claude
 
 | ID | Topik | Yang dibutuhkan |
 |---|---|---|
@@ -371,9 +396,11 @@ T0x — <judul>
 
 ---
 
-## Serah terima ke Claude untuk audit ulang
+## Serah terima ke Claude (orchestrator) untuk audit
 
-Setelah PR dibuka, kirim ke Claude: nomor PR + ID task. Claude akan:
+Setelah PR dibuka dan CI selesai, Hermes menulis komentar di PR:
+`Siap audit Claude: Txx` (beserta bukti sesuai template). Pemilik meneruskan nomor PR ke Claude,
+atau Claude menemukannya sendiri saat memantau PR `hermes/T*`. Claude akan:
 
 1. Membaca diff terhadap scope task dan aturan di bagian 0 (perubahan di luar scope = ditolak).
 2. Menjalankan ulang gate CI secara lokal di PostgreSQL 16 (suite penuh, grup PG wajib, `alembic check`,
@@ -381,4 +408,6 @@ Setelah PR dibuka, kirim ke Claude: nomor PR + ID task. Claude akan:
 3. Memverifikasi tes regresi benar-benar gagal pada `main` dan lulus pada branch PR.
 4. Menjalankan `tools/audit/regression_probe.py`: baris task harus `OK`, tidak boleh ada regresi.
 5. Mencari jalan pintas secara adversarial (bypass lewat endpoint lain, jalur worker/dokumen,
-   konkurensi) dan memberi putusan **APPROVE** / **REQUEST CHANGES** dengan temuan spesifik.
+   konkurensi) dan memberi putusan dengan komentar di PR: `Claude audit: APPROVE` atau
+   `Claude audit: REQUEST CHANGES` beserta temuan spesifik.
+6. Setelah merge, memperbarui antrean di `PROJECT_STATUS.md` (task berikutnya, blocker).

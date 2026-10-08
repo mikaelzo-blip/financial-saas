@@ -1,39 +1,57 @@
 # Project Status
 
-- **Last reconciled**: 2026-09-16
-- **Current branch**: `main`
-- **Main commit**: `faec99bb40dc2911e2717e3dd7bfede2bf2ff23c` (`feat(documents): add idempotent automatic accounting posting (#71)`)
-- **Active feature**: Slice 5 — Automatic Accounting Posting [COMPLETED AND MERGED]
+- **Last reconciled**: 2026-10-08
+- **Current branch**: `main` (remediation work happens on `hermes/T*` branches)
+- **Main commit**: `4849ba0` (`docs(audit): add Gemini remediation task list and regression probe (#90)`)
+- **Active work**: Audit Remediation Batch 2026-10-07 (T01–T17). Executed by **Hermes Coder**, orchestrated and audited by **Claude**.
 - **Operating model**: Local-first. Local Baileys intake is supported while the Finance PC services are running; durable PC-off capture remains `DEFERRED_POST_RC1`.
-- **Status**: PR #71 squash-merged to `main` on 2026-09-16. GitHub Quality Gates passed for the merged candidate.
 
-## Delivered Scope
+## Baseline
 
-- Canonical `DocumentPostingService` converts approved documents from `READY_TO_POST` to `POSTED` through existing `TransactionService`, `AccountingEngine`, AP, AR, and audit services.
-- Authenticated manual posting is available at `POST /documents/{id}/post`.
-- Approval remains asynchronous: it transitions to `READY_TO_POST` and only queues `DOCUMENT_POST` for explicit AUTO_SAFE candidates.
-- AUTO_SAFE remains limited to `DIRECT_PURCHASE` and `BANK_CHARGE`; processable payment/billing types remain manual-only.
-- Migration `028_document_posting_linkage` adds `documents.converted_transaction_id` with a unique index and `ON DELETE RESTRICT` foreign key to `transactions.id`.
-- PostgreSQL-backed row locking and durable linkage make conversion/retry/concurrent posting idempotent.
-- Fail-closed handling covers malformed candidates, unsupported types, reversals, unresolved review state, and tenant-invalid references.
-- Frontend supports the `POSTED` state and displays **Sudah diposting**. Manual posting UX is deferred; the backend endpoint is available.
+- Slice 5 (Automatic Accounting Posting, PR #71) is complete. Merges since then on `main`: #72, #73, #74, #76, #77, #78, #79, #82, #84, #85, #88, #89, #90 (`git log faec99b..4849ba0`).
+- The 2026-10-07 audit of `690e761` produced the task list in `docs/audit/2026-10-07-audit-remediation-tasks.md` and the probe `tools/audit/regression_probe.py`.
+- Probe baseline on `4849ba0`: defects present for T03, T04, T05, T06, T07, T08, T09, T10, T11. Trial balance is balanced.
 
-## Verification
+## Blockers
 
-- Local backend suite: **814 passed, 75 skipped** (`uv run pytest -q --disable-warnings`).
-- Slice 5 focused tests: **17 passed**; PostgreSQL 16 Slice 5 concurrency tests: **6 passed**.
-- Alembic head/current/check/offline SQL passed at `028_document_posting_linkage`.
-- Frontend: **70 passed**; lint, typecheck, and production build passed.
-- Backend compile, `pip check`, repository safety, and diff checks passed.
-- Independent final review: **APPROVE** — 0 Critical, 0 High, 0 Medium, 0 Low.
-- GitHub Quality Gates for PR #71: Backend, Frontend, and Repository Safety all passed. The backend job executed the required Slice 5 PostgreSQL concurrency step and full backend suite.
+- **Backend CI is red on `main` for every PR** until T01 and T02 merge:
+  - `pip-audit --strict` reports 25 vulnerabilities (`pyjwt` 2.13.0, `pypdf` 6.16.2, `urllib3` 2.7.0) → T02.
+  - Two UAT tests hardcode 2026-09 dates and fail after 2026-10-01 → T01.
 
-## Delivery Record
+## Merge Gate (owner instruction for this batch)
 
-- Feature branch commit: `e927908760b89c6d9f8d4283142c8c7e83eeb441`.
-- Squash merge commit: `faec99bb40dc2911e2717e3dd7bfede2bf2ff23c`.
-- Pull request: [#71](https://github.com/mikaelzo-blip/financial-saas/pull/71) — `MERGED`.
+A `[Txx]` PR is squash-merged only when GitHub CI is green **and** Claude has commented `Claude audit: APPROVE` on it. This overrides automatic squash merge for this batch.
+
+## Remediation Queue
+
+Progress source of truth: merged PRs titled `[Txx]` on `main`. Task PRs must not edit this file; the orchestrator updates it.
+
+| Wave | Task | Summary | Depends on |
+|---|---|---|---|
+| 1 | T01 | Date-independent AR/AP UAT tests | — |
+| 1 | T02 | Upgrade `pyjwt`, `pypdf`, `urllib3` | — |
+| 2 | T03 | Reject review flags on posted/reversed transactions | T01, T02 |
+| 2 | T04 | Forbid reversing a reversal | T01, T02 |
+| 2 | T06 | Validate status before approve/post (no HTTP 500) | T01, T02 |
+| 2 | T07 | Record `created_by`, audit transaction creation | T01, T02 |
+| 2 | T08 | Audit accounting period lifecycle | T01, T02 |
+| 2 | T09 | Subcontractor bills/payments in AP sub-ledger | T01, T02 |
+| 2 | T11 | Block generic adjustments on control accounts | T01, T02 |
+| 2 | T12 | Edge-relay signature verification, fail closed | T01, T02 |
+| 2 | T13 | Upload validation for `/inbox/capture` | T01, T02 |
+| 2 | T14 | Safe local config defaults (`DEBUG`, `SECRET_KEY`, SQL echo) | T01, T02 |
+| 2 | T15 | Org-scoped assertions in `test_scenario_j` | T01, T02 |
+| 2 | T16 | Block invoice reversal while retention releases exist | T01, T02 |
+| 2 | T17 | Block depreciation reversal until register sync exists | T01, T02 |
+| 3 | T05 | Unique reversal per transaction (migration 030) | T04, T16, T17 (same `reversal_service.py`) |
+| 3 | T10 | Vendor bill number unique per vendor (migration 031) | T05, T09 |
+
+T01 and T02 ship as one PR. At most 3 `[Txx]` PRs may be open at the same time. Wave 3 is strictly sequential.
+
+## Pending Owner Decisions
+
+D1–D9 in `docs/audit/2026-10-07-audit-remediation-tasks.md` (maker/checker, currency, payment account requirement, fixed-asset disposal, year-end close, opening AR/AP, soft-void reversals, DB-level immutability, advances). These are out of scope for Hermes until the owner decides.
 
 ## Next Action
 
-No Slice 6 work has begun. Select the next feature only through the required post-merge discovery and prioritization workflow.
+Hermes Coder: implement **T01 and T02 together** on branch `hermes/T01-T02-unblock-ci` (two commits, one PR titled `[T01+T02]`), because either PR alone stays red on the other's failure. After CI finishes, comment `Siap audit Claude: T01+T02` on the PR and wait for the audit verdict before merging.

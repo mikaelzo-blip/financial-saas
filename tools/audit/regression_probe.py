@@ -6,7 +6,7 @@ task, whether the audited defect is still present.
 
 Usage (from the backend/ directory, after `alembic upgrade head`):
 
-    AUDIT_PROBE_DATABASE_URL=postgresql+asyncpg://user:pass@127.0.0.1:5432/fin_audit_disposable \
+    AUDIT_PROBE_DATABASE_URL=postgresql+asyncpg://user:pass@127.0.0.1:55432/fin_audit_disposable \
         .venv/bin/python ../tools/audit/regression_probe.py
 
 Exit code: 0 when no in-scope defect is present, 1 otherwise. Rows marked
